@@ -15,6 +15,8 @@ def main():
     choice = parser.add_mutually_exclusive_group(required=True)
     choice.add_argument('--request', help='统一参数请求 JSON 文件')
     choice.add_argument('--example', help='examples.json 中的官网工作流 ID；必需媒体要先替换为真实 URL')
+    parser.add_argument('--format', choices=['openai', 'minimax', 'autodl'], default='openai', help='请求格式；默认保持现有 OpenAI 格式')
+    parser.add_argument('--model', help='AutoDL 原生 --request 请求的官网工作流 ID，放在 URL 中，不加入 body')
     parser.add_argument('--out', required=True, help='输出文件，禁止覆盖已有文件')
     parser.add_argument('--artifact', help='产物 key，默认下载第一个')
     parser.add_argument('--timeout', type=int, default=1800)
@@ -32,8 +34,21 @@ def main():
         examples = json.loads(pathlib.Path(__file__).with_name('examples.json').read_text(encoding='utf-8'))
         if args.example not in examples:
             raise ValueError('工作流 ID 未列入 examples.json')
-        body = examples[args.example]
-    if not isinstance(body, dict) or not body.get('model'):
+        if args.format == 'openai':
+            body = examples[args.example]
+        else:
+            body = examples['_formats'][args.format][args.example]
+            if args.format == 'autodl':
+                body = body['body']
+    if not isinstance(body, dict):
+        raise ValueError('JSON 请求必须是对象')
+    submit_path = '/autodl/v1/tasks' if args.format == 'minimax' else '/v1/tasks/autodl'
+    if args.format == 'autodl':
+        model = args.model or args.example
+        if not model:
+            raise ValueError('AutoDL 原生 --request 必须同时提供 --model 工作流 ID')
+        submit_path = '/autodl/v1/raw/' + urllib.parse.quote(model, safe='')
+    elif not body.get('model'):
         raise ValueError('JSON 请求必须包含 model')
     if 'your-public-file-host.example' in json.dumps(body):
         raise ValueError('请将媒体占位 URL 替换为公开可下载的真实图片、音频或视频 URL，再通过 --request 提交')
@@ -56,7 +71,7 @@ def main():
         except urllib.error.HTTPError as error:
             raise RuntimeError('New API HTTP ' + str(error.code) + '；请检查渠道 Token、价格、分组和工作流参数') from None
 
-    submitted = call('POST', '/v1/tasks/autodl', body)
+    submitted = call('POST', submit_path, body)
     public_id = submitted.get('task_id')
     if not isinstance(public_id, str) or not public_id:
         raise RuntimeError('提交响应缺少 New API 公开 task_id')

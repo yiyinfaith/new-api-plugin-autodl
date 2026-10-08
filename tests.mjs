@@ -210,5 +210,121 @@ test('multiple output stable artifact keys and audio string fallback', () => {
   assert.deepEqual(p.listArtifacts({ status: 'SUCCESS', action: 'text_to_audio', data: envelope('SUCCESS', ['https://cdn.example.com/a', 'https://cdn.example.com/b']) }).map(a => a.key), ['audio', 'audio-2']);
 });
 fixture('running task has no artifacts', 'listArtifacts', [{ status: 'IN_PROGRESS', data: envelope('RUNNING') }], []);
+const formats = examples._formats;
+test('three format example catalog coverage', () => {
+  assert.deepEqual(Object.keys(formats.minimax).sort(), Object.keys(catalog).sort());
+  assert.deepEqual(Object.keys(formats.autodl).sort(), Object.keys(catalog).sort());
+  assert.ok(p.meta.routes.some(r => r.path === '/autodl/v1/raw/:model' && r.decode === 'rawCreate'));
+});
+const rawContext = (model, body) => ({ method: 'POST', path: '/autodl/v1/raw/' + model, params: { model }, body: { kind: 'json', value: body } });
+const nativeInput = body => ({ __autodl_fields: Object.entries(body) });
+for (const [model, config] of Object.entries(catalog)) {
+  const original = p.buildSubmitRequest(ctx(model));
+  const facts = p.extractUsage(ctx(model));
+  const mini = formats.minimax[model], raw = formats.autodl[model].body;
+  fixture(model + ': MiniMax equivalent submit', 'buildSubmitRequest', [ctx(model, mini)], original);
+  fixture(model + ': MiniMax equivalent billing', 'extractUsage', [ctx(model, mini)], facts);
+  const intent = p.native.rawCreate(rawContext(model, raw));
+  test(model + ': raw decoder model and action', () => {
+    assert.equal(intent.model, model); assert.equal(intent.action, original.action);
+    assert.deepEqual(Object.fromEntries(intent.requestBody.__autodl_fields), raw);
+  });
+  fixture(model + ': raw equivalent submit', 'buildSubmitRequest', [ctx(model, intent.requestBody)], original);
+  fixture(model + ': raw equivalent billing', 'extractUsage', [ctx(model, intent.requestBody)], facts);
+  test(model + ': MiniMax persisted task facts', () => assert.deepEqual(p.parseSubmitResponse(ctx(model, mini), { statusCode: 200, body: envelope('QUEUED') }), p.parseSubmitResponse(ctx(model), { statusCode: 200, body: envelope('QUEUED') })));
+  test(model + ': native MiniMax decode normalizes request and facts', () => {
+    const decoded = p.native.create({ body: { kind: 'json', value: mini } }).requestBody;
+    assert.deepEqual(Object.fromEntries(decoded.__autodl_fields), raw); assert.deepEqual(p.extractUsage(ctx(model, decoded)), facts);
+  });
+  if (config.type === 'video') test(model + ': OpenAI protocol carries MiniMax JSON', () => {
+    const decoded = p.protocols.openai_video.decodeRequest({ model, body: { kind: 'json', value: mini } });
+    assert.equal(decoded.action, original.action); assert.deepEqual(p.buildSubmitRequest(ctx(model, decoded.requestBody)), original);
+  });
+  reject(model + ': raw unknown field', 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, unknown_control: 1 }))], 'internal AutoDL field');
+  reject(model + ': raw rejects unified packaging', 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, input_reference: singleReference }))], 'internal AutoDL field');
+  reject(model + ': MiniMax cannot mix seconds', 'buildSubmitRequest', [ctx(model, { ...mini, seconds: 5 })], 'mixed MiniMax field');
+  for (const field of ['duration', 'audio_duration']) {
+    if (config.rules[field]) {
+      const rule = config.rules[field];
+      for (const value of [rule.min, rule.max]) {
+        const expected = { ...original, body: { ...original.body, [field]: value } };
+        fixture(model + ': MiniMax ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: value })], expected);
+        fixture(model + ': raw ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, [field]: value }))], expected);
+      }
+      for (const value of [rule.min - 1, rule.max + 1, 1.5, false, null]) {
+        reject(model + ': MiniMax bad ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: value })], field + ' must');
+        reject(model + ': raw bad ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, [field]: value }))], field + ' must');
+      }
+    } else reject(model + ': MiniMax unsupported ' + field, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: 5 })], 'does not support ' + field);
+  }
+  if (config.rules.seed) {
+    fixture(model + ': MiniMax seed extension', 'buildSubmitRequest', [ctx(model, { ...mini, seed: config.rules.seed.min })], { ...original, body: { ...original.body, seed: config.rules.seed.min } });
+    reject(model + ': MiniMax bad seed', 'buildSubmitRequest', [ctx(model, { ...mini, seed: config.rules.seed.max + 1 })], 'seed must');
+  } else reject(model + ': MiniMax unsupported seed', 'buildSubmitRequest', [ctx(model, { ...mini, seed: 1 })], 'does not support seed');
+  const qualityNames = { '480p': '480P', '768p': '768P', '1440p': '2K' };
+  const ratioNames = { landscape: '16:9', portrait: '9:16', square: '1:1' };
+  for (const r of config.resolutions) {
+    const expected = { ...original, body: { ...original.body, resolution: r.upstream } };
+    fixture(model + ': MiniMax tier/ratio ' + r.upstream, 'buildSubmitRequest', [ctx(model, { ...mini, resolution: qualityNames[r.resolution] || r.resolution, ratio: ratioNames[r.orientation] })], expected);
+    fixture(model + ': raw exact resolution ' + r.upstream, 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, resolution: r.upstream }))], expected);
+    if (!qualityNames[r.resolution]) fixture(model + ': MiniMax exact extension tier ' + r.upstream, 'buildSubmitRequest', [ctx(model, { ...mini, resolution: r.upstream, ratio: ratioNames[r.orientation] })], expected);
+  }
+  if (config.resolutions.length) {
+    for (const ratio of ['adaptive', '4:3', '21:9', '3:4', null]) reject(model + ': unsupported ratio ' + ratio, 'buildSubmitRequest', [ctx(model, { ...mini, ratio })], 'MiniMax ratio');
+    const missingRatio = { ...mini }; delete missingRatio.ratio;
+    reject(model + ': explicit ratio required', 'buildSubmitRequest', [ctx(model, missingRatio)], 'MiniMax ratio');
+    reject(model + ': invalid resolution', 'buildSubmitRequest', [ctx(model, { ...mini, resolution: '4K' })], 'resolution/ratio');
+  } else reject(model + ': no ratio control', 'buildSubmitRequest', [ctx(model, { ...mini, ratio: '16:9' })], 'no resolution or ratio');
+  for (const field of Object.keys(config.rules).filter(k => config.rules[k].required && ['image', 'audio', 'video', 'prompt', 'string'].includes(config.rules[k].type))) {
+    const missing = { ...raw }; delete missing[field];
+    reject(model + ': raw required ' + field, 'buildSubmitRequest', [ctx(model, nativeInput(missing))], field + ' is required');
+  }
+  for (const kind of ['input_reference', 'audios', 'videos']) {
+    const type = { input_reference: 'image_url', audios: 'audio_url', videos: 'video_url' }[kind];
+    const role = { input_reference: 'reference_image', audios: 'reference_audio', videos: 'reference_video' }[kind];
+    if (config.input_reference.includes('first_frame') && kind === 'input_reference') continue;
+    const content = mini.content.filter(item => item.type !== type);
+    const tooMany = [...content, ...Array.from({ length: config[kind].length + 1 }, () => ({ type, [type]: { url: 'https://cdn.example.com/extra' }, role }))];
+    reject(model + ': MiniMax too many ' + type, 'buildSubmitRequest', [ctx(model, { ...mini, content: tooMany })], config.input_reference.includes('first_frame') ? 'cannot be mixed' : 'too many ' + type);
+  }
+}
+const miniBase = formats.minimax[referenceModel];
+const rawBase = formats.autodl[referenceModel].body;
+const canonicalBase = p.native.rawCreate(rawContext(referenceModel, rawBase)).requestBody;
+for (const [key, value] of Object.entries({ requests: 0, seconds: 1, resolution: '480p', orientation: 'landscape' })) {
+  reject('normalized billing facts cannot override ' + key, 'buildSubmitRequest', [ctx(referenceModel, { ...canonicalBase, [key]: value })], 'usage facts conflict');
+}
+for (const fields of [null, [['prompt']], [[false, 'bad']], [...canonicalBase.__autodl_fields, canonicalBase.__autodl_fields[0]], [...canonicalBase.__autodl_fields, ['unknown_control', 1]]]) {
+  reject('normalized field structure rejects ' + JSON.stringify(fields), 'buildSubmitRequest', [ctx(referenceModel, { ...canonicalBase, __autodl_fields: fields })], 'AutoDL: invalid');
+}
+reject('normalized request cannot mix another dialect', 'buildSubmitRequest', [ctx(referenceModel, { ...canonicalBase, content: miniBase.content })], 'invalid internal normalized request');
+fixture('normalized request revalidates media URLs', 'extractUsage', [ctx(referenceModel, canonicalBase)], p.extractUsage(ctx(referenceModel)));
+reject('normalized request rejects invalid media before billing', 'extractUsage', [ctx(referenceModel, { ...canonicalBase, __autodl_fields: canonicalBase.__autodl_fields.map(([key, value]) => [key, key === 'ref_image_0' ? 'data:image/png;base64,abc' : value]) })], 'invalid media URL');
+for (const content of [null, {}, 'text', [null], [{ type: 'reference_image' }], [{ type: 'image_url', image_url: { file_id: 'f' }, role: 'reference_image' }], [{ type: 'text', text: 'a', extra: true }]]) reject('MiniMax malformed content ' + JSON.stringify(content), 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, content })], 'AutoDL:');
+reject('MiniMax duplicate text', 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, content: [...miniBase.content, { type: 'text', text: 'duplicate' }] })], 'only one text');
+reject('MiniMax URL must be public', 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, content: [{ type: 'text', text: 'a' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' }, role: 'reference_image' }] })], 'invalid media URL');
+for (const field of ['prompt', 'input_reference', 'images', 'audios', 'videos', 'size', 'orientation', 'callback_url', 'extra']) reject('MiniMax mixed/unsupported top-level ' + field, 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, [field]: 'unsupported' })], 'mixed MiniMax field');
+test('MiniMax source model remains workflow ID with channel mapping', () => {
+  const decoded = p.protocols.openai_video.decodeRequest({ model: 'client-alias', upstreamModel: referenceModel, body: { kind: 'json', value: { ...miniBase, model: 'ignored-body-model' } } });
+  assert.equal(decoded.model, 'client-alias');
+  assert.equal(p.buildSubmitRequest({ ...base, model: 'client-alias', upstreamModel: referenceModel, requestBody: decoded.requestBody }).url, 'https://autodl.art/api/v1/comfyui/comfyui_workflow/' + referenceModel);
+});
+for (const field of ['ratio', 'contentX', '__autodl_fields', 'ref_image_0']) test('OpenAI still rejects ' + field, () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind: 'json', value: { ...examples[referenceModel], [field]: {} } } }), /unsupported request field/));
+test('raw body cannot be guessed from prompt/duration', () => assert.throws(() => p.native.create({ body: { kind: 'json', value: { model: referenceModel, ...rawBase } } }), /unsupported request field/));
+test('raw endpoint requires explicit model in URL and JSON', () => {
+  assert.throws(() => p.native.rawCreate({ body: { kind: 'json', value: rawBase } }), /workflow ID in the URL/);
+  assert.throws(() => p.native.rawCreate({ params: { model: referenceModel }, body: { kind: 'form', fields: {} } }), /requires a JSON object/);
+});
+const frameModel = 'minimax_h3_lightx2v';
+const frameMini = formats.minimax[frameModel];
+fixture('MiniMax frame roles override array position', 'buildSubmitRequest', [ctx(frameModel, { ...frameMini, content: frameMini.content.slice().reverse() })], p.buildSubmitRequest(ctx(frameModel)));
+const frameItems = frameMini.content.filter(i => i.type === 'image_url');
+reject('MiniMax duplicate first frame', 'buildSubmitRequest', [ctx(frameModel, { ...frameMini, content: [...frameMini.content, frameItems[0]] })], 'duplicate first_frame');
+reject('MiniMax missing last frame', 'buildSubmitRequest', [ctx(frameModel, { ...frameMini, content: frameMini.content.filter(i => i.role !== 'last_frame') })], 'last_frame is required');
+reject('MiniMax frame/reference mix', 'buildSubmitRequest', [ctx(frameModel, { ...frameMini, content: [...frameMini.content, { type: 'audio_url', audio_url: { url: 'https://cdn.example.com/a.wav' }, role: 'reference_audio' }] })], 'cannot be mixed');
+fixture('raw optional image slots retain original indices', 'buildSubmitRequest', [ctx(referenceModel, nativeInput({ ...rawBase, ref_image_8: secondReference.image_url }))], { ...p.buildSubmitRequest(ctx(referenceModel)), body: { ...rawBase, ref_image_8: secondReference.image_url } });
+const ttsRaw = JSON.parse(official.find(r => r.uuid === 'indextts2-v1').input_example);
+fixture('official native indexTTS2 body is preserved', 'buildSubmitRequest', [ctx('indextts2-v1', nativeInput(ttsRaw))], { ...p.buildSubmitRequest(ctx('indextts2-v1')), body: ttsRaw });
+reject('native emotion reference requires audio', 'buildSubmitRequest', [ctx('indextts2-v1', nativeInput({ prompt_text: 'Hello', prompt_simple: 'https://cdn.example.com/a.wav', emo_control_method: '使用情感参考音频' }))], 'emo_ref_audio is required');
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

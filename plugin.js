@@ -2498,6 +2498,7 @@ export const meta = {
   protocols: [{ name: "openai_video", models: VIDEO_MODELS }],
   routes: [
     { method: "POST", path: "/autodl/v1/tasks", type: "submit", decode: "create", render: "task" },
+    { method: "POST", path: "/autodl/v1/raw/:model", type: "submit", decode: "rawCreate", render: "task" },
     { method: "GET", path: "/autodl/v1/tasks/:task_id", type: "query", render: "task" },
   ],
   usageSchema: REQUEST_SCHEMA,
@@ -2641,7 +2642,135 @@ function normalizeInput(config, input) {
   return { body: body, facts: facts, type: config.type };
 }
 
-function normalized(ctx) { return normalizeInput(workflow(ctx.upstreamModel || ctx.model), ctx.requestBody); }
+// All request dialects converge on the same {body, facts, type} structure.
+// Driver hooks consume this structure without choosing routes or protocols.
+function normalizeRaw(config, input) {
+  if (!object(input)) throw new Error("AutoDL: raw body must be a JSON object");
+  const body = {}, facts = { requests: 1 };
+  for (const key of Object.keys(input)) {
+    if (!has(config.rules, key)) throw new Error("AutoDL: unsupported raw field " + key + " for this workflow");
+    const rule = config.rules[key], value = input[key];
+    if (["image", "audio", "video"].includes(rule.type)) body[key] = mediaURL(value);
+    else if (["integer", "number"].includes(rule.type)) body[key] = numberValue(value, rule, key);
+    else if (rule.type === "boolean") {
+      if (typeof value !== "boolean") throw new Error("AutoDL: " + key + " must be boolean");
+      body[key] = value;
+    } else if (rule.type === "enum") {
+      // The official indexTTS2 example uses numeric 0 for this string enum.
+      const exampleZero = key === "emo_surprised" && value === 0 && rule.options.includes("0");
+      if (!rule.options.includes(value) && !exampleZero) throw new Error("AutoDL: unsupported " + key + " for this workflow");
+      body[key] = value;
+    } else if (["prompt", "string"].includes(rule.type)) {
+      if (typeof value !== "string" || !value.trim() || value.length < (rule.min_length || 1) || (rule.max_length !== undefined && value.length > rule.max_length)) throw new Error("AutoDL: invalid " + key + " length or type for this workflow");
+      body[key] = value;
+    } else throw new Error("AutoDL: unsupported official rule type " + rule.type);
+  }
+  for (const key of Object.keys(config.rules)) {
+    const rule = config.rules[key];
+    if (has(body, key)) continue;
+    if ([config.secondsField, "resolution", "emo_control_method"].includes(key) && rule.default !== undefined) body[key] = rule.default;
+    else if (rule.required) throw new Error("AutoDL: raw field " + key + " is required for this workflow");
+  }
+  if (body.emo_control_method === "使用情感参考音频" && !body.emo_ref_audio) throw new Error("AutoDL: emo_ref_audio is required for reference emotion mode");
+  if (config.secondsField) facts.seconds = body[config.secondsField];
+  if (config.resolutions.length) {
+    const selected = config.resolutions.find(function (entry) { return entry.upstream === body.resolution; });
+    if (!selected) throw new Error("AutoDL: unsupported native resolution for this workflow");
+    facts.resolution = selected.resolution; facts.orientation = selected.orientation;
+  }
+  return { body: body, facts: facts, type: config.type };
+}
+
+const MINIMAX_RESOLUTIONS = { "480P": "480p", "768P": "768p", "2K": "1440p" };
+const MINIMAX_RATIOS = { "16:9": "landscape", "9:16": "portrait", "1:1": "square" };
+
+function normalizeMiniMax(config, input) {
+  if (!object(input) || !Array.isArray(input.content)) throw new Error("AutoDL: MiniMax content must be an array");
+  const reserved = ["model", "content", "resolution", "duration", "audio_duration", "ratio", "seed"];
+  const mediaFields = config.input_reference.concat(config.audios, config.videos);
+  const body = {};
+  for (const key of Object.keys(input)) {
+    if (reserved.includes(key)) continue;
+    // Preserve AutoDL-specific controls, but never mix competing media/prompt inputs.
+    if (!has(config.rules, key) || key === config.promptField || mediaFields.includes(key)) throw new Error("AutoDL: unsupported or mixed MiniMax field " + key);
+    body[key] = input[key];
+  }
+  for (const key of ["duration", "audio_duration", "seed"]) if (has(input, key)) {
+    if (!has(config.rules, key)) throw new Error("AutoDL: this workflow does not support " + key);
+    body[key] = input[key];
+  }
+  if (config.resolutions.length) {
+    if (typeof input.ratio !== "string" || !has(MINIMAX_RATIOS, input.ratio)) throw new Error("AutoDL: MiniMax ratio must be an explicit 16:9, 9:16 or 1:1; adaptive and other ratios cannot be mapped by this workflow");
+    if (typeof input.resolution !== "string") throw new Error("AutoDL: MiniMax resolution is required for this workflow");
+    const orientation = MINIMAX_RATIOS[input.ratio];
+    let quality = has(MINIMAX_RESOLUTIONS, input.resolution) ? MINIMAX_RESOLUTIONS[input.resolution] : undefined;
+    const rawChoice = config.resolutions.find(function (entry) { return entry.upstream === input.resolution; });
+    if (quality === undefined) {
+      // Non-MiniMax tiers retain their AutoDL spelling, including exact enum labels.
+      quality = rawChoice ? rawChoice.resolution : input.resolution;
+      if (Object.values(MINIMAX_RESOLUTIONS).includes(quality)) throw new Error("AutoDL: use MiniMax resolution spelling 480P, 768P or 2K");
+    }
+    if (rawChoice && rawChoice.orientation !== orientation) throw new Error("AutoDL: MiniMax ratio conflicts with the AutoDL resolution label");
+    const selected = config.resolutions.find(function (entry) { return entry.resolution === quality && entry.orientation === orientation; });
+    if (!selected) throw new Error("AutoDL: unsupported MiniMax resolution/ratio combination for this workflow");
+    body.resolution = selected.upstream;
+  } else if (has(input, "resolution") || has(input, "ratio")) throw new Error("AutoDL: this workflow has no resolution or ratio control");
+
+  const references = { image_url: [], audio_url: [], video_url: [] }, frames = {};
+  let textCount = 0;
+  for (const item of input.content) {
+    if (!object(item)) throw new Error("AutoDL: MiniMax content entries must be objects");
+    if (item.type === "text") {
+      if (Object.keys(item).some(function (key) { return !["type", "text"].includes(key); })) throw new Error("AutoDL: unsupported text content field");
+      if (++textCount > 1) throw new Error("AutoDL: MiniMax content accepts only one text item");
+      if (!config.promptField) throw new Error("AutoDL: this workflow does not accept text content");
+      body[config.promptField] = item.text;
+      continue;
+    }
+    if (!has(references, item.type)) throw new Error("AutoDL: MiniMax content type must be text, image_url, audio_url or video_url");
+    if (Object.keys(item).some(function (key) { return !["type", item.type, "role"].includes(key); })) throw new Error("AutoDL: unsupported media content field");
+    const resource = item[item.type];
+    if (!object(resource) || Object.keys(resource).length !== 1 || !has(resource, "url")) throw new Error("AutoDL: MiniMax media must contain only a public HTTP(S) url");
+    const url = mediaURL(resource.url);
+    const role = item.role === undefined && item.type === "image_url" ? "first_frame" : item.role;
+    if (item.type === "image_url" && ["first_frame", "last_frame"].includes(role)) {
+      if (has(frames, role)) throw new Error("AutoDL: duplicate " + role + " in MiniMax content");
+      const field = has(config.rules, role) ? role : role === "first_frame" && config.input_reference.length === 1 ? config.input_reference[0] : null;
+      if (!field) throw new Error("AutoDL: this workflow does not support " + role);
+      frames[role] = field; body[field] = url;
+    } else {
+      const expected = { image_url: "reference_image", audio_url: "reference_audio", video_url: "reference_video" }[item.type];
+      if (role !== expected) throw new Error("AutoDL: invalid MiniMax media role for " + item.type);
+      references[item.type].push(url);
+    }
+  }
+  if (Object.keys(frames).length && Object.values(references).some(function (values) { return values.length; })) throw new Error("AutoDL: first/last frames and reference media cannot be mixed in MiniMax content");
+  for (const kind of ["image_url", "audio_url", "video_url"]) {
+    const fields = kind === "image_url" ? config.input_reference : kind === "audio_url" ? config.audios : config.videos;
+    if (kind === "image_url" && references[kind].length && fields.includes("first_frame")) throw new Error("AutoDL: first/last-frame workflows require first_frame and last_frame roles");
+    if (references[kind].length > fields.length) throw new Error("AutoDL: too many " + kind + " references for this workflow");
+    references[kind].forEach(function (url, index) { body[fields[index]] = url; });
+  }
+  return normalizeRaw(config, body);
+}
+
+function normalizeRequest(config, input) {
+  if (object(input) && has(input, "__autodl_fields")) {
+    if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
+    const body = {};
+    for (const pair of input.__autodl_fields) {
+      if (!Array.isArray(pair) || pair.length !== 2 || typeof pair[0] !== "string" || !has(config.rules, pair[0]) || has(body, pair[0])) throw new Error("AutoDL: invalid or duplicate internal AutoDL field");
+      body[pair[0]] = pair[1];
+    }
+    const result = normalizeRaw(config, body);
+    for (const key of ["requests", "seconds", "resolution", "orientation"]) if (has(input, key) && input[key] !== result.facts[key]) throw new Error("AutoDL: internal usage facts conflict");
+    return result;
+  }
+  if (object(input) && has(input, "content")) return normalizeMiniMax(config, input);
+  return normalizeInput(config, input);
+}
+
+function normalized(ctx) { return normalizeRequest(workflow(ctx.upstreamModel || ctx.model), ctx.requestBody); }
 
 function credentials(ctx) {
   // authHeader may be host-generated Bearer; use the original channel key instead.
@@ -2719,6 +2848,10 @@ function results(body, fallbackType) {
 const STATUSES = { QUEUED: "QUEUED", RUNNING: "IN_PROGRESS", SUCCESS: "SUCCESS", FAILED: "FAILURE", completed: "SUCCESS" };
 
 function taskAction(config, input) {
+  if (object(input) && (has(input, "content") || has(input, "__autodl_fields"))) {
+    const body = normalizeRequest(config, input).body;
+    return config.type === "audio" ? "text_to_audio" : config.videos.some(function (key) { return has(body, key); }) ? "video_to_video" : config.input_reference.some(function (key) { return has(body, key); }) ? "image_to_video" : "text_to_video";
+  }
   return config.type === "audio" ? "text_to_audio" : (input.videos || []).length ? "video_to_video" : referenceURLs(input.input_reference).length ? "image_to_video" : "text_to_video";
 }
 
@@ -2866,14 +2999,41 @@ function renderTask(_ctx, task) {
   return result;
 }
 
+function decodeCompatible(ctx, pinnedModel) {
+  if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value) && has(ctx.body.value, "content"))) return decode(ctx, pinnedModel);
+  const request = Object.assign({}, ctx.body.value);
+  const model = pinnedModel || text(request.model);
+  if (!model) throw new Error("AutoDL: model is required");
+  request.model = model;
+  const config = workflow(ctx.upstreamModel || model);
+  const canonical = canonicalRequest(model, normalizeMiniMax(config, request));
+  return { kind: "submit", model: model, action: taskAction(config, canonical), requestBody: canonical };
+}
+
+function canonicalRequest(model, normalized) {
+  // Key/value pairs prevent the host's recursive usage preflight from treating
+  // native resolution enum labels as billing enum values. Facts stay explicit.
+  return Object.assign({ model: model, __autodl_fields: Object.entries(normalized.body) }, normalized.facts);
+}
+
+function decodeRaw(ctx) {
+  if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value))) throw new Error("AutoDL: native/raw endpoint requires a JSON object");
+  const model = text((ctx.params || {}).model);
+  if (!model) throw new Error("AutoDL: raw endpoint requires a workflow ID in the URL");
+  const config = workflow(model);
+  const request = canonicalRequest(model, normalizeRaw(config, ctx.body.value));
+  return { kind: "submit", model: model, action: taskAction(config, request), requestBody: request };
+}
+
 export const native = {
-  create: function (ctx) { return decode(ctx); },
+  create: function (ctx) { return decodeCompatible(ctx); },
+  rawCreate: decodeRaw,
   task: renderTask,
 };
 
 export const protocols = {
   openai_video: {
-    decodeRequest: function (ctx) { return decode(ctx, ctx.model); },
+    decodeRequest: function (ctx) { return decodeCompatible(ctx, ctx.model); },
     render: function (_ctx, task) {
       // The host supplies standard public ID/model/status/progress/timestamps.
       const result = {};
