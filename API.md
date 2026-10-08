@@ -2,6 +2,179 @@
 
 版本 **1.0.0**。四套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
+## 5 分钟快速开始
+
+四种接口是平等入口，按已有客户端和请求结构选择；没有默认推荐。提交都是异步任务，成功创建后需继续查询，不代表视频已生成。
+
+| 接口 | 适用场景 | 模型与输入结构 |
+|---|---|---|
+| **OpenAI** `POST /v1/videos` | 已使用 OpenAI Videos 风格客户端；统一提示词、秒数、尺寸与参考媒体。 | 视频 workflow ID；`prompt / seconds / size / input_reference / audios / videos`。 |
+| **MiniMax** `POST /v2/video_generation` | MiniMax V2 客户端；需要 content 多媒体结构或 H3 官方模型自动路由。 | `MiniMax-H3 / MiniMax-H3-Max` **或全部 17 个 AutoDL workflow ID**；`content / resolution / duration / ratio`。 |
+| **AutoDL Native** `POST /api/v1/comfyui/comfyui_workflow/{workflow_id}` | 已有 AutoDL 官网 body；需要保留原生字段和扩展参数。 | 工作流写在路径中；body 使用 `prompt / duration / resolution / ref_image_*` 等原字段。 |
+| **DashScope Wan** `POST /api/v1/services/aigc/image2video/video-synthesis` | 已有百炼 Wan 动作迁移客户端；输入人物图和动作视频。 | 仅 `wan2.2-animate-move`；`input.image_url / input.video_url / parameters.mode`。 |
+
+### 先准备
+
+1. 管理员已安装并启用插件、完成渠道及模型价格/分组配置；Native/DashScope 所需宿主路由放行、动作迁移时长计量能力也已具备。具体前提在本文件[基本配置](#基本配置)。
+2. 以下命令使用 **Bash**（Linux/macOS/Windows Git Bash 或 WSL）；先替换 Base URL 和 **New API Key**。Base64 示例另需 Python 3。
+
+```bash
+export NEW_API_BASE_URL="https://api.example.com"  # 替换为你的 New API 根地址，不带末尾 /
+export NEW_API_KEY="<NEW_API_KEY>"                # 替换为调用方 Key，不是 AutoDL Token
+```
+
+3. 媒体示例的 `https://media.example.com/...` 是占位地址，必须替换为公开可读的真实媒体；Base64 示例用自己的 PNG 文件。**只接受标准 Data URL，不支持裸 Base64；输出仍为公网 URL。**
+4. 响应均为结构示意。将查询命令中的 TASK_ID 替换为本次创建返回的 ID，重复 GET 至成功/失败终态；不要重复 POST 同一任务。生成耗时与排队时间另计。
+
+### OpenAI：文生视频
+
+```bash
+curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"minimax_h3_lightx2v_no_pic","prompt":"一只猫在雪地中奔跑，镜头平稳跟随","seconds":1,"size":"864x480"}'
+```
+
+创建响应，任务 ID 取 **id**：
+
+```json
+{"id":"task_openai_xxx","object":"video","status":"queued","created_at":1785125529}
+```
+
+```bash
+TASK_ID="task_openai_xxx"  # 替换为本次响应的 id
+curl -sS "$NEW_API_BASE_URL/v1/videos/$TASK_ID" -H "Authorization: Bearer $NEW_API_KEY"
+```
+
+成功状态 **completed**，视频取 **url**，也可用带鉴权的 `/v1/videos/{task_id}/content` 下载；查询示意：
+
+```json
+{"id":"task_openai_xxx","object":"video","status":"completed","url":"https://media.example.com/result.mp4","results":[{"url":"https://media.example.com/result.mp4","type":"video"}]}
+```
+
+### MiniMax：图片 URL + 音频 URL
+
+此例直接用 AutoDL workflow ID，仍走同一 MiniMax V2 接口；不是必须使用官方 H3 模型名。两个媒体 URL 均需替换为真实输入。
+
+```bash
+curl -sS -X POST "$NEW_API_BASE_URL/v2/video_generation" \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model":"minimax_h3_image_audio_to_video_v2",
+    "content":[
+      {"type":"text","text":"人物面向镜头说话，保持参考人物外观"},
+      {"type":"image_url","role":"reference_image","image_url":{"url":"https://media.example.com/person.png"}},
+      {"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://media.example.com/speech.wav"}}
+    ],
+    "resolution":"480P","duration":1,"ratio":"9:16"
+  }'
+```
+
+创建响应，任务 ID 取 **task_id**：
+
+```json
+{"task_id":"task_minimax_xxx"}
+```
+
+```bash
+TASK_ID="task_minimax_xxx"  # 替换为本次响应的 task_id
+curl -sS "$NEW_API_BASE_URL/v2/query/video_generation/$TASK_ID" -H "Authorization: Bearer $NEW_API_KEY"
+```
+
+成功状态 **task.status = succeeded**，视频取 **task.content.url**：
+
+```json
+{"task":{"id":"task_minimax_xxx","status":"succeeded","task_type":"generation","modality":"video","content":{"url":"https://media.example.com/result.mp4"}}}
+```
+
+### AutoDL Native：图片 Base64 Data URL
+
+将真实 PNG 保存为当前目录的 `person.png`（或修改路径）。命令先编码成 `data:image/png;base64,...`，再通过标准输入发送完整 JSON，body 不加 model：
+
+```bash
+IMAGE_DATA_URL="$(python3 -c 'import base64; from pathlib import Path; print("data:image/png;base64," + base64.b64encode(Path("person.png").read_bytes()).decode("ascii"))')"
+curl -sS -X POST "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v_v5" \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -H 'Content-Type: application/json' --data-binary @- <<EOF
+{"prompt":"人物向镜头微笑，动作自然","duration":1,"resolution":"480p竖","ref_image_0":"$IMAGE_DATA_URL"}
+EOF
+```
+
+创建响应，任务 ID 取 **task_id**（初始状态可能随宿主变化）：
+
+```json
+{"task_id":"task_native_xxx","status":"SUBMITTED","progress":"","fail_reason":"","results":[]}
+```
+
+```bash
+TASK_ID="task_native_xxx"  # 替换为本次响应的 task_id
+curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" -H "Authorization: Bearer $NEW_API_KEY"
+```
+
+成功状态 **SUCCESS**，视频取 **results 中 type=video 的 url**：
+
+```json
+{"task_id":"task_native_xxx","status":"SUCCESS","progress":"100%","fail_reason":"","results":[{"url":"https://media.example.com/result.mp4","type":"video"}]}
+```
+
+### DashScope Wan：图片 URL + 视频 URL / 动作迁移
+
+替换为真实人物图和 MP4/WebM 动作视频；时长跟随参考视频，不传 seconds/duration：
+
+```bash
+curl -sS -X POST "$NEW_API_BASE_URL/api/v1/services/aigc/image2video/video-synthesis" \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -H 'Content-Type: application/json' -H 'X-DashScope-Async: enable' \
+  -d '{"model":"wan2.2-animate-move","input":{"image_url":"https://media.example.com/person.png","video_url":"https://media.example.com/motion.mp4","watermark":false},"parameters":{"mode":"wan-std","check_image":true}}'
+```
+
+创建响应，任务 ID 取 **output.task_id**：
+
+```json
+{"output":{"task_status":"PENDING","task_id":"task_dashscope_xxx"},"request_id":""}
+```
+
+```bash
+TASK_ID="task_dashscope_xxx"  # 替换为本次响应的 output.task_id
+curl -sS "$NEW_API_BASE_URL/api/v1/tasks/$TASK_ID" -H "Authorization: Bearer $NEW_API_KEY"
+```
+
+成功状态 **output.task_status = SUCCEEDED**，视频取 **output.results.video_url**：
+
+```json
+{"request_id":"","output":{"task_id":"task_dashscope_xxx","task_status":"SUCCEEDED","results":{"video_url":"https://media.example.com/result.mp4"}}}
+```
+
+以上成功视频 URL 可直接下载，**不要向媒体站点附带 New API/AutoDL Key**。图片、音频、视频的已有输入字段都可替换为对应 MIME 的标准 Data URL；不增加协议没有的媒体字段，DashScope 没有音频字段。
+
+### 常用模型速查
+
+表中是直接使用的 AutoDL workflow ID；MiniMax 两个官方模型名的自动路由另列在本文件详细章节。
+
+| 场景 | 模型 / 工作流 | 最小输入与常用参数 |
+|---|---|---|
+| 文生视频 | `minimax_h3_lightx2v_no_pic` | 非空 prompt；1–15 秒；480p/768p；不传参考图。 |
+| 单图生视频（也可多图） | `minimax_h3_lightx2v_v5` | prompt + 1–9 图；1–10 秒；480p/768p/1080p。 |
+| 图+音频生视频 | `minimax_h3_image_audio_to_video_v2` | prompt，可带 0–9 图、0–3 音频；图+音频场景各传至少 1 个；1–10 秒。 |
+| 首尾帧 | `minimax_h3_lightx2v` | prompt + 恰好 2 图；1–15 秒；480p/768p。 |
+| 动作迁移 | `wan2.2animate-v4-motion_retargeting` | 1 图+1 视频；无 prompt/可控时长；DashScope 用 `wan2.2-animate-move` 自动映射。 |
+
+OpenAI 用 prompt/seconds 等统一字段；MiniMax 用 content/duration 等；Native 用原生字段。上表是工作流能力，不能把不同协议字段混写；全部 17 项默认值、媒体范围与分辨率在后面的[工作流参数表](#工作流目录与能力边界)。
+
+### 快速错误排查
+
+| 错误 | 先检查 / 处理 |
+|---|---|
+| `model_price_error` | 请求 model 未配置价格或计费规则无效；管理员补齐该 model 的价格。官方 H3 别名也需单独配置。 |
+| `no_eligible_channel` | 渠道未启用、未包含请求 model，或 Key/用户组无可用渠道；检查 Task Plugin→AutoDL、模型列表及分组权限。 |
+| `invalid media URL` | 输入不是有效 HTTP(S) URL/标准 Data URL，MIME 不匹配或 Base64 格式错误；不用裸 Base64，按对应字段类型编码。 |
+| `intersects reserved namespace /api` | 宿主未放行插件的指定 Native/DashScope 路由；管理员补齐宿主能力并重建部署，改请求 body 无法解决。 |
+| `502 / 5xx` | 根据响应错误与宿主日志定位上游/宿主异常；暂时错误退避重试，若已取得 task ID，先查询该任务，避免重复付费提交。 |
+
+以下保留完整字段、响应、工作流能力、计费和技术说明，可在本文件内继续查阅。
+
+
 [配置](#基本配置) · [接口](#接口速查) · [输入媒体](#输入媒体url-与-data-url) · [OpenAI](#openai-videos-api) · [MiniMax](#minimax-官方-v2-api) · [AutoDL 原生](#autodl-comfyui-原生-api) · [DashScope](#阿里云百炼--dashscope-wan-api) · [工作流参数](#工作流目录与能力边界) · [动作迁移](#动作迁移与-wan22-animate-move-渠道别名) · [错误与计费](#错误轮询和计费)
 
 ## 基本配置
@@ -68,17 +241,21 @@ video = data_url("motion.mp4", "video/mp4")
 
 `POST /v1/videos` 支持 16 个视频 workflow ID；不提供官方 MiniMax 别名或 TTS。范围、默认、必需媒体与尺寸见[本文件参数表](#工作流目录与能力边界)。
 
-| 字段 | 类型 | 规则 |
-|---|---|---|
-| `model` | string，必需 | AutoDL workflow ID；渠道映射后的动作迁移别名也可用。 |
-| `prompt` | string | 有文本槽位时必需、非空，按工作流长度限制；无文本槽位时拒绝。 |
-| `seconds` | integer 或数字字符串 | 映射 `duration` 或 `audio_duration`，省略默认 5；按工作流范围校验。动作迁移不接受。 |
-| `resolution` | string | 统一档位，如 `480p / 768p / 1080p`；省略用工作流默认。 |
-| `orientation` | string | `portrait / landscape / square`；省略用默认方向，组合必须有对应档位。 |
-| `size` | string | 精确 `宽x高`；仅接受已确认尺寸，与 resolution/orientation 冲突报错。 |
-| `input_reference` | object 或 object[] | 每个对象只能有字符串 `image_url`；单图 `{"image_url":"https://…"}`，多图为同类对象数组。 |
-| `audios` / `videos` | string[] | 按数组顺序填入对应音频/视频槽位，值接受 URL/Data URL。 |
-| `seed` | integer 或数字字符串 | 按工作流种子范围校验；没有 seed 能力时拒绝。 |
+| 字段 | 类型 | 必填 / 省略行为 | 可选值、范围与映射 |
+|---|---|---|---|
+| `model` | string | 必填，无默认 | 16 个视频 workflow ID；渠道映射后的动作迁移别名也可用，不接受 MiniMax 官方别名作为 OpenAI 风格 model。 |
+| `prompt` | string | 有文本槽位时必填，无默认 | 非空；H3 按工作流文本上限。音频同步/动作迁移没有文本槽位、拒绝此字段。 |
+| `seconds` | integer 或数字字符串 | 可选，默认 5 | 映射 duration 或 audio_duration；工作流范围为 1–10/12/15，详见能力表。动作迁移拒绝；非整数、超范围拒绝。 |
+| `resolution` | string | 可选，用工作流默认档位 | 全部统一档位为 480p/464p/736p/768p/832p/1080p/1088p/1440p；具体允许项见工作流分辨率组，不是每个模型都支持全部值。 |
+| `orientation` | string | 可选，用默认方向 | portrait/landscape/square；档位与方向必须存在对应组合。 |
+| `size` | string | 可选，无独立默认 | 精确 `宽x高`（小写 x），只接受尺寸表中该工作流已确认的值；与显式 resolution/orientation 冲突报错。 |
+| `input_reference` | object 或 object[] | 按工作流必需数量；无自动补图 | 单对象或对象数组，每个对象恰好一个 image_url 字符串（图片 URL/Data URL）；1 图、成对首尾帧或多图规则见下文。 |
+| `audios` | string[] | 按工作流最少数量，省略视为空数组 | 每项音频 URL/Data URL，按顺序映射 ref_audio_*；不支持音频的工作流只能没有音频输入。 |
+| `videos` | string[] | 动作迁移必填 1 项；省略视为空数组 | 每项视频 URL/Data URL；当前只有动作迁移支持，videos[0]→ref_video。 |
+| `seed` | integer 或数字字符串 | 可选，省略不写入 body | 1–999999999999999，zm_u24/zm_u08 允许 0；默认值与无 seed 能力的工作流见能力表。 |
+| `duration` | integer 或数字字符串 | 仅旧 no_pic 模型可选 | 仅 minimax_h3_lightx2v_no_pic 的 seconds 兼容别名；两者同时传必须一致，其他模型拒绝。 |
+
+数字字符串会转换为数值，仍须满足安全整数及工作流上下限；boolean、空字符串和科学计数法字符串不是有效秒数/种子。省略媒体不表示可绕过必需数量。OpenAI 的统一参数只接受本表字段（内部 emotion 另见 TTS 说明）。
 
 参考图：文生不传；单图恰好 1 张；首尾帧 2 张、依序 first_frame/last_frame；多图依序 ref_image_*。数量不符报错，不补齐/截断/忽略。对象数组是扩展；拒绝旧 images、引用字符串/字符串数组、额外对象属性和未知字段。emotion 仅属内部 TTS 控制，视频工作流拒绝。
 
@@ -132,25 +309,27 @@ MiniMax-H3-MAX 是 MiniMax-H3-Max 的兼容别名。渠道配置请求 model 与
 
 ### 请求结构
 
-| 字段 | 类型 | 规则 |
-|---|---|---|
-| `model` | string，必需 | 上述官方模型名或任意已注册 workflow ID。 |
-| `content` | object[]，必需 | 下表定义的文本/媒体项；最多 1 项 text。 |
-| `resolution` | string | 有分辨率控制时必需；官方命名 `480P→480p`、`768P→768p`、`2K→1440p`。 |
-| `duration` | integer | 官方模型名必需；直接 ID 按该工作流 `duration` 范围，省略默认 5。 |
-| `audio_duration` | integer 或数字字符串 | 仅存在此字段的工作流可用，省略默认 5；不与 duration 互换。 |
-| `ratio` | string | 规则见[比例与 adaptive](#比例与-adaptive)。 |
-| `seed` | integer 或数字字符串 | 仅支持种子的工作流接受，范围见参数表。 |
-| 工作流扩展字段 | 对应类型 | 可用该工作流的非文本、非媒体原生控制，如 TTS `emo_*`；不混入 prompt 或媒体槽位字段。 |
+| 字段 | 类型 | 必填 / 省略行为 | 可选值、范围与映射 |
+|---|---|---|---|
+| `model` | string | 必填，无默认 | MiniMax-H3、MiniMax-H3-Max（另兼容 MiniMax-H3-MAX）或任意 17 个注册 workflow ID；不增加 workflow_id。 |
+| `content` | object[] | 必填；所需文本/媒体依工作流 | 只接受下表项，最多 1 条 text；每项必须是 object，媒体数量按工作流。 |
+| `resolution` | string | 有分辨率控制时必填；TTS 拒绝 | 官方 480P→480p、768P→768p、2K→1440p。H3 仅 768P/2K，Max 仅 480P/768P；直接 ID 另支持本文件列出的 AutoDL 扩展档位/完整原生标签。 |
+| `duration` | integer；直接 ID 另可数字字符串 | 官方模型必填；直接 ID 可省略默认 5 | H3 4–15，Max 5–15；直接 ID 按 duration 的 1–10/12/15 范围。音频同步、动作迁移、TTS 无该字段、拒绝。 |
+| `audio_duration` | integer 或数字字符串 | 仅音频同步工作流可选，默认 5 | minimax_h3_image_audio_to_video 的 1–15 秒字段；不与 duration 互换，其余工作流拒绝。 |
+| `ratio` | string | 纯文生必填；参考场景省略为 adaptive；TTS 拒绝 | adaptive/21:9/16:9/4:3/1:1/3:4/9:16；纯文生不能 adaptive，首尾帧按 adaptive，详见[比例说明](#比例与-adaptive)。 |
+| `seed` | integer 或数字字符串 | 有 seed 能力时可选，不补写默认 | 按目标 workflow 的种子范围；没有 seed 能力则拒绝。 |
+| 工作流扩展字段 | 对应 input_rules 类型 | 依工作流，如 TTS 控制方法可省略用默认 | 仅接受该 workflow 的非文本、非媒体控制，如 emo_*；不能混入 prompt/ref_image_*/ref_audio_* 等竞争字段。 |
 
 官方模型须 1 条非空 text、≤7000 字符；直接 ID 按工作流文本上限，duration 另可数字字符串。无 duration 控制则拒绝，TTS 也拒绝 resolution/ratio；未知字段（callback_url/extra 等）拒绝。
 
-| `content[].type` | 内容 | `role` 与映射 |
-|---|---|---|
-| `text` | `"text":"描述"` | 不传 role；映射 `prompt / prompt_text`。 |
-| `image_url` | `"image_url":{"url":"https://…"}` | `first_frame / last_frame` 对应帧；省略 role 默认 first_frame；`reference_image` 按顺序填图片槽位。 |
-| `audio_url` | `"audio_url":{"url":"https://…"}` | 必须 `reference_audio`，按同类项出现顺序填音频槽位。 |
-| `video_url` | `"video_url":{"url":"https://…"}` | 必须 `reference_video`；仅直接指定有视频输入能力的工作流可用。 |
+| `content[].type`（必填 string） | 必需内容字段 / 类型 | `role` / 默认 | 校验与映射 |
+|---|---|---|---|
+| `text` | text：非空 string | 不传 role | 项只允许 type/text，映射 prompt 或 prompt_text；最多 1 条，官方模型必需且≤7000，直接 ID 按工作流上限。 |
+| `image_url` | image_url：object，仅含 url:string | first_frame / last_frame / reference_image；省略为 first_frame | 图片 URL/Data URL；对应帧或顺序映射图片槽位。官方模型帧必须成对；单图直接 ID 也可将 first_frame 映射唯一图片槽位。 |
+| `audio_url` | audio_url：object，仅含 url:string | 必填 reference_audio | 音频 URL/Data URL，按同类项出现顺序映射音频槽位。 |
+| `video_url` | video_url：object，仅含 url:string | 必填 reference_video | 视频 URL/Data URL，仅直接指定有视频输入能力的 workflow ID（当前动作迁移）可用；官方别名拒绝。 |
+
+媒体项仅允许 type、对应媒体对象和 role；媒体对象不接受 file_id 或其他属性。type/role 的拼写区分大小写，重复帧或首尾帧混参考媒体均报错。
 
 资源对象只有字符串 url（URL/Data URL）；role 不能当 type，MiniMax url 不能换成 OpenAI image_url 结构。首尾帧不与参考媒体混用、不重复 frame role；数量按工作流，首尾帧工作流必须用对应两种 role。
 
@@ -263,6 +442,30 @@ ratio 可用 adaptive/21:9/16:9/4:3/1:1/3:4/9:16：横向映横，3:4/9:16 映�
 
 **Native Body Passthrough + Sidecar Validation/Billing**：保留字段（含未知字段）、嵌套/数组及 number/string 类型，不保证空白/键顺序，不补默认。仅旁路检查 duration/audio_duration/resolution；不能安全计费则拒绝，省略用默认生成内部 facts。已知媒体字符串校验 URL/Data URL 后原样发送，数量/业务内容/数字字符串可用性由上游校验。__fileRef 当普通 JSON、不展开附件；action 由工作流及媒体槽位决定。
 
+### 原生字段
+
+下表是当前官网字段的使用规则，**不是原生模式的字段白名单**。只填写目标 workflow 实际存在的字段；未知业务扩展仍透传。官网必填/默认规则由上游执行，插件只旁路检查计费字段和已知媒体字符串格式，且不把省略的默认值补进原始 body。
+
+| 字段 | 官网类型 | 必填 / 默认 | 适用工作流与规则 |
+|---|---|---|---|
+| `prompt` | string | 有此字段时必填，无默认 | 有文本输入的 H3；非空及字符上限见工作流表。音频同步/动作迁移没有此字段。 |
+| `prompt_text` | string | 必填，无默认 | 仅 indextts2-v1，1–2048 字符。 |
+| `duration` | integer | 可选，默认 5 | 声明 duration 的 H3；1–10/12/15 秒。原生数字字符串可通过计费分析但原样发送，上游决定是否接受。 |
+| `audio_duration` | integer | 可选，默认 5 | 仅 minimax_h3_image_audio_to_video，1–15 秒，不改名为 duration。 |
+| `resolution` | enum string | 可选；默认见分辨率组 | 必须使用该 workflow 的完整原生标签，如 480p竖、768p竖(768*1376)、464*832px(竖版)；不能用统一档位代替完整标签。 |
+| `seed` | integer | 可选；默认见工作流表 | 仅有 seed 字段的工作流；最大 999999999999999，下限通常 1、zm_u24/zm_u08 为 0；原生不重写类型。 |
+| `first_frame` / `last_frame` | image string | 首尾帧工作流两项必需 | minimax_h3_lightx2v、minimax_h3_b99_002；分别为第一帧/最后一帧 URL 或图片 Data URL。 |
+| `ref_image_0…ref_image_8` | image string | 必需数量按工作流；部分槽位可选 | 按编号顺序，最多数量为 1/6/9，见工作流表；图片 URL/Data URL，不为不存在的槽位补值。 |
+| `ref_audio_0…ref_audio_2` | audio string | 必需数量按工作流 | H3 音频输入，最多 1/3 段；音频 URL/Data URL。 |
+| `ref_image` / `ref_video` | image / video string | 两项必填 | 仅动作迁移，各 1 个；视频为可测量 MP4/WebM，URL/Data URL，不能传可控时长字段。 |
+| `prompt_simple` / `emo_ref_audio` | audio string | 第一项必填；第二项按情感模式 | 仅 TTS，音色/情感参考音频 URL/Data URL；参考情感模式需要第二项。 |
+| `emo_control_method` | enum string | 官网默认「与音色参考音频相同」 | TTS 另可「使用情感参考音频」「使用情感向量控制」。 |
+| `emo_afraid / emo_angry / emo_calm / emo_disgusted / emo_happy / emo_melancholic / emo_sad` | number | 可选，默认 0 | TTS 每项 0–1.4。 |
+| `emo_random` / `emo_surprised` | boolean / enum | false / "0" | TTS；surprised 仅 "0"，官网样例另有数字 0，原生保持提交值。 |
+| 其他业务扩展 | 任意 JSON 值 | 由上游定义 | 保留字段、嵌套对象/数组及 number/string 类型；客户端字段不能覆盖可信计费 facts。 |
+
+原生 body 不增加统一 model/input/content/parameters 包装；模型由完整路径中的 workflow_id 决定。具体媒体数量、分辨率枚举、时长/文本上限与种子默认值见本文件的工作流表。
+
 创建返回 task_id；查询 `GET /api/v1/comfyui/comfyui_workflow/result/{task_id}` 返回：
 
 ```json
@@ -290,14 +493,18 @@ curl "$NEW_API_BASE_URL/api/v1/services/aigc/image2video/video-synthesis" \
   -d '{"model":"wan2.2-animate-move","input":{"image_url":"https://media.example.com/person.png","video_url":"https://media.example.com/motion.mp4","watermark":false},"parameters":{"mode":"wan-std","check_image":true}}'
 ```
 
-| 字段 | 类型 | 规则 |
-|---|---|---|
-| `model` | string，必需 | 仅 wan2.2-animate-move。 |
-| `input` / `parameters` | object，必需 | 仅接受本表子字段，所有层级拒绝未知字段。 |
-| `input.image_url` / `input.video_url` | string，必需 | 图片/视频 URL 或对应 Data URL→ref_image/ref_video；各 1 个，无音频字段。 |
-| `input.watermark` | boolean，可选 | 只能 false 或省略；上游没有水印控制。 |
-| `parameters.mode` | string，必需 | 仅 wan-std；wan-pro 无等价工作流，明确拒绝。 |
-| `parameters.check_image` | boolean，可选 | 只能 true 或省略；上游不能关闭图片检查，此兼容值不发送上游。 |
+| 字段 | 类型 | 必填 / 省略行为 | 可选值与规则 |
+|---|---|---|---|
+| `model` | string | 必填，无默认 | 仅 wan2.2-animate-move，自动映射动作迁移 workflow。 |
+| `input` | object | 必填 | 只允许 image_url、video_url、watermark。 |
+| `input.image_url` | string | 必填，无默认 | 1 个图片 URL/标准图片 Data URL→ref_image。 |
+| `input.video_url` | string | 必填，无默认 | 1 个视频 URL/标准视频 Data URL→ref_video；MP4/WebM，按动作迁移计量限制校验。 |
+| `input.watermark` | boolean | 可选，省略等同 false | 只能 false；true 或其他类型拒绝，上游无水印控制。 |
+| `parameters` | object | 必填 | 只允许 mode、check_image。 |
+| `parameters.mode` | string | 必填，无默认 | 仅 wan-std；wan-pro 无对应工作流、拒绝。 |
+| `parameters.check_image` | boolean | 可选，省略等同 true | 只能 true；false 或其他类型拒绝，兼容值不发送上游。 |
+
+所有层级拒绝未知字段，包括音频、prompt、seconds/duration、resolution、seed、原生媒体槽位及私有计费字段。此入口不提供这些控制，不能套用其他 Wan 模型的参数。
 
 固定 body `{"resolution":"464*832px(竖版)","ref_image":"<图片>","ref_video":"<视频>"}`；不测图片尺寸、不加外部分辨率/时长/原生字段，wan-std 不保证官方服务质量。拒绝非法媒体、本地地址、facts/rewriteModel/私有 marker；视频抓取遵循宿主 DNS/重定向 SSRF 校验。
 

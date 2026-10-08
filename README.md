@@ -4,7 +4,7 @@
 
 插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.0**（插件元数据为 `1.0.0`）。
 
-**调用方请先阅读：[完整 API 请求与响应文档](API.md)。** 文档包含四套接口的字段、单图/多图、MiniMax 自动路由、原生透传、查询下载、计费前提和错误处理。
+**调用方从这里开始：[5 分钟快速开始与完整 API 参考](API.md#5-分钟快速开始)。** 一份文档平等介绍 OpenAI、MiniMax、AutoDL Native、DashScope Wan 四种接口；每种都有完整 curl、创建响应、任务查询和成功结果字段。覆盖文生视频、图片 URL/Data URL、图+音频、图+视频，并提供常用模型与错误速查；后半部分保留完整字段类型、必填/默认值、工作流范围、MiniMax 自动路由、原生透传、计费及技术限制，无需跳到其他说明文档。
 
 **AutoDL 官网工作流模型名也能使用 MiniMax 官方格式。** 在 `model` 填 `minimax_h3_z0901`、`minimax_h3_lightx2v` 等 workflow ID，继续使用 `content / resolution / duration / ratio`，统一调用 `POST /v2/video_generation`。这项能力与 `MiniMax-H3`、`MiniMax-H3-Max` 自动路由并列支持；完整说明和多图、音频、首尾帧示例见 [直接使用官网工作流的 MiniMax 请求文档](API.md#autodl-官网工作流模型名直接使用-minimax-格式)。
 
