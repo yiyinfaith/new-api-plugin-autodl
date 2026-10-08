@@ -51,7 +51,7 @@ OpenAI 解码器将 `seconds / size / input_reference` 等统一字段转换成�
 
 三种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，完成时沿用保存的请求用量；AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
 
-插件不会自动导入价格、探测远程媒体尺寸或替用户上传本地媒体。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#minimax-比例与-adaptive)。上线前请为全部要调用的工作流及官方模型别名配置价格；仅安装插件不足以完成渠道和计费配置。
+插件不会自动导入价格、探测远程媒体尺寸或替用户上传本地媒体。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#比例与-adaptive)。上线前请为全部要调用的工作流及官方模型别名配置价格；仅安装插件不足以完成渠道和计费配置。
 
 ## URL 安装
 

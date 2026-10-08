@@ -119,7 +119,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 }
 ```
 
-必填字段为 `model`、`content`、`resolution` 和 `duration`。官方别名还要求恰好一条非空 text，最多 7000 字符。`ratio` 按场景必需或可选。`seed`、`audio_duration` 和 AutoDL 特有工作流字段为扩展参数，仅当选中的工作流存在相应 `input_rules` 时接受；不得将 AutoDL 的 `duration` 和 `audio_duration` 混为一项。没有官方含义的顶层字段不会被静默接受。
+`model` 和 `content` 必填。使用官方模型名时，`resolution` 和整数 `duration` 必填，还要求恰好一条非空 text，最多 7000 字符。直接指定 workflow ID 时，存在分辨率控制的工作流仍要求 `resolution`；可控时长省略时使用该工作流默认值。没有 `duration` 控制的动作迁移或 TTS 工作流不接受 `duration`，TTS 也不接受 `resolution` 或 `ratio`。`ratio` 按场景必需或可选。`seed`、`audio_duration` 和 AutoDL 特有工作流字段为扩展参数，仅当选中的工作流存在相应 `input_rules` 时接受；不得将 AutoDL 的 `duration` 和 `audio_duration` 混为一项。没有官方含义的顶层字段不会被静默接受。
 
 `content` 项：
 
@@ -132,6 +132,16 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 ```
 
 `text` 最多一项。媒体资源对象只接受 `url`，值须为公开 HTTP(S) URL。未指定 image role 时按官方规则视为 `first_frame`；参考图请显式使用 `reference_image`。不允许首尾帧与参考媒体混用、重复 frame role 或超过工作流输入槽位。当前自动路由模型没有可用的 reference-video workflow，传 `reference_video` 会明确报错。
+
+| `type` | 对应资源字段 | `role` | 内部映射 |
+|---|---|---|---|
+| `text` | `text` 为字符串 | 不传 | 工作流的 `prompt` 或 `prompt_text` |
+| `image_url` | `image_url: {"url":"https://…"}` | `first_frame` / `last_frame` | 对应首尾帧槽位；官方别名要求两帧成对 |
+| `image_url` | `image_url: {"url":"https://…"}` | `reference_image` | 按同类媒体出现顺序映射图片槽位 |
+| `audio_url` | `audio_url: {"url":"https://…"}` | `reference_audio` | 按同类媒体出现顺序映射音频槽位 |
+| `video_url` | `video_url: {"url":"https://…"}` | `reference_video` | 仅直接指定有视频输入的 workflow ID 时可用，如动作迁移；两个官方别名拒绝 |
+
+角色不是 `type`：不要写 `{"type":"reference_image",...}`。MiniMax 的资源对象使用 `url`，OpenAI 的 `input_reference` 对象使用 `image_url` 字符串，两者不能混写。
 
 首尾帧请求将上面的媒体对象替换为两项 image：分别用 `role: "first_frame"` 和 `role: "last_frame"`。单帧、reference image、reference audio 和 reference video 的对象结构不变，只使用对应的 role；当前模型路由对 reference video 会明确拒绝。
 
@@ -158,7 +168,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 
 ### 比例与 adaptive
 
-接受 MiniMax 官方比例：`adaptive`、`21:9`、`16:9`、`4:3`、`1:1`、`3:4`、`9:16`。横向比例选择可用横屏档位，`3:4` / `9:16` 选择竖屏档位，`1:1` 优先选择方形档位。某 workflow 没有对应方向时会报不支持，比例映射不会改变其 resolution 档位。
+接受 MiniMax 官方比例：`adaptive`、`21:9`、`16:9`、`4:3`、`1:1`、`3:4`、`9:16`。横向比例选择可用横屏档位，`3:4` / `9:16` 选择竖屏档位，`1:1` 优先选择方形档位；若当前工作流在请求档位没有方形，则退回官网默认方向。横屏/竖屏方向没有对应档位时会报不支持，比例映射不会改变其 resolution 档位。AutoDL 只提供有限方向标签，横向不同具体比例映射到同一横屏档位，因此不保证生成精确的 `21:9` 或 `4:3` 画幅。
 
 纯文生视频必须给出具体 ratio，不能传 `adaptive`。图像/视频/音频参考场景允许省略 ratio，默认按 adaptive；首尾帧遵循 MiniMax adaptive 语义。插件仅为单文件，New API rc.41 Plugin API v1 不提供远程媒体尺寸探测能力，因此无法按图片真实宽高选择方向。遇到 adaptive 时会接受请求，并使用所选 AutoDL workflow 的官网默认方向作为最接近的降级；此行为不保证输出匹配参考图真实比例，也不是 MiniMax 服务端尺寸探测。
 
@@ -176,11 +186,58 @@ curl -sS "$NEW_API_BASE_URL/v2/query/video_generation/$TASK_ID" \
   -H "Authorization: Bearer $NEW_API_KEY"
 ```
 
-创建成功返回 `{"task_id":"<New API 公开任务 ID>"}`。查询返回 MiniMax 风格 `{ "task": { ... } }`：状态为 `queued / running / succeeded / failed`；成功含 `task.content.url`；失败含 `task.error.code / message`。视频任务 `task.modality` 为 `video`，AutoDL 的 TTS 扩展任务则为 `audio`，可以用 `--artifact audio` 下载。
+创建成功返回 `{"task_id":"<New API 公开任务 ID>"}`。查询返回 MiniMax 风格 `{ "task": { ... } }`：状态为 `queued / running / succeeded / failed`，宿主取消时可为 `cancelled`；成功含 `task.content.url`；失败含 `task.error.code / message`。视频任务 `task.modality` 为 `video`，AutoDL 的 TTS 扩展任务则为 `audio`，可以用 `--artifact audio` 下载。
+
+成功查询的示意响应（时间字段仅在宿主提供时出现）：
+
+```json
+{
+  "task": {
+    "id": "<task_id>",
+    "status": "succeeded",
+    "task_type": "generation",
+    "modality": "video",
+    "created_at": 1785125529,
+    "updated_at": 1785125589,
+    "content": {"url": "https://media.example.com/result.mp4"}
+  }
+}
+```
+
+排队或运行时暂不返回 `content`。失败任务的示意响应：
+
+```json
+{
+  "task": {
+    "id": "<task_id>",
+    "status": "failed",
+    "task_type": "generation",
+    "modality": "video",
+    "error": {"code": "video_generation_failed", "message": "上游返回的失败原因"}
+  }
+}
+```
 
 New API rc.41 的公开 TaskView 不包含所有私有插件 state；AutoDL 的 `data.duration` 表示处理耗时而不是成片秒数。因此查询只返回可确认的 ID、状态、时间和产物，省略不能确认的 model、resolution、duration、ratio、usage 和 token 用量。MiniMax 客户端若要求这些字段，不能用本适配器查询结果替代官方服务的完整元数据。插件也不实现 `file_id`、二进制上传和 `callback_url` 等其他服务能力。
 
 直接使用 AutoDL workflow ID 时仍走相同路径和 MiniMax `content` 格式，例如将上例的 `model` 改成 `minimax_h3_z0901`。该模式按对应工作流能力处理，可使用 AutoDL 扩展 duration 范围、resolution、seed、audio_duration 等参数，不受官方别名 H3/H3-Max 的额外参数约束。
+
+### TTS 音频扩展示例
+
+此能力来自 AutoDL `indextts2-v1`，属于适配器扩展。仍提交到 `POST /v2/video_generation`，不使用两个视频官方模型名：
+
+```json
+{
+  "model": "indextts2-v1",
+  "content": [
+    {"type": "text", "text": "你好，这是音色参考合成示例。"},
+    {"type": "audio_url", "audio_url": {"url": "https://media.example.com/voice.wav"}, "role": "reference_audio"}
+  ],
+  "emo_control_method": "与音色参考音频相同"
+}
+```
+
+第一段 `reference_audio` 映射必需的 `prompt_simple`（音色参考），第二段映射可选的 `emo_ref_audio`（情感参考）；总共只接受 1–2 段。选择 `emo_control_method: "使用情感参考音频"` 时第二段必需。也可选择 `"使用情感向量控制"`，并使用原生扩展字段 `emo_afraid / emo_angry / emo_calm / emo_disgusted / emo_happy / emo_melancholic / emo_sad`（数值 0–1.4）、`emo_random`（boolean）；官网 `emo_surprised` 当前只接受字符串 `"0"`。这里不使用 OpenAI 风格的 `emotion` 包装。TTS 不传 `duration`、`resolution` 或 `ratio`；成功查询的 `task.modality` 为 `audio`，在 `task.content.url` 下载音频。
 
 ## AutoDL ComfyUI 原生 API
 
@@ -208,7 +265,35 @@ curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" \
   -H "Authorization: Bearer $NEW_API_KEY"
 ```
 
-返回 `{ "task_id", "status", "progress", "fail_reason", "results" }`。状态包括 `QUEUED`、`IN_PROGRESS`、`SUCCESS`、`FAILURE` 和 `UNKNOWN`。成功时 `results` 保留可用的公开媒体 URL 与 `type`，例如 `video` 或 `audio`；客户端直接下载 URL，不能转发 New API 或 AutoDL Token 到 CDN。
+返回 `{ "task_id", "status", "progress", "fail_reason", "results" }`。状态保留 New API 任务状态，包括 `NOT_START`、`SUBMITTED`、`QUEUED`、`IN_PROGRESS`、`SUCCESS`、`FAILURE`、`UNKNOWN`，宿主取消时也可为 `CANCELLED`。成功时 `results` 保留可用的公开媒体 URL 与 `type`，例如 `video` 或 `audio`；客户端直接下载 URL，不能转发 New API 或 AutoDL Token 到 CDN。
+
+成功查询的示意响应：
+
+```json
+{
+  "task_id": "<task_id>",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "fail_reason": "",
+  "results": [{"url": "https://media.example.com/result.mp4", "type": "video"}]
+}
+```
+
+排队和执行期间 `results` 为空；失败时 `status` 为 `FAILURE`，`fail_reason` 提供原因。查询响应由插件转换，使用 New API 公开任务 ID；创建 body 的原样透传不表示任务 ID 和响应 JSON 也与上游完全相同。
+
+### 原生 TTS 与等价映射
+
+以下 body 直接提交到 `POST /api/v1/comfyui/comfyui_workflow/indextts2-v1`，与上面的 MiniMax 音频示例等价：
+
+```json
+{
+  "prompt_text": "你好，这是音色参考合成示例。",
+  "prompt_simple": "https://media.example.com/voice.wav",
+  "emo_control_method": "与音色参考音频相同"
+}
+```
+
+查询继续使用本节的原生结果路径；`results[].type` 为 `audio`。原生 body 的其他 `emo_*` 字段沿用官网字段名，不需要 `model`。与 MiniMax 转换层不同，原生接口不会替你验证或补齐这些业务参数，实际有效性由 AutoDL 判定。
 
 ## 工作流目录与能力边界
 
@@ -230,7 +315,7 @@ curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" \
 | `minimax_h3_lightx2v_v5` | H3 多图参考 | 图 1–9 | 1–10 秒；480p/768p/1080p |
 | `minimax_h3_lightx2v_no_pic` | H3 文生视频 | 无媒体 | 1–15 秒；480p/768p |
 | `minimax_h3_lightx2v` | H3 首尾帧 | 图 2 | 1–15 秒；480p/768p |
-| `indextts2-v1` | indexTTS2 音频合成 | 音色参考 1–2；可选情感参考音频 | 时长由文本决定；无视频 resolution |
+| `indextts2-v1` | indexTTS2 音频合成 | 第 1 段音色参考必需；第 2 段情感参考可选，共 1–2 段 | 时长由文本决定；无视频 resolution |
 
 OpenAI Videos 模式不暴露 `indextts2-v1`。它可使用 MiniMax 音频扩展或 AutoDL 原生接口。动作迁移的视频时长跟随输入视频，TTS 没有生成视频秒数；不能传 `seconds` 计费。每项 workflow 的准确必需字段、默认值、完整原始 resolution 标签、数值上下限和 input_rules 以 [workflows.json](workflows.json) 为准。
 
