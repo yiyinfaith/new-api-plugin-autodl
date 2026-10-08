@@ -9,14 +9,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5"
-      ],
       "audios": [
         "ref_audio_0",
         "ref_audio_1",
@@ -199,7 +191,15 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5"
+      ]
     },
     "minimax_h3_z0902": {
       "workflowId": "minimax_h3_z0902",
@@ -208,14 +208,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5"
-      ],
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -364,7 +356,15 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5"
+      ]
     },
     "minimax_h3_z0901": {
       "workflowId": "minimax_h3_z0901",
@@ -373,7 +373,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [],
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -462,7 +461,8 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": []
     },
     "minimax_h3_zm_u24": {
       "workflowId": "minimax_h3_zm_u24",
@@ -471,17 +471,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5",
-        "ref_image_6",
-        "ref_image_7",
-        "ref_image_8"
-      ],
       "audios": [
         "ref_audio_0",
         "ref_audio_1",
@@ -674,16 +663,8 @@
           "min": 0,
           "max": 999999999999999
         }
-      }
-    },
-    "minimax_h3_zm_u08": {
-      "workflowId": "minimax_h3_zm_u08",
-      "name": "H3多图多音频生视频(高速版)",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "images": [
+      },
+      "input_reference": [
         "ref_image_0",
         "ref_image_1",
         "ref_image_2",
@@ -693,7 +674,15 @@
         "ref_image_6",
         "ref_image_7",
         "ref_image_8"
-      ],
+      ]
+    },
+    "minimax_h3_zm_u08": {
+      "workflowId": "minimax_h3_zm_u08",
+      "name": "H3多图多音频生视频(高速版)",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
       "audios": [
         "ref_audio_0",
         "ref_audio_1",
@@ -886,7 +875,18 @@
           "min": 0,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
     },
     "minimax_h3_b99_002": {
       "workflowId": "minimax_h3_b99_002",
@@ -895,10 +895,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [
-        "first_frame",
-        "last_frame"
-      ],
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -969,7 +965,11 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "first_frame",
+        "last_frame"
+      ]
     },
     "minimax_h3_b99_001": {
       "workflowId": "minimax_h3_b99_001",
@@ -978,7 +978,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [],
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -1029,7 +1028,8 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": []
     },
     "minimax_h3_b99_003_12s": {
       "workflowId": "minimax_h3_b99_003_12s",
@@ -1038,17 +1038,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5",
-        "ref_image_6",
-        "ref_image_7",
-        "ref_image_8"
-      ],
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -1189,7 +1178,18 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
     },
     "wan2.2animate-v4-motion_retargeting": {
       "workflowId": "wan2.2animate-v4-motion_retargeting",
@@ -1198,9 +1198,6 @@
       "timeoutSeconds": 1800,
       "promptField": null,
       "secondsField": null,
-      "images": [
-        "ref_image"
-      ],
       "audios": [],
       "videos": [
         "ref_video"
@@ -1251,7 +1248,10 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "ref_image"
+      ]
     },
     "minimax_h3_image_audio_to_video_v2_15s": {
       "workflowId": "minimax_h3_image_audio_to_video_v2_15s",
@@ -1260,17 +1260,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5",
-        "ref_image_6",
-        "ref_image_7",
-        "ref_image_8"
-      ],
       "audios": [
         "ref_audio_0",
         "ref_audio_1",
@@ -1458,16 +1447,8 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
-    },
-    "minimax_h3_lightx2v_v5_15s": {
-      "workflowId": "minimax_h3_lightx2v_v5_15s",
-      "name": "H3多图生视频15秒",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "images": [
+      },
+      "input_reference": [
         "ref_image_0",
         "ref_image_1",
         "ref_image_2",
@@ -1477,7 +1458,15 @@
         "ref_image_6",
         "ref_image_7",
         "ref_image_8"
-      ],
+      ]
+    },
+    "minimax_h3_lightx2v_v5_15s": {
+      "workflowId": "minimax_h3_lightx2v_v5_15s",
+      "name": "H3多图生视频15秒",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -1642,16 +1631,8 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
-    },
-    "minimax_h3_image_audio_to_video_v2": {
-      "workflowId": "minimax_h3_image_audio_to_video_v2",
-      "name": "H3多图多音频生视频",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "images": [
+      },
+      "input_reference": [
         "ref_image_0",
         "ref_image_1",
         "ref_image_2",
@@ -1661,7 +1642,15 @@
         "ref_image_6",
         "ref_image_7",
         "ref_image_8"
-      ],
+      ]
+    },
+    "minimax_h3_image_audio_to_video_v2": {
+      "workflowId": "minimax_h3_image_audio_to_video_v2",
+      "name": "H3多图多音频生视频",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
       "audios": [
         "ref_audio_0",
         "ref_audio_1",
@@ -1863,7 +1852,18 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
     },
     "minimax_h3_image_audio_to_video": {
       "workflowId": "minimax_h3_image_audio_to_video",
@@ -1872,9 +1872,6 @@
       "timeoutSeconds": 1800,
       "promptField": null,
       "secondsField": "audio_duration",
-      "images": [
-        "ref_image_0"
-      ],
       "audios": [
         "ref_audio_0"
       ],
@@ -1957,7 +1954,10 @@
             "1080p横"
           ]
         }
-      }
+      },
+      "input_reference": [
+        "ref_image_0"
+      ]
     },
     "minimax_h3_lightx2v_v5": {
       "workflowId": "minimax_h3_lightx2v_v5",
@@ -1966,17 +1966,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5",
-        "ref_image_6",
-        "ref_image_7",
-        "ref_image_8"
-      ],
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -2162,7 +2151,18 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
     },
     "minimax_h3_lightx2v_no_pic": {
       "workflowId": "minimax_h3_lightx2v_no_pic",
@@ -2171,7 +2171,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [],
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -2239,7 +2238,8 @@
             "768p(1:1)"
           ]
         }
-      }
+      },
+      "input_reference": []
     },
     "minimax_h3_lightx2v": {
       "workflowId": "minimax_h3_lightx2v",
@@ -2248,10 +2248,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt",
       "secondsField": "duration",
-      "images": [
-        "first_frame",
-        "last_frame"
-      ],
       "audios": [],
       "videos": [],
       "resolutions": [
@@ -2344,7 +2340,11 @@
           "min": 1,
           "max": 999999999999999
         }
-      }
+      },
+      "input_reference": [
+        "first_frame",
+        "last_frame"
+      ]
     },
     "indextts2-v1": {
       "workflowId": "indextts2-v1",
@@ -2353,7 +2353,6 @@
       "timeoutSeconds": 1800,
       "promptField": "prompt_text",
       "secondsField": null,
-      "images": [],
       "audios": [
         "prompt_simple",
         "emo_ref_audio"
@@ -2455,7 +2454,8 @@
           "min_length": 1,
           "max_length": 2048
         }
-      }
+      },
+      "input_reference": []
     }
   }
 }

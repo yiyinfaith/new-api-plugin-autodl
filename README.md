@@ -2,7 +2,7 @@
 
 为 New API 提供 AutoDL.Art Task Plugin 适配，将 AutoDL ComfyUI 工作流接入 New API。
 
-插件 key：`autodl`；显示名：**AutoDL**；当前版本：**1.1.1**。
+插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.0**（插件元数据为 `1.0.0`）。
 
 **推荐安装地址：** [https://raw.githubusercontent.com/yiyinfaith/new-api-plugin-autodl/main/plugin.js](https://raw.githubusercontent.com/yiyinfaith/new-api-plugin-autodl/main/plugin.js)
 
@@ -42,6 +42,8 @@ URL 导入在浏览器中下载源码，因此使用管理后台的浏览器需�
 **只需下载 `plugin.js` 即可安装并运行。** 工作流定义、参数映射、插件元信息和任务钩子均包含在这个文件中；不依赖本地 import、Node.js 文件系统或仓库其他文件。`export const meta` 就是官方插件元信息，无需额外 manifest 文件。
 
 仓库只维护根目录的一个 `plugin.js` 和一个当前版本，更新后仍使用同一个 `main` Raw URL。`workflows.json`、`official-workflows.json`、`examples.json` 和 `prices.json` 用于查阅、示例及开发验证，插件运行时不会读取它们；测试脚本、校验文件、许可证和 `.github/` 也不是安装依赖。
+
+更新已有安装时需留意 rc.41 的同版本校验：如果已经安装 `autodl / 1.0.0`，再次导入不同源码会提示 `plugin key and version already exist with different source`。请先备份已有插件源码；该版本未激活时可在任务插件中删除它后重新导入。如果它正在使用，先暂停关联渠道并等待运行中任务结束，再按后台提示删除旧安装、从同一个 Raw URL 导入并启用，最后恢复渠道。本仓库仍只维护 v1.0.0，不需要创建 tag 或选择安装版本。
 
 URL 安装不会自动配置渠道或导入模型价格。请完成上述渠道配置，并为要使用的模型设置价格；未配置价格时可能返回 `model_price_error`。7 个已核实模型的官方价格及表达式见下方价格章节和 [prices.json](prices.json)。
 
@@ -85,11 +87,11 @@ URL 安装不会自动配置渠道或导入模型价格。请完成上述渠道�
 |---|---|---|
 | `model` | string | 官网工作流 ID，必填 |
 | `prompt` | string | 文本；自动映射 `prompt` 或 TTS 的 `prompt_text`；不接受文本的工作流不应传 |
-| `seconds` | integer | 秒数；自动映射 `duration` 或 `audio_duration`；按模型校验范围 |
+| `seconds` | integer / numeric string | 秒数；自动映射 `duration` 或 `audio_duration`；按模型校验范围 |
 | `resolution` | string | `480p`、`768p` 等统一档位；支持值以模型表为准 |
 | `orientation` | string | `portrait` 竖屏、`landscape` 横屏、`square` 方形；按工作流枚举校验 |
 | `size` | string | 可选精确尺寸，如 `864x480`；只对已确认尺寸的工作流支持；与上述参数冲突时报错 |
-| `images` | string[] | 公开 HTTP(S) 图片 URL；按顺序映射首尾帧或 `ref_image_0...` |
+| `input_reference` | string / string[] | 单张参考图用公开 HTTP(S) URL 字符串，多张用 URL 字符串数组；按顺序映射首尾帧或 `ref_image_*`，严格校验工作流允许的数量 |
 | `audios` | string[] | 公开 HTTP(S) 音频 URL；按顺序映射参考音频；TTS 第一段是音色，第二段是情感参考 |
 | `videos` | string[] | 公开 HTTP(S) 视频 URL；动作迁移 `videos[0]` 映射 `ref_video` |
 | `seed` | integer | 按官网该工作流的种子范围校验；没种子控制的工作流拒绝 |
@@ -101,7 +103,41 @@ URL 安装不会自动配置渠道或导入模型价格。请完成上述渠道�
 
 TTS `emotion.mode` 接受 `voice`（默认，沿用音色参考情感）、`reference`（必须 `audios[1]`）、`vector`（情感向量）。向量参数为 `afraid`、`angry`、`calm`、`disgusted`、`happy`、`melancholic`、`sad`、`surprised`，范围见 catalog；`emotion.random` 是 boolean。官网当前 `surprised` 枚举仅有字符串 `"0"`，本插件接受统一数值 `0` 并转换，拒绝其他值。
 
-JSON 和文本表单均可使用统一参数；表单里的媒体数组和 `emotion` 必须 JSON 编码。二进制 multipart 文件上传不受本适配器支持，使用公开可下载的媒体 URL。URL 的过期时间要覆盖任务排队和处理。
+JSON 和文本表单均可使用统一参数。表单里的 `input_reference` 单图直接填写 URL，多图填写 JSON 字符串数组；也可重复同名文本字段，每项填写一个 URL，顺序保持不变。`audios`、`videos` 和 `emotion` 仍须 JSON 编码。参考媒体 URL 的过期时间要覆盖任务排队和处理。
+
+## input_reference 与协议限制
+
+已核对当前部署的 New API v1.0.0-rc.41：[Plugin API v1 文档的 Request body / Host protocols](https://github.com/QuantumNous/new-api/blob/2035a82aeb5414253a728bd937d4b8f97aa99b9b/docs/plugin-api-v1.md) 明确支持 `POST /v1/videos` 的 JSON 和 multipart 请求。JSON 值直接交给插件解码，字符串和数组可原样传递；multipart 同名文本字段保留多个值和顺序，同名文件则各自具有独立 `FileReference`。本插件使用 URL 文本输入。
+
+[OpenAI 保留的 Videos Create 文档](https://developers.openai.com/api/reference/resources/videos/methods/create) 将 JSON `input_reference` 定义为一个引用对象，包含 `image_url` 或 `file_id`。以下 URL 字符串 / 字符串数组是 **AutoDL 插件的输入约定**，通过 New API 透传实现：字段名和接口沿用 OpenAI Videos 风格，类型不是 OpenAI 官方引用对象或多文件上传格式。
+
+- **单图：** `"input_reference": "https://your-public-file-host.example/reference.png"`；一个元素的字符串数组也可以。
+- **多图：** `"input_reference": ["https://your-public-file-host.example/first.png", "https://your-public-file-host.example/last.png"]`。
+- **文生视频和其他无图工作流：** 不传 `input_reference`；即使传空数组也报错。
+- **单图工作流：** 必须恰好 1 张。
+- **首尾帧工作流：** 必须恰好 2 张，第 1 张映射 `first_frame`，第 2 张映射 `last_frame`。
+- **多图参考工作流：** 按数组顺序映射对应的 `ref_image_*`，数量以模型表为准（1–6、1–9，或官网允许图片全部可选的 0–9）。支持 0 张的工作流可省略字段或传 `[]`。
+- **数量或类型不合法直接报错：** 不自动补齐、截断或跳过，不接受 `null` 占位、非字符串条目、引用对象或对象数组。
+- 旧 `images` 字段彻底移除：字段一旦出现就报错，空数组也不兼容。所有参考图只通过 `input_reference` 输入。
+
+AutoDL 官网工作流 API 目前明确图片输入是公开 HTTP(S) URL。本插件没有可确认的上游文件上传/转存流程，因此 **不支持二进制文件上传、`file_id` 或 Base64/data URL**。这些输入会在提交前明确报错。需要使用本地图片时，请先上传到可公开下载的存储，再将 URL 字符串或字符串数组放入 `input_reference`；这项限制来自 AutoDL 的已确认输入能力。
+
+推荐客户端使用 `model`、`prompt`、`seconds`、`size` 和 `input_reference`。`seconds` 接受整数或数字字符串；秒数及精确尺寸仍以 AutoDL 工作流枚举为准，不能直接套用 Sora 的枚举。`resolution`、`orientation`、音频/视频输入和种子等工作流扩展仍保留。
+
+多图也可以使用 multipart 的重复文本字段，每项填写一个 URL：
+
+```bash
+export NEW_API_BASE_URL='https://your-new-api.example'
+export NEW_API_KEY='填写NewAPI密钥'
+curl -sS "$NEW_API_BASE_URL/v1/videos" \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -F 'model=minimax_h3_lightx2v' \
+  -F 'prompt=镜头平稳推进' \
+  -F 'seconds=5' \
+  -F 'size=864x480' \
+  -F 'input_reference=https://your-public-file-host.example/first.png' \
+  -F 'input_reference=https://your-public-file-host.example/last.png'
+```
 
 ## 调用示例
 
@@ -113,7 +149,7 @@ export NEW_API_KEY='填写NewAPI密钥'
 curl -sS "$NEW_API_BASE_URL/v1/videos" \
   -H "Authorization: Bearer $NEW_API_KEY" \
   -H 'Content-Type: application/json' \
-  -d '{"model":"minimax_h3_lightx2v_no_pic","prompt":"一只猫在雪地中奔跑","seconds":5,"resolution":"480p","orientation":"landscape"}'
+  -d '{"model":"minimax_h3_lightx2v_no_pic","prompt":"一只猫在雪地中奔跑","seconds":"5","size":"864x480"}'
 ```
 
 响应 `id` 是 New API 的公开任务 ID，后续不用 AutoDL 私有 ID。每隔 5–10 秒查询一次，到 `completed` / `failed` 停止，最长 30 分钟：
@@ -129,19 +165,19 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" -H "Authorization: Bearer
 首尾帧（两张图片，顺序为首帧和尾帧）：
 
 ```json
-{"model":"minimax_h3_lightx2v","prompt":"镜头平稳推进","seconds":5,"resolution":"480p","orientation":"landscape","images":["https://your-public-file-host.example/first.png","https://your-public-file-host.example/last.png"]}
+{"model":"minimax_h3_lightx2v","prompt":"镜头平稳推进","seconds":"5","size":"864x480","input_reference":["https://your-public-file-host.example/first.png","https://your-public-file-host.example/last.png"]}
 ```
 
 图生视频、音频同步（没有文本输入，`seconds` 转为 `audio_duration`）：
 
 ```json
-{"model":"minimax_h3_image_audio_to_video","seconds":5,"resolution":"480p","orientation":"portrait","images":["https://your-public-file-host.example/person.png"],"audios":["https://your-public-file-host.example/voice.wav"]}
+{"model":"minimax_h3_image_audio_to_video","seconds":"5","size":"480x864","input_reference":"https://your-public-file-host.example/person.png","audios":["https://your-public-file-host.example/voice.wav"]}
 ```
 
 动作迁移（无秒数、无文本控制）：
 
 ```json
-{"model":"wan2.2animate-v4-motion_retargeting","resolution":"464p","orientation":"portrait","images":["https://your-public-file-host.example/person.png"],"videos":["https://your-public-file-host.example/motion.mp4"]}
+{"model":"wan2.2animate-v4-motion_retargeting","resolution":"464p","orientation":"portrait","input_reference":"https://your-public-file-host.example/person.png","videos":["https://your-public-file-host.example/motion.mp4"]}
 ```
 
 TTS 语音合成，通过通用 Task API 提交：
@@ -192,6 +228,7 @@ Python 脚本只依赖标准库。真实调用会消耗 AutoDL 余额，先完�
 $env:NEW_API_BASE_URL = 'https://your-new-api.example'
 $env:NEW_API_KEY = '填写NewAPI密钥'
 python .\test-video.py --prompt '一个红色小球' --seconds 1 --size 864x480 --out result.mp4
+python .\test-video.py --model minimax_h3_lightx2v --prompt '镜头平稳推进' --seconds 1 --size 864x480 --input-reference 'https://your-public-file-host.example/first.png' --input-reference 'https://your-public-file-host.example/last.png' --out reference-result.mp4
 python .\test-task.py --request request.json --out result.wav
 ```
 
@@ -224,13 +261,13 @@ node tests.mjs
 /new-api plugin test plugin.js --fixture golden.json
 ```
 
-`node tests.mjs` 执行 **653 项检查**并生成 **583 个官方 host fixture**。当前插件已在 rc.41 实际二进制通过 lint 和 583/583 fixture，包含 GET 签名 URL 和 HEAD 的回归覆盖。
+`node tests.mjs` 执行 **766 项检查**并生成 **660 个官方 host fixture**。当前插件已在 rc.41 实际二进制通过 lint 和 660/660 fixture，包含 GET 签名 URL 和 HEAD 的回归覆盖。
 
 URL 安装已验证：推荐 Raw URL 返回 HTTP 200 和纯文本源码，允许浏览器跨域读取；只下载 `plugin.js`，在生产同镜像的隔离 New API 实例中通过官方上传接口导入、启用并注册全部 17 个模型，随后通过不发送网络请求的 dryrun。单文件目录中没有仓库 JSON 或其他文件，断网 lint 也通过；此验证没有提交 AutoDL 生成任务。
 
-已有的隔离 HTTP 验证使用生产同镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流逐一断言，24 项检查覆盖视频/通用任务/原生路由、音频视频产物、HEAD/Range 下载及错误处理。GET 签名链接的 HEAD 兼容另在真实生产任务上验证。这些模拟测试不产生 AutoDL 费用，不能代替每个工作流真实付费生成的验证。
+当前插件的隔离 HTTP 验证使用生产同镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流逐一断言，覆盖视频/通用任务/原生路由、音频视频产物、HEAD/Range 下载及错误处理，并验证单 URL、多 URL 数组、multipart 重复引用字段、严格图片数量、旧参考图字段拒绝及不支持的文件输入。GET 签名链接的 HEAD 兼容另在已有真实生产任务上验证。这些模拟测试不产生 AutoDL 费用，不能代替每个工作流真实付费生成的验证。
 
-2026-10-08 生产验证仅提交了一次真实任务：`minimax_h3_lightx2v_no_pic`，1 秒、480p、横屏，成功生成 MP4，New API 记账 ¥0.03。复用同一个任务，源站及公网域名均通过认证 HEAD（200）和 Range GET（206），完整 MP4 下载也通过。未重复付费生成，也未对其余 16 个工作流进行付费生成测试。¥0.03 为 New API 的记录，AutoDL 账户余额未另外核对。
+此前 2026-10-08 生产验证仅提交了一次真实任务：`minimax_h3_lightx2v_no_pic`，1 秒、480p、横屏，成功生成 MP4，New API 记账 ¥0.03。复用同一个任务，源站及公网域名均通过认证 HEAD（200）和 Range GET（206），完整 MP4 下载也通过。本次参考图字段修改使用模拟测试，没有新增真实生成任务，也未对其余 16 个工作流进行付费生成测试。¥0.03 为此前 New API 的记录，AutoDL 账户余额未另外核对。
 
 - [New API Task Plugin API v1](https://docs.newapi.pro/zh/docs/plugins/api-reference)
 - [New API 插件开发指南](https://docs.newapi.pro/zh/docs/plugins/development)

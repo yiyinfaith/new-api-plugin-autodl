@@ -13,9 +13,13 @@ function test(name, fn) { fn(); checks++; }
 function fixture(name, hook, args, expected) { assert.deepEqual(p[hook](...args), expected, name); fixtures.push({ name, hook, args, expected }); checks++; }
 function reject(name, hook, args, expectedError) { assert.throws(() => p[hook](...args), e => e.message.includes(expectedError), name); fixtures.push({ name, hook, args, expectedError }); checks++; }
 const base = { baseUrl: 'https://autodl.art/', apiKey: 'fake-autodl-token', authHeader: 'Bearer fake-autodl-token' };
+const referenceValues = value => value === undefined ? [] : (Array.isArray(value) ? value : [value]);
+const mediaValues = (input, kind) => kind === 'input_reference' ? referenceValues(input[kind]) : (input[kind] || []);
+const mediaInput = (kind, values) => values;
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
+  assert.equal(p.meta.version, '1.0.0');
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
   assert.deepEqual(p.meta.models.sort(), Object.keys(catalog).sort());
@@ -25,6 +29,7 @@ test('exact official catalog coverage', () => {
 for (const [model, config] of Object.entries(catalog)) {
   const source = official.find(row => row.uuid === config.workflowId);
   const input = examples[model];
+  for (const value of [[], ['https://cdn.example.com/old.png']]) reject(model + ': removed reference field ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(model, { ...input, images: value })], 'images is no longer supported');
   const expectedBody = {};
   const expectedFacts = { requests: 1 };
   const promptField = ['prompt', 'prompt_text'].find(k => source.input_rules[k]);
@@ -35,9 +40,9 @@ for (const [model, config] of Object.entries(catalog)) {
     expectedBody.resolution = source.input_rules.resolution.default;
     expectedFacts.resolution = input.resolution; expectedFacts.orientation = input.orientation;
   }
-  for (const kind of ['images', 'audios', 'videos']) for (let i = 0; i < (input[kind] || []).length; i++) expectedBody[config[kind][i]] = input[kind][i];
+  for (const kind of ['input_reference', 'audios', 'videos']) for (let i = 0; i < mediaValues(input, kind).length; i++) expectedBody[config[kind][i]] = mediaValues(input, kind)[i];
   if (config.type === 'audio') expectedBody.emo_control_method = '与音色参考音频相同';
-  const action = config.type === 'audio' ? 'text_to_audio' : input.videos?.length ? 'video_to_video' : input.images?.length ? 'image_to_video' : 'text_to_video';
+  const action = config.type === 'audio' ? 'text_to_audio' : input.videos?.length ? 'video_to_video' : referenceValues(input.input_reference).length ? 'image_to_video' : 'text_to_video';
   fixture(model + ': official submit mapping', 'buildSubmitRequest', [ctx(model)], {
     url: 'https://autodl.art/api/v1/comfyui/comfyui_workflow/' + encodeURIComponent(source.uuid), method: 'POST', action,
     headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' }, body: expectedBody,
@@ -61,17 +66,27 @@ for (const [model, config] of Object.entries(catalog)) {
     if (choice.size) fixture(model + ': size ' + choice.size, 'extractUsage', [ctx(model, { ...input, resolution: choice.resolution, orientation: choice.orientation, size: choice.size })], { ...expectedFacts, resolution: choice.resolution, orientation: choice.orientation });
   }
   reject(model + ': invalid resolution', 'buildSubmitRequest', [ctx(model, { ...input, resolution: '720p' })], config.resolutions.length ? 'unsupported resolution' : 'no resolution');
-  for (const kind of ['images', 'audios', 'videos']) {
-    reject(model + ': media count ' + kind, 'buildSubmitRequest', [ctx(model, { ...input, [kind]: Array(config[kind].length + 1).fill('https://cdn.example.com/a') })], 'too many ' + kind);
+  for (const kind of ['input_reference', 'audios', 'videos']) {
+    const countError = kind === 'input_reference' && !config[kind].length ? 'does not accept input_reference' : 'too many ' + kind;
+    reject(model + ': media count ' + kind, 'buildSubmitRequest', [ctx(model, { ...input, [kind]: mediaInput(kind, Array(config[kind].length + 1).fill('https://cdn.example.com/a')) })], countError);
     for (let i = 0; i < config[kind].length; i++) if (source.input_rules[config[kind][i]].required) {
-      const values = [...(input[kind] || [])]; values[i] = null;
-      reject(model + ': required ' + kind + '[' + i + ']', 'buildSubmitRequest', [ctx(model, { ...input, [kind]: values })], kind + '[' + i + '] is required');
+      const values = [...mediaValues(input, kind)]; values[i] = null;
+      reject(model + ': required ' + kind + '[' + i + ']', 'buildSubmitRequest', [ctx(model, { ...input, [kind]: mediaInput(kind, values) })], kind === 'input_reference' ? 'input_reference' : kind + '[' + i + '] is required');
     }
     if (config[kind].length) {
       test(model + ': all optional media slots map', () => {
         const values = Array(config[kind].length).fill('https://cdn.example.com/reference');
-        const result = p.buildSubmitRequest(ctx(model, { ...input, [kind]: values }));
+        const result = p.buildSubmitRequest(ctx(model, { ...input, [kind]: mediaInput(kind, values) }));
         for (const key of config[kind]) assert.equal(result.body[key], values[0]);
+      });
+    }
+    if (kind === 'input_reference' && config[kind].length) {
+      const refs = referenceValues(input.input_reference);
+      if (refs.length === 1) test(model + ': string and one-element array have identical mapping', () => assert.deepEqual(p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs[0] })), p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs }))));
+      test(model + ': unique image URLs retain positional mapping', () => {
+        const refs = config[kind].map((_, i) => 'https://cdn.example.com/image-' + i + '.png');
+        const result = p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs }));
+        config[kind].forEach((field, i) => assert.equal(result.body[field], refs[i]));
       });
     }
   }
@@ -143,6 +158,50 @@ test('multipart rejects repeated fields and binary', () => {
   assert.throws(() => p.protocols.openai_video.decodeRequest({ model, body: { kind: 'multipart', fields: { prompt: ['a', 'b'] }, files: [] } }), /exactly once/);
   assert.throws(() => p.protocols.openai_video.decodeRequest({ model, body: { kind: 'multipart', fields: {}, files: [{ ref: 'f' }] } }), /binary uploads/);
 });
+const referenceModel = 'minimax_h3_lightx2v_v5';
+const referenceContext = ctx(referenceModel);
+const singleReference = 'https://cdn.example.com/first.png';
+const secondReference = 'https://cdn.example.com/second.png';
+fixture('single reference string maps to first upstream slot', 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: singleReference })], {
+  url: 'https://autodl.art/api/v1/comfyui/comfyui_workflow/' + referenceModel, method: 'POST', action: 'image_to_video',
+  headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' },
+  body: { prompt: referenceContext.requestBody.prompt, duration: referenceContext.requestBody.seconds, resolution: '768p竖', ref_image_0: singleReference },
+});
+for (const value of [false, null, 1, [[singleReference]], [null], [singleReference, 123], { image_url: singleReference }, [{ image_url: singleReference }], { file_id: 'file-123' }]) reject('invalid reference shape ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'URL string');
+for (const value of ['data:image/png;base64,abc', 'file:///image.png', 'C:/image.png', '']) reject('unsupported reference URL ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'public HTTP(S)');
+for (const value of ['https://u:p@cdn.example.com/image.png', ' https://cdn.example.com/image.png']) reject('invalid public reference URL ' + value, 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'AutoDL:');
+const referenceFields = { model: [referenceModel], prompt: [referenceContext.requestBody.prompt], seconds: ['5'], size: ['768x1344'] };
+for (const kind of ['form', 'multipart']) {
+  for (const values of [[singleReference], [JSON.stringify([singleReference, secondReference])], [singleReference, secondReference]]) {
+    test(kind + ': reference string and ordered references ' + JSON.stringify(values), () => {
+      const decoded = p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: values }, files: [] } });
+      const body = p.buildSubmitRequest(ctx(referenceModel, decoded.requestBody)).body;
+      assert.equal(decoded.action, 'image_to_video'); assert.equal(body.ref_image_0, singleReference);
+      if (values.length > 1 || values[0].startsWith('[')) assert.equal(body.ref_image_1, secondReference);
+    });
+  }
+  test(kind + ': removed reference field is rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, images: ['[]'], input_reference: [singleReference] }, files: [] } }), /images is no longer supported/));
+  test(kind + ': malformed reference array rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: ['[broken'] }, files: [] } }), /array in forms must be valid JSON/));
+}
+test('same-field multipart image files fail explicitly for URL-only adapter', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind: 'multipart', fields: referenceFields, files: [{ field: 'input_reference', ref: 'request_file:input_reference' }, { field: 'input_reference', ref: 'request_file:input_reference#1' }] } }), /binary uploads.*input_reference URLs/));
+test('generic native single reference matches protocol', () => {
+  const body = { ...referenceContext.requestBody, input_reference: singleReference };
+  assert.deepEqual(p.native.create({ body: { kind: 'json', value: body } }), p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind: 'json', value: body } }));
+});
+for (const [id, config] of Object.entries(catalog)) {
+  const fields = config.input_reference;
+  if (!fields.length) {
+    for (const refs of [[], [singleReference], singleReference]) reject(id + ': no reference parameter allowed ' + JSON.stringify(refs), 'buildSubmitRequest', [ctx(id, { ...examples[id], input_reference: refs })], 'does not accept input_reference');
+  } else {
+    const minimum = fields.reduce((n, field, i) => config.rules[field].required ? i + 1 : n, 0);
+    if (minimum) for (let count = 0; count < minimum; count++) reject(id + ': reference count below minimum ' + count, 'buildSubmitRequest', [ctx(id, { ...examples[id], input_reference: Array(count).fill(singleReference) })], 'requires at least ' + minimum);
+    if (fields.length === 1) fixture(id + ': exactly one reference', 'buildSubmitRequest', [ctx(id, { ...examples[id], input_reference: singleReference })], p.buildSubmitRequest(ctx(id, { ...examples[id], input_reference: [singleReference] })));
+    if (fields.length === 2 && minimum === 2) test(id + ': exactly two ordered first/last frames', () => {
+      const body = p.buildSubmitRequest(ctx(id, { ...examples[id], input_reference: [singleReference, secondReference] })).body;
+      assert.equal(body.first_frame, singleReference); assert.equal(body.last_frame, secondReference);
+    });
+  }
+}
 test('motion size is not guessed from inconsistent official dimensions', () => assert.ok(catalog['wan2.2animate-v4-motion_retargeting'].resolutions.every(r => !r.size)));
 test('multiple output stable artifact keys and audio string fallback', () => {
   assert.deepEqual(p.listArtifacts({ status: 'SUCCESS', action: 'text_to_audio', data: envelope('SUCCESS', ['https://cdn.example.com/a', 'https://cdn.example.com/b']) }).map(a => a.key), ['audio', 'audio-2']);

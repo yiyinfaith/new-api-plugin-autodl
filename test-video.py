@@ -4,6 +4,8 @@ import argparse, json, os, pathlib, sys, time, urllib.error, urllib.request
 def main():
     p = argparse.ArgumentParser(description='通过 New API 的 AutoDL 插件生成并下载视频')
     p.add_argument('--prompt',default='一只猫在雪地中奔跑')
+    p.add_argument('--model',default='minimax_h3_lightx2v_no_pic')
+    p.add_argument('--input-reference',action='append',default=[],metavar='IMAGE_URL',help='公开 HTTP(S) 图片 URL；多图时重复此选项，按顺序生成 input_reference 字符串数组')
     p.add_argument('--seconds',type=int,default=5)
     p.add_argument('--size',default='864x480')
     p.add_argument('--out',default='autodl-result.mp4')
@@ -24,7 +26,10 @@ def main():
         except urllib.error.HTTPError as e:
             # Do not print request headers, keys, or the complete upstream payload.
             raise RuntimeError('New API HTTP '+str(e.code)+'；请检查渠道 Token、模型价格、分组和请求参数') from None
-    task=call('POST','/v1/videos',{'model':'minimax_h3_lightx2v_no_pic','prompt':args.prompt,'seconds':args.seconds,'size':args.size})
+    body={'model':args.model,'prompt':args.prompt,'seconds':str(args.seconds),'size':args.size}
+    if args.input_reference:
+        body['input_reference']=args.input_reference[0] if len(args.input_reference)==1 else args.input_reference
+    task=call('POST','/v1/videos',body)
     task_id=task.get('id')
     if not isinstance(task_id,str) or not task_id:raise RuntimeError('New API 提交响应缺少公开任务 ID')
     print('task_id: '+task_id,flush=True)

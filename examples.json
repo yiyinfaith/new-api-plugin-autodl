@@ -5,12 +5,10 @@
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ],
     "audios": [
       "https://your-public-file-host.example/reference-1.wav"
-    ]
+    ],
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "minimax_h3_z0902": {
     "model": "minimax_h3_z0902",
@@ -18,9 +16,7 @@
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ]
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "minimax_h3_z0901": {
     "model": "minimax_h3_z0901",
@@ -35,9 +31,7 @@
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ]
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "minimax_h3_zm_u08": {
     "model": "minimax_h3_zm_u08",
@@ -45,9 +39,7 @@
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ]
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "minimax_h3_b99_002": {
     "model": "minimax_h3_b99_002",
@@ -55,7 +47,7 @@
     "seconds": 5,
     "resolution": "736p",
     "orientation": "portrait",
-    "images": [
+    "input_reference": [
       "https://your-public-file-host.example/reference-1.png",
       "https://your-public-file-host.example/reference-2.png"
     ]
@@ -73,20 +65,16 @@
     "seconds": 5,
     "resolution": "736p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ]
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "wan2.2animate-v4-motion_retargeting": {
     "model": "wan2.2animate-v4-motion_retargeting",
     "resolution": "832p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ],
     "videos": [
       "https://your-public-file-host.example/reference-1.mp4"
-    ]
+    ],
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "minimax_h3_image_audio_to_video_v2_15s": {
     "model": "minimax_h3_image_audio_to_video_v2_15s",
@@ -101,9 +89,7 @@
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ]
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "minimax_h3_image_audio_to_video_v2": {
     "model": "minimax_h3_image_audio_to_video_v2",
@@ -117,12 +103,10 @@
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ],
     "audios": [
       "https://your-public-file-host.example/reference-1.wav"
-    ]
+    ],
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "minimax_h3_lightx2v_v5": {
     "model": "minimax_h3_lightx2v_v5",
@@ -130,9 +114,7 @@
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "images": [
-      "https://your-public-file-host.example/reference-1.png"
-    ]
+    "input_reference": "https://your-public-file-host.example/reference-1.png"
   },
   "minimax_h3_lightx2v_no_pic": {
     "model": "minimax_h3_lightx2v_no_pic",
@@ -147,7 +129,7 @@
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "images": [
+    "input_reference": [
       "https://your-public-file-host.example/reference-1.png",
       "https://your-public-file-host.example/reference-2.png"
     ]

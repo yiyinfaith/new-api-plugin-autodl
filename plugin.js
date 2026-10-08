@@ -10,7 +10,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -209,7 +209,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -374,7 +374,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [],
+    "input_reference": [],
     "audios": [],
     "videos": [],
     "resolutions": [
@@ -472,7 +472,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -684,7 +684,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -896,7 +896,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "first_frame",
       "last_frame"
     ],
@@ -979,7 +979,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [],
+    "input_reference": [],
     "audios": [],
     "videos": [],
     "resolutions": [
@@ -1039,7 +1039,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -1199,7 +1199,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": null,
     "secondsField": null,
-    "images": [
+    "input_reference": [
       "ref_image"
     ],
     "audios": [],
@@ -1261,7 +1261,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -1468,7 +1468,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -1652,7 +1652,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -1873,7 +1873,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": null,
     "secondsField": "audio_duration",
-    "images": [
+    "input_reference": [
       "ref_image_0"
     ],
     "audios": [
@@ -1967,7 +1967,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "ref_image_0",
       "ref_image_1",
       "ref_image_2",
@@ -2172,7 +2172,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [],
+    "input_reference": [],
     "audios": [],
     "videos": [],
     "resolutions": [
@@ -2249,7 +2249,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt",
     "secondsField": "duration",
-    "images": [
+    "input_reference": [
       "first_frame",
       "last_frame"
     ],
@@ -2354,7 +2354,7 @@ const WORKFLOWS = {
     "timeoutSeconds": 1800,
     "promptField": "prompt_text",
     "secondsField": null,
-    "images": [],
+    "input_reference": [],
     "audios": [
       "prompt_simple",
       "emo_ref_audio"
@@ -2486,7 +2486,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.1.1",
+  version: "1.0.0",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2551,10 +2551,25 @@ function mapResolution(config, input) {
   return selected;
 }
 
+function referenceURLs(value) {
+  if (value === undefined) return [];
+  const values = Array.isArray(value) ? value : [value];
+  return values.map(function (item) {
+    if (typeof item !== "string") throw new Error("AutoDL: input_reference must be a URL string or an array of URL strings");
+    if (!/^https?:\/\//i.test(item)) throw new Error("AutoDL: input_reference must contain public HTTP(S) image URLs; data URLs and local files are not supported");
+    return mediaURL(item);
+  });
+}
+
 function mapMedia(config, input, body, kind) {
-  const values = input[kind] === undefined ? [] : input[kind];
+  const values = kind === "input_reference" ? referenceURLs(input[kind]) : (input[kind] === undefined ? [] : input[kind]);
   if (!Array.isArray(values)) throw new Error("AutoDL: " + kind + " must be an array of public HTTP(S) URLs");
   const fields = config[kind];
+  if (kind === "input_reference") {
+    if (fields.length === 0 && has(input, kind)) throw new Error("AutoDL: this workflow does not accept input_reference");
+    const minimum = fields.reduce(function (count, field, index) { return config.rules[field].required ? index + 1 : count; }, 0);
+    if (values.length < minimum) throw new Error("AutoDL: input_reference requires at least " + minimum + " image(s) for this workflow");
+  }
   if (values.length > fields.length) throw new Error("AutoDL: too many " + kind + " for this workflow (maximum " + fields.length + ")");
   for (let i = 0; i < fields.length; i++) {
     const key = fields[i], rule = config.rules[key], value = values[i];
@@ -2596,7 +2611,8 @@ function mapEmotion(config, input, body) {
 
 function normalizeInput(config, input) {
   if (!object(input)) throw new Error("AutoDL: request body must be an object");
-  const allowed = ["model", "prompt", "seconds", "resolution", "orientation", "size", "images", "audios", "videos", "seed", "emotion"];
+  if (has(input, "images")) throw new Error("AutoDL: images is no longer supported; use input_reference as a URL string or URL string array");
+  const allowed = ["model", "prompt", "seconds", "resolution", "orientation", "size", "input_reference", "audios", "videos", "seed", "emotion"];
   if (config.workflowId === "minimax_h3_lightx2v_no_pic") allowed.push("duration");
   for (const key of Object.keys(input)) if (!allowed.includes(key)) throw new Error("AutoDL: unsupported request field; use unified parameters only");
   const body = {}, facts = { requests: 1 };
@@ -2614,7 +2630,7 @@ function normalizeInput(config, input) {
   } else if (input.seconds !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
   const selected = mapResolution(config, input);
   if (selected) { body.resolution = selected.upstream; facts.resolution = selected.resolution; facts.orientation = selected.orientation; }
-  for (const kind of ["images", "audios", "videos"]) mapMedia(config, input, body, kind);
+  for (const kind of ["input_reference", "audios", "videos"]) mapMedia(config, input, body, kind);
   if (input.seed !== undefined) {
     if (!config.rules.seed) throw new Error("AutoDL: this workflow has no seed control");
     body.seed = numberValue(input.seed, config.rules.seed, "seed");
@@ -2701,11 +2717,11 @@ function results(body, fallbackType) {
 const STATUSES = { QUEUED: "QUEUED", RUNNING: "IN_PROGRESS", SUCCESS: "SUCCESS", FAILED: "FAILURE", completed: "SUCCESS" };
 
 function taskAction(config, input) {
-  return config.type === "audio" ? "text_to_audio" : (input.videos || []).length ? "video_to_video" : (input.images || []).length ? "image_to_video" : "text_to_video";
+  return config.type === "audio" ? "text_to_audio" : (input.videos || []).length ? "video_to_video" : referenceURLs(input.input_reference).length ? "image_to_video" : "text_to_video";
 }
 
 export function buildSubmitRequest(ctx) {
-  if ((ctx.files || []).length) throw new Error("AutoDL: use public URL arrays for reference media; binary uploads are not supported by this adapter");
+  if ((ctx.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; upload images to public storage and use input_reference URLs");
   const config = workflow(ctx.upstreamModel || ctx.model);
   return {
     url: endpoint(ctx, "/api/v1/comfyui/comfyui_workflow/" + encodeURIComponent(config.workflowId)),
@@ -2816,13 +2832,22 @@ function decode(ctx, pinnedModel) {
   let request;
   if (body && body.kind === "json" && object(body.value)) request = Object.assign({}, body.value);
   else if (body && (body.kind === "multipart" || body.kind === "form")) {
-    if ((body.files || []).length) throw new Error("AutoDL: use public URL arrays for reference media; binary uploads are not supported by this adapter");
+    if ((body.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; upload images to public storage and use input_reference URLs");
     request = {};
     for (const key of Object.keys(body.fields || {})) {
       const values = body.fields[key];
+      if (key === "input_reference") {
+        if (!Array.isArray(values) || values.length === 0) throw new Error("AutoDL: input_reference form field must have at least one value");
+        request[key] = values.length === 1 ? values[0] : values.slice();
+        if (values.length === 1 && typeof values[0] === "string" && values[0].trim().startsWith("[")) {
+          try { request[key] = JSON.parse(values[0]); }
+          catch (_) { throw new Error("AutoDL: input_reference array in forms must be valid JSON"); }
+        }
+        continue;
+      }
       if (!Array.isArray(values) || values.length !== 1) throw new Error("AutoDL: each form field must be provided exactly once");
       request[key] = values[0];
-      if (["images", "audios", "videos", "emotion"].includes(key)) {
+      if (["audios", "videos", "emotion"].includes(key)) {
         try { request[key] = JSON.parse(values[0]); } catch (_) { throw new Error("AutoDL: media arrays and emotion in forms must be JSON encoded"); }
       }
     }
