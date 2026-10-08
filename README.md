@@ -513,21 +513,7 @@ python .\test-task.py --format autodl --model minimax_h3_lightx2v --request auto
 
 **此项需要确认：**动作迁移官网枚举标签为 464×832 / 832×464，内部节点值却为 468/832。插件保留官方选项，通过 `resolution: "464p"` 和方向选择，不承诺精确 `size`。如果必须保证最终像素，需要工作流维护者确认实际输出尺寸或提供真实生成文件信息。
 
-## 验证与官方资料
-
-```bash
-node tests.mjs
-/new-api plugin lint plugin.js
-/new-api plugin test plugin.js --fixture golden.json
-```
-
-`node tests.mjs` 执行 **2,253 项检查**并生成 **1,986 个官方 host fixture**。覆盖 OpenAI 与 MiniMax 原有行为、官方别名自动路由、全部 ratio、adaptive 默认方向、错误组合，以及原生 body deep-equal、无默认值写回、未知字段与嵌套参数、数字字符串、计费边界、内部 facts/工作流防伪、task state 和成功/失败结算。上线审计新增宿主附件占位标记旁路、特殊 JSON 自有字段复制和无 type 音频产物的回归检查。前一轮另确认更早的 1,794 个 fixture 保持一致；本轮在 rc.41 实际二进制通过 lint 和 **1,986/1,986 fixture**。
-
-URL 安装已验证：推荐 Raw URL 返回 HTTP 200 和纯文本源码，允许浏览器跨域读取；只下载 `plugin.js`，在应用本仓库 ComfyUI 路由补丁的 rc.41 隔离 New API 实例中通过官方上传接口导入、启用并注册全部 17 个工作流和 2 个 MiniMax 模型别名，随后通过不发送网络请求的 dryrun。单文件目录中没有仓库 JSON 或其他文件，断网 lint 也通过；此验证没有提交 AutoDL 生成任务。
-
-当前插件通过 **155 项隔离 HTTP 检查**，验证使用应用 ComfyUI 路由补丁的 rc.41 镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流、三种格式以及两个官方别名的路由场景逐一断言，覆盖 OpenAI、MiniMax V2 和完整 ComfyUI 原生路由、音频视频产物、辅助图片与视频混合结果、HEAD/Range 下载及错误处理，并验证 MiniMax 参数拒绝、原生计费字段拒绝与业务字段原样透传、单图对象、多图对象数组、multipart 重复引用字段、严格图片数量、旧参考图字段及字符串写法拒绝、`file_id` 的明确报错和不支持的文件输入。本轮在修改前插件复现了原生 JSON 的 `__fileRef` 同名字段被宿主误解析的问题，并通过修复后 HTTP 回归。GET 签名链接的 HEAD 兼容另在已有真实生产任务上验证。`python tests-client.py` 另通过 **19 项离线客户端检查**，不产生网络请求，覆盖三格式提交、查询、下载、音频产物和无效产物类型的提前拒绝。这些模拟测试不产生 AutoDL 费用，不能代替每个工作流真实付费生成的验证。
-
-此前 2026-10-08 生产验证仅提交了一次真实任务：`minimax_h3_lightx2v_no_pic`，1 秒、480p、横屏，成功生成 MP4，New API 记账 ¥0.03。复用同一个任务，源站及公网域名均通过认证 HEAD（200）和 Range GET（206），完整 MP4 下载也通过。本次 MiniMax 官方兼容增强使用模拟测试，没有新增真实生成任务，也未对其余 16 个工作流进行付费生成测试。¥0.03 为此前 New API 的记录，AutoDL 账户余额未另外核对。
+## 相关官方资料
 
 - [New API Task Plugin API v1](https://docs.newapi.pro/zh/docs/plugins/api-reference)
 - [New API 插件开发指南](https://docs.newapi.pro/zh/docs/plugins/development)
