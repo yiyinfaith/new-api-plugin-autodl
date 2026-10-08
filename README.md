@@ -23,7 +23,7 @@
 
 **宿主前提：**本插件采用完整的 AutoDL 官方 ComfyUI 路径。未修改的 New API v1.0.0-rc.41 会以 `intersects reserved namespace /api` 拒绝这些路由，因而不能直接加载此最终接口版本。管理员需要先让宿主允许下文的两条精确 ComfyUI 任务路由；针对已核对的 rc.41 源码，仓库提供 [new-api-comfyui-routes.patch](new-api-comfyui-routes.patch)。该补丁只放行对应的 POST submit 和 GET query 声明，其他管理路径、方法、动态路由和通配路由仍被拒绝；原有 Token 鉴权、归属检查、渠道分配和计费处理保持原样。补丁属于宿主适配，不是 `plugin.js` 的运行时依赖。其他 New API 版本请先核对其路由限制，不要直接套用补丁。
 
-宿主补丁对应的源码提交为 `QuantumNous/new-api@2035a82aeb5414253a728bd937d4b8f97aa99b9b`。应用方式是在该源码目录执行 `git apply /path/to/new-api-comfyui-routes.patch`，随后按 New API 原有构建与部署方式更新宿主。完成宿主适配后，安装只需下列唯一 Raw URL。
+宿主补丁对应的源码提交为 `QuantumNous/new-api@2035a82aeb5414253a728bd937d4b8f97aa99b9b`。应用方式是在该源码目录执行 `git apply /path/to/new-api-comfyui-routes.patch`，随后按 New API 原有构建与部署方式更新宿主。该提交的 `VERSION` 文件为空；构建前将其内容设为 `v1.0.0-rc.41`，确保前端与二进制的版本元数据正确，并在部署后核对 `/api/status`。完成宿主适配后，安装只需下列唯一 Raw URL。
 
 1. 登录 New API 管理后台。已验证的 New API **v1.0.0-rc.41** 需要使用 **Root 账户**安装任务插件。
 2. 打开「任务插件」，确认任务插件功能已启用。
