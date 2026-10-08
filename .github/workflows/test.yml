@@ -13,7 +13,8 @@ jobs:
         with:
           node-version: '22'
       - run: node tests.mjs
-      - run: python3 -m py_compile test-task.py test-video.py
+      - run: python3 -m py_compile test-task.py test-video.py tests-client.py
+      - run: python3 tests-client.py
       - uses: actions/upload-artifact@v4
         with:
           name: official-host-fixtures
