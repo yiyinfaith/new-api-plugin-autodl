@@ -16,7 +16,8 @@ const base = { baseUrl: 'https://autodl.art/', apiKey: 'fake-autodl-token', auth
 const referenceValues = value => value === undefined ? [] : (Array.isArray(value) ? value : [value]);
 const mediaValues = (input, kind) => kind === 'input_reference' ? referenceValues(input[kind]).map(ref => ref === null ? null : ref.image_url) : (input[kind] || []);
 const mediaInput = (kind, values) => kind === 'input_reference' ? values.map(url => url === null ? null : ({ image_url: url })) : values;
-const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
+const motionModel = 'wan2.2animate-v4-motion_retargeting';
+const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody, ...(model === motionModel ? { usageMeasurements: { seconds: 5 } } : {}) });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
   assert.equal(p.meta.version, '1.0.0');
@@ -36,6 +37,7 @@ for (const [model, config] of Object.entries(catalog)) {
   const secondsField = ['duration', 'audio_duration'].find(k => source.input_rules[k]);
   if (promptField) expectedBody[promptField] = input.prompt;
   if (secondsField) { expectedBody[secondsField] = input.seconds; expectedFacts.seconds = input.seconds; }
+  if (model === motionModel) expectedFacts.seconds = 5; // deterministic host media measurement
   if (source.input_rules.resolution) {
     expectedBody.resolution = source.input_rules.resolution.default;
     expectedFacts.resolution = input.resolution; expectedFacts.orientation = input.orientation;
@@ -104,7 +106,7 @@ for (const [model, config] of Object.entries(catalog)) {
   const output = envelope('completed', [{ url: 'https://cdn.example.com/out', type: config.type, file_type: config.type === 'audio' ? 'wav' : 'mp4' }], { duration: 196 });
   fixture(model + ': successful result', 'parseTaskResult', [query, output, { status: 200 }], { status: 'SUCCESS', progress: '100%', url: 'https://cdn.example.com/out' });
   fixture(model + ': processing duration is not output seconds', 'extractUsageOnComplete', [query, { status: 'SUCCESS' }, output], expectedFacts);
-  fixture(model + ': failed usage zeroed', 'extractUsageOnComplete', [query, { status: 'FAILURE' }, output], { ...expectedFacts, requests: 0, ...(secondsField ? { seconds: 0 } : {}) });
+  fixture(model + ': failed usage zeroed', 'extractUsageOnComplete', [query, { status: 'FAILURE' }, output], { ...expectedFacts, requests: 0, ...(secondsField || model === motionModel ? { seconds: 0 } : {}) });
   const task = { status: 'SUCCESS', action, data: output };
   fixture(model + ': output artifact', 'listArtifacts', [task], [{ key: config.type, type: config.type, mimeType: config.type === 'audio' ? 'audio/wav' : 'video/mp4' }]);
   for (const method of ['GET', 'HEAD']) fixture(model + ': credentialless ' + method, 'buildContentRequest', [{ ...query, action, data: output, artifactKey: config.type, clientRequest: { method, headers: { Range: 'bytes=0-31' } } }], { url: 'https://cdn.example.com/out', method: 'GET', credentialless: true });
@@ -617,5 +619,20 @@ const untypedVideo = { url: 'https://cdn.example.com/movie', file_type: 'mp4' };
 nativeFixture('audit MiniMax selects video after untyped preview', 'miniTask', [{}, { task_id: 'task_video', status: 'SUCCESS', data: envelope('SUCCESS', [untypedPreview, untypedVideo]) }], { task: { id: 'task_video', status: 'succeeded', task_type: 'generation', modality: 'video', content: { url: untypedVideo.url } } });
 fixture('audit preview-only output cannot settle video success', 'parseTaskResult', [query, envelope('SUCCESS', [untypedPreview]), { status: 200 }], { status: 'FAILURE', reason: 'AutoDL: SUCCESS response contains no expected media output' });
 fixture('audit untyped audio output cannot settle video success', 'parseTaskResult', [query, envelope('SUCCESS', ['https://cdn.example.com/voice.wav']), { status: 200 }], { status: 'FAILURE', reason: 'AutoDL: SUCCESS response contains no expected media output' });
+const motionContext = ctx(motionModel);
+const motionState = p.parseSubmitResponse(motionContext, { statusCode: 200, body: envelope('QUEUED') }).state;
+fixture('motion estimate measures reference video', 'measureUsage', [motionContext, null], { seconds: { videoUrl: examples[motionModel].videos[0] } });
+fixture('motion alias uses mapped workflow for estimation', 'measureUsage', [{ ...motionContext, model: 'wan2.2-animate-move' }, null], { seconds: { videoUrl: examples[motionModel].videos[0] } });
+fixture('motion completion measures actual output', 'measureUsage', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS', url: 'https://cdn.example.com/generated.webm' }], { seconds: { videoUrl: 'https://cdn.example.com/generated.webm' } });
+fixture('motion failed task needs no media probe', 'measureUsage', [{ upstreamModel: motionModel, state: motionState }, { status: 'FAILURE' }], null);
+fixture('existing H3 billing needs no media probe', 'measureUsage', [ctx('minimax_h3_z0901'), null], null);
+fixture('motion completion replaces estimate with measured fractional seconds', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState, usageMeasurements: { seconds: 3.25 } }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], { ...motionState.facts, seconds: 3.25 });
+fixture('motion failure refunds seconds without output measurement', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'FAILURE' }], { ...motionState.facts, requests: 0, seconds: 0 });
+for (const seconds of [undefined, 0, -1, 3601, '5', null]) {
+  reject('motion rejects missing/invalid host seconds ' + String(seconds), 'extractUsage', [{ ...motionContext, usageMeasurements: { seconds } }], 'requires host video-duration@1');
+}
+reject('motion completion cannot silently retain estimated seconds', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS' }], 'requires host video-duration@1');
+reject('motion request cannot inject host measurement', 'extractUsage', [{ ...motionContext, requestBody: { ...examples[motionModel], usageMeasurements: { seconds: 1 } } }], 'unsupported request field');
+test('motion usage profile declares actual-video seconds', () => assert.equal(p.meta.usageProfiles.find(profile => profile.models.includes(motionModel)).schema.seconds.unit, 'second'));
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

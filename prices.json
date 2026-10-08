@@ -149,6 +149,20 @@
         }
       ],
       "expression": "hour(\"Asia/Shanghai\") < 8 ? (u(\"resolution\") == \"480p\" ? tier(\"off_peak_480p\", u(\"seconds\") * 0.02) : (tier(\"off_peak_768p\", u(\"seconds\") * 0.03))) : (u(\"resolution\") == \"480p\" ? tier(\"peak_480p\", u(\"seconds\") * 0.03) : (tier(\"peak_768p\", u(\"seconds\") * 0.04)))"
+    },
+    "wan2.2-animate-move": {
+      "name": "动作迁移",
+      "workflow_id": "wan2.2animate-v4-motion_retargeting",
+      "source": "https://www.autodl.art/api/v1/comfyui/workflows/wan2.2animate-v4-motion_retargeting",
+      "unit": "CNY per actual generated video second",
+      "prices": [
+        {
+          "peak": 0.04,
+          "off_peak": 0.03
+        }
+      ],
+      "requires_host_capability": "video-duration@1",
+      "expression": "hour(\"Asia/Shanghai\") < 8 ? tier(\"off_peak\", u(\"seconds\") * 0.03) : tier(\"peak\", u(\"seconds\") * 0.04)"
     }
   }
 }

@@ -409,9 +409,46 @@ curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" \
 | `minimax_h3_lightx2v` | H3 首尾帧 | 图 2 | 1–15 秒；480p/768p |
 | `indextts2-v1` | indexTTS2 音频合成 | 第 1 段音色参考必需；第 2 段情感参考可选，共 1–2 段 | 时长由文本决定；无视频 resolution |
 
-OpenAI Videos 模式不暴露 `indextts2-v1`。它可使用 MiniMax 音频扩展或 AutoDL 原生接口。动作迁移的视频时长跟随输入视频，TTS 没有生成视频秒数；不能传 `seconds` 计费。每项 workflow 的准确必需字段、默认值、完整原始 resolution 标签、数值上下限和 input_rules 以 [workflows.json](workflows.json) 为准。
+OpenAI Videos 模式不暴露 `indextts2-v1`。它可使用 MiniMax 音频扩展或 AutoDL 原生接口。动作迁移的视频时长跟随输入视频，不能用 `seconds` 控制；计费秒数由支持 `video-duration@1` 的宿主测量视频取得。TTS 没有生成视频秒数。每项 workflow 的准确必需字段、默认值、完整原始 resolution 标签、数值上下限和 input_rules 以 [workflows.json](workflows.json) 为准。
 
 MiniMax 官方别名受官方规则约束；例如 H3 duration 为 4–15、resolution 为 768P/2K，H3-Max duration 为 5–15、resolution 为 480P/768P。直接用 workflow ID 时，使用 AutoDL 对应规则，某些 workflow 可接受 1 秒或额外 resolution。自动路由无法匹配或选中的 AutoDL workflow 不支持请求配置时会报错，不猜测映射。
+
+## 动作迁移与 wan2.2-animate-move 渠道别名
+
+AutoDL 官网工作流 ID 为 `wan2.2animate-v4-motion_retargeting`，中文工作流名为 **动作迁移**。渠道可以把 `wan2.2-animate-move` 映射到这个 ID；完成映射后，OpenAI 请求的 `model` 可使用这个渠道别名，底层调用同一个工作流。别名不是另外一个生成模型。MiniMax V2 和 AutoDL 原生请求继续使用插件已声明的实际 workflow ID，渠道也必须允许这个 ID。
+
+OpenAI 请求示例：
+
+```bash
+curl "$NEW_API_BASE_URL/v1/videos" \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model":"wan2.2-animate-move",
+    "input_reference":{"image_url":"https://cdn.example.com/person.png"},
+    "videos":["https://cdn.example.com/motion.mp4"]
+  }'
+```
+
+MiniMax V2 请求示例，仍使用同一条 `/v2/video_generation` 路径：
+
+```json
+{
+  "model":"wan2.2animate-v4-motion_retargeting",
+  "content":[
+    {"type":"image_url","role":"reference_image","image_url":{"url":"https://cdn.example.com/person.png"}},
+    {"type":"video_url","role":"reference_video","video_url":{"url":"https://cdn.example.com/motion.mp4"}}
+  ],
+  "resolution":"832p",
+  "ratio":"9:16"
+}
+```
+
+AutoDL 原生调用使用实际 workflow ID：`POST /api/v1/comfyui/comfyui_workflow/wan2.2animate-v4-motion_retargeting`，请求体为 `{"ref_image":"https://cdn.example.com/person.png","ref_video":"https://cdn.example.com/motion.mp4"}`。原生路径使用工作流 ID 时，渠道也必须允许这个 ID。三种格式都不新增可控制时长参数，不传 `prompt / seconds / duration / audio_duration`。参考图必须恰好一张，视频必须恰好一条。
+
+准确计费需要 [宿主时长计量补丁](new-api-video-duration.patch) 和 `ffprobe`，详细安装限制见 [README](README.md#动作迁移按秒计费与渠道别名)。提交前测量参考视频秒数预扣，完成后按实际输出视频轨道时长结算；失败按原有逻辑退款。`data.duration` 是处理耗时，客户端 JSON 中的用量不能代替宿主测量。输入不可读取或无法测得有效时长时，在付费提交前返回错误；输出暂时无法测量时由宿主轮询重试。测量限于公开 MP4/WebM、256 MiB 内、`0 < 时长 <= 3600` 秒。
+
+官网单价（2026-10-08 核对）为北京时间高峰 08:00–24:00 **¥0.04/成片秒**，低峰 00:00–08:00 **¥0.03/成片秒**。例如 5 秒输入预扣高峰 ¥0.20，而 3.25 秒成片结算 ¥0.13，退差额 ¥0.07；若成片为 7 秒，结算 ¥0.28，补扣 ¥0.08。实际收费还受站点用户组倍率影响；跨时段任务遵循 README 中说明的宿主时间规则。
 
 ## 错误、轮询和计费
 
@@ -423,7 +460,7 @@ MiniMax 官方别名受官方规则约束；例如 H3 duration 为 4–15、reso
 - 429 和 5xx：处理限流或服务暂时错误，遵守客户端截止时间和退避策略。插件轮询最长约 30 分钟；超时只表示插件停止等待，上游任务可能仍在运行。
 - `SUCCESS` 缺少预期类型的产物时，任务会以失败原因结束；插件不把图片预览误当视频，也不把无类型音频默认当视频。
 
-当前价格快照和来源列于 [prices.json](prices.json)。以下 7 个 workflow 已核实官网定价：`minimax_h3_lightx2v_no_pic`、`minimax_h3_lightx2v_v5`、`minimax_h3_lightx2v`、`minimax_h3_image_audio_to_video_v2`、`minimax_h3_image_audio_to_video`、`minimax_h3_image_audio_to_video_v2_15s`、`minimax_h3_lightx2v_v5_15s`。其他 10 个 workflow 和两个官方 MiniMax 模型别名目前没有仓库提供的默认价格。管理员需按自己的成本和站点策略补齐价格后才能正常调用。插件安装不会改价格；不要把不同 AutoDL workflow 的价格或 alias 的内部路由价格自行假定为相同。
+当前价格快照和来源列于 [prices.json](prices.json)。以下 7 个 H3 workflow 已核实官网定价：`minimax_h3_lightx2v_no_pic`、`minimax_h3_lightx2v_v5`、`minimax_h3_lightx2v`、`minimax_h3_image_audio_to_video_v2`、`minimax_h3_image_audio_to_video`、`minimax_h3_image_audio_to_video_v2_15s`、`minimax_h3_lightx2v_v5_15s`；另提供 `wan2.2-animate-move` 映射到动作迁移工作流的官网按秒单价。其余 9 个 workflow 和两个官方 MiniMax 模型别名目前没有仓库提供的默认价格。管理员需按自己的成本和站点策略补齐价格后才能正常调用。插件安装不会改价格；不要把不同 AutoDL workflow 的价格或 alias 的内部路由价格自行假定为相同。
 
 ## 插件处理流程
 

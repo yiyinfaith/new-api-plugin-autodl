@@ -2464,14 +2464,15 @@ const WORKFLOWS = {
 const MINIMAX_MODELS = ["MiniMax-H3", "MiniMax-H3-Max"];
 const VIDEO_MODELS = Object.keys(WORKFLOWS).filter(function (model) { return WORKFLOWS[model].type === "video"; }).concat(MINIMAX_MODELS);
 const REQUEST_SCHEMA = { requests: { type: "number", unit: "count", unitLabel: { en: "request", zh: "次" }, description: { en: "Generation request unit price", zh: "生成请求单价" } } };
+const MOTION_WORKFLOW = "wan2.2animate-v4-motion_retargeting";
 
 function usageProfile(model) {
   const config = WORKFLOWS[model];
   const schema = Object.assign({}, REQUEST_SCHEMA);
   const facts = { requests: 1 };
-  if (config.secondsField) {
+  if (config.secondsField || model === MOTION_WORKFLOW) {
     schema.seconds = { type: "number", unit: "second", description: { en: "Video generation unit price", zh: "视频生成单价" } };
-    facts.seconds = config.rules[config.secondsField].default;
+    facts.seconds = config.secondsField ? config.rules[config.secondsField].default : 5;
   }
   if (config.resolutions.length) {
     schema.resolution = { enum: Array.from(new Set(config.resolutions.map(function (entry) { return entry.resolution; }))), description: { en: "Output resolution", zh: "输出分辨率" } };
@@ -3043,7 +3044,7 @@ export function parseSubmitResponse(ctx, response) {
   const id = taskId(body.data.task_id);
   const request = normalized(ctx);
   const config = requestWorkflow(ctx);
-  const state = { facts: request.facts, type: config.type, submittedAt: utils.unixNow(), timeoutSeconds: config.timeoutSeconds, workflowId: config.workflowId };
+  const state = { facts: measuredMotionFacts(ctx, request.facts, config), type: config.type, submittedAt: utils.unixNow(), timeoutSeconds: config.timeoutSeconds, workflowId: config.workflowId };
   const parsed = parseTaskResult(Object.assign({}, ctx, { taskId: id, state: state }), body, { status: response.statusCode, headers: {} });
   const output = { taskId: id, taskData: body, state: state };
   if (parsed.status === "SUCCESS" || parsed.status === "FAILURE") output.immediate = parsed;
@@ -3085,8 +3086,28 @@ export function parseTaskResult(ctx, body, response) {
   return { status: status };
 }
 
+function measuredMotionFacts(ctx, facts, config) {
+  if (config.workflowId !== MOTION_WORKFLOW) return facts;
+  const seconds = ctx.usageMeasurements && ctx.usageMeasurements.seconds;
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600) throw new Error("AutoDL: motion transfer billing requires host video-duration@1 support and a measurable public MP4/WebM video (0 < duration <= 3600 seconds)");
+  return Object.assign({}, facts, { seconds: seconds });
+}
+
+// This descriptor contains no credentials. The host fetches and measures media
+// outside the JavaScript hook timeout, then supplies trusted usageMeasurements.
+export function measureUsage(ctx, result) {
+  const model = ctx.upstreamModel || ctx.model || (ctx.state && ctx.state.workflowId);
+  if (model !== MOTION_WORKFLOW) return null;
+  if (result) {
+    if (result.status !== "SUCCESS") return null;
+    if (typeof result.url !== "string" || !result.url) throw new Error("AutoDL: completed motion transfer has no measurable video URL");
+    return { seconds: { videoUrl: result.url } };
+  }
+  return { seconds: { videoUrl: normalized(ctx).body.ref_video } };
+}
+
 export function extractUsage(ctx) {
-  return normalized(ctx).facts;
+  return measuredMotionFacts(ctx, normalized(ctx).facts, requestWorkflow(ctx));
 }
 
 export function extractUsageOnComplete(task, result) {
@@ -3097,6 +3118,8 @@ export function extractUsageOnComplete(task, result) {
   if (result.status === "FAILURE") {
     facts.requests = 0;
     if (facts.seconds !== undefined) facts.seconds = 0;
+  } else if (result.status === "SUCCESS" && (task.upstreamModel || state.workflowId) === MOTION_WORKFLOW) {
+    return measuredMotionFacts(task, facts, WORKFLOWS[MOTION_WORKFLOW]);
   }
   return facts;
 }

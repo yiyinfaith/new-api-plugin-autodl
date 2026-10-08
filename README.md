@@ -431,7 +431,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" -H "Authorization: Bearer
 动作迁移（无秒数、无文本控制）：
 
 ```json
-{"model":"wan2.2animate-v4-motion_retargeting","resolution":"464p","orientation":"portrait","input_reference":{"image_url":"https://your-public-file-host.example/person.png"},"videos":["https://your-public-file-host.example/motion.mp4"]}
+{"model":"wan2.2animate-v4-motion_retargeting","resolution":"832p","orientation":"portrait","input_reference":{"image_url":"https://your-public-file-host.example/person.png"},"videos":["https://your-public-file-host.example/motion.mp4"]}
 ```
 
 TTS 语音合成，通过 AutoDL 原生兼容接口提交：
@@ -470,7 +470,27 @@ curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" -H 
 
 当前指定实例使用 CNY 展示、`USDExchangeRate=1`，表达式直接填写上述数值，未做外汇换算或加价。其他实例如使用不同展示汇率，应由管理员按站点币种设置换算，不能盲目复制；既有分组倍率仍由 New API 应用。官网价格后续变化不会自动同步，本文件是已核实日期的快照。
 
-每个模型有独立 `usageProfiles`。可控时长视频上报请求次数、请求秒数、分辨率和方向；动作迁移及 TTS 不伪造输出秒数，可先按次配置价格。上游 `data.duration` 是运行耗时，不是视频秒数，绝不用于本插件的按秒结算。完成时沿用保存的请求用量；失败结算次数/秒数归零。宿主时间函数在预扣和结算时计算当前时间，跨 00:00/08:00 的任务可能命中不同时段；AutoDL 公共资料未明确其跨时段判定时点。
+每个模型有独立 `usageProfiles`。可控时长视频上报请求次数、请求秒数、分辨率和方向，完成时沿用保存的请求用量。动作迁移工作流 `wan2.2animate-v4-motion_retargeting` 按实际成片秒数收费：提交前由宿主测量参考视频用于预扣，完成后测量输出视频替换 `seconds`，通过宿主原有结算逻辑补扣或退差额；客户端仍不能传 `seconds` 或 `duration` 控制该工作流。TTS 不上报视频秒数。上游 `data.duration` 是运行耗时，绝不用于视频按秒结算。失败结算次数/秒数归零。宿主时间函数在预扣和结算时计算当前时间，跨 00:00/08:00 的任务可能命中不同时段；AutoDL 公共资料未明确其跨时段判定时点。
+
+### 动作迁移按秒计费与渠道别名
+
+官网工作流名为 **动作迁移**。截至 2026-10-08，官网价格为北京时间 **08:00–24:00 ¥0.04/成片秒，00:00–08:00 ¥0.03/成片秒**，分辨率不改变这两个单价。配置表达式为：
+
+```text
+hour("Asia/Shanghai") < 8 ? tier("off_peak", u("seconds") * 0.03) : tier("peak", u("seconds") * 0.04)
+```
+
+该工作流的准确按秒计费需要宿主支持 `video-duration@1`，并安装 `ffprobe`。本仓库提供针对 New API rc.42 的 [宿主时长计量补丁](new-api-video-duration.patch)，与前面的 ComfyUI 路由补丁一起应用后重建宿主；Docker 运行镜像和构建测试环境均需安装 FFmpeg 包。只安装 `plugin.js` 仍是单文件插件，无仓库文件运行时依赖；没有该宿主能力时，动作迁移请求会在提交前报错，其他工作流沿用原有逻辑。
+
+宿主测量公开 MP4/WebM 视频，使用视频轨道时长，避免较长音轨抬高视频费用；单文件上限 256 MiB、测量总时限 45 秒、有效时长为 `0 < 秒数 <= 3600`。下载遵守宿主的媒体抓取和 SSRF 设置，不向媒体地址转发渠道密钥。无法测量输入时拒绝提交；输出暂时不可读时交由宿主轮询重试，不用运行耗时或虚构秒数结算。
+
+管理员可在渠道中添加模型名 `wan2.2-animate-move`，并设置模型映射：
+
+```json
+{"wan2.2-animate-move":"wan2.2animate-v4-motion_retargeting"}
+```
+
+该别名的模型简介只填写 `动作迁移`，价格选择上述表达式。`wan2.2-animate-move` 是渠道别名，需先配置映射；插件内置的工作流 ID 仍为 `wan2.2animate-v4-motion_retargeting`。完整请求和计费说明见 [API 文档中的动作迁移章节](API.md#动作迁移与-wan22-animate-move-渠道别名)。站点按 CNY 展示且 `USDExchangeRate=1` 时直接填写这些数值；既有用户组倍率仍会影响最终收费。
 
 ## 自动测试客户端
 
