@@ -2486,7 +2486,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.1.0",
+  version: "1.1.1",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2806,7 +2806,9 @@ export function buildContentRequest(ctx) {
   if (method !== "GET" && method !== "HEAD") throw new Error("AutoDL: content only supports GET and HEAD");
   // Host validates public destinations/redirects and forwards safe Range headers.
   // Never send the AutoDL token to the dynamic result/CDN host.
-  return { url: item.url, method: method, credentialless: true };
+  // AutoDL's TOS URLs are signed for GET. The host closes the upstream body
+  // after copying headers when the client requested HEAD.
+  return { url: item.url, method: "GET", credentialless: true };
 }
 
 function decode(ctx, pinnedModel) {

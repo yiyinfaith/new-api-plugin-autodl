@@ -1,6 +1,6 @@
 # AutoDL — New API Task Plugin
 
-插件 key：`autodl`；显示名：**AutoDL**；版本：**1.1.0**。
+插件 key：`autodl`；显示名：**AutoDL**；版本：**1.1.1**。
 
 通过官方 Task Plugin API v1 将 AutoDL.Art ComfyUI 工作流接入 New API。当前覆盖官网全部 **17 个工作流（16 个视频、1 个音频）**，模型名与官网工作流 ID 完全一致，对外使用统一参数。插件是单个自包含同步 JavaScript 模块，不修改 New API 核心源码，不使用 Node、网络 SDK、文件系统或虚构的 SDK 方法。
 
@@ -173,7 +173,7 @@ python .\test-task.py --request request.json --out result.wav
 - 重试/后台轮询由 New API 负责。正常排队、运行和未知状态有 30 分钟插件截止时间；不会取消上游任务，也不保证 AutoDL 退款。宿主默认连续轮询错误上限为 20，最终遵循实例配置。
 - 单次 HTTP 超时由宿主 `RELAY_TIMEOUT`、`RELAY_RESPONSE_HEADER_TIMEOUT` 控制；插件 API v1 无请求级 `timeout` 字段。部署未改动生产超时配置或重启生产容器。
 - 产物支持 video/audio/image/file，稳定 key 如 `video`、`audio`、`video-2`。音频识别 WAV、MP3、FLAC，视频识别 MP4、WebM。
-- `/content` 支持 GET、HEAD 和宿主安全转发的 Range。使用 `credentialless: true`，不把渠道密钥发给 CDN；宿主校验目标和重定向。
+- `/content` 支持 GET、HEAD 和宿主安全转发的 Range。AutoDL 的 TOS 结果 URL 按 GET 签名，因此插件统一用 GET 请求 CDN；客户端请求 HEAD 时，rc.41 宿主复制响应头后关闭上游正文，只返回响应头。使用 `credentialless: true`，不把渠道密钥发给 CDN；宿主校验目标和重定向。
 - AutoDL 结果 URL 有效期较短，代理下载不会延长 URL 有效期。本插件没有自动转存，需要长期保存时及时下载到自己的存储。
 
 ## 精确尺寸与需确认项目
@@ -192,7 +192,11 @@ node tests.mjs
 /new-api plugin test plugin.js --fixture golden.json
 ```
 
-`node tests.mjs` 执行 **650 项检查**并生成 **580 个官方 host fixture**。已在 rc.41 实际二进制通过 lint 和 580/580 fixture。隔离 HTTP 测试使用生产同镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流逐一断言，测试视频/通用任务/原生路由、音频视频产物、HEAD/Range 下载及错误处理；模拟测试不产生 AutoDL 费用。它不能代替每个工作流真实付费生成的验证。
+`node tests.mjs` 执行 **653 项检查**并生成 **583 个官方 host fixture**。1.1.1 已在 rc.41 实际二进制通过 lint 和 583/583 fixture，新增 GET 签名 URL 和 HEAD 的回归覆盖。
+
+1.1.0 的隔离 HTTP 测试使用生产同镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流逐一断言，24 项检查覆盖视频/通用任务/原生路由、音频视频产物、HEAD/Range 下载及错误处理。1.1.1 的内容修复另在真实生产任务上验证。这些模拟测试不产生 AutoDL 费用，不能代替每个工作流真实付费生成的验证。
+
+2026-10-08 生产验证仅提交了一次真实任务：`minimax_h3_lightx2v_no_pic`，1 秒、480p、横屏，成功生成 MP4，New API 记账 ¥0.03。升级至 1.1.1 后复用同一个任务，源站及公网域名均通过认证 HEAD（200）和 Range GET（206），完整 MP4 下载也通过。未重复付费生成，也未对其余 16 个工作流进行付费生成测试。¥0.03 为 New API 的记录，AutoDL 账户余额未另外核对。
 
 - [New API Task Plugin API v1](https://docs.newapi.pro/zh/docs/plugins/api-reference)
 - [New API 插件开发指南](https://docs.newapi.pro/zh/docs/plugins/development)
