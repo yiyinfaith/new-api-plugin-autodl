@@ -124,15 +124,16 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 `content` 项：
 
 ```json
-{"type":"text","text":"描述文字"}
-{"type":"image_url","image_url":{"url":"https://media.example.com/frame.png"},"role":"first_frame"}
-{"type":"image_url","image_url":{"url":"https://media.example.com/end.png"},"role":"last_frame"}
-{"type":"image_url","image_url":{"url":"https://media.example.com/ref.png"},"role":"reference_image"}
-{"type":"audio_url","audio_url":{"url":"https://media.example.com/ref.wav"},"role":"reference_audio"}
-{"type":"video_url","video_url":{"url":"https://media.example.com/ref.mp4"},"role":"reference_video"}
+[
+  {"type":"text","text":"描述文字"},
+  {"type":"image_url","image_url":{"url":"https://media.example.com/ref.png"},"role":"reference_image"},
+  {"type":"audio_url","audio_url":{"url":"https://media.example.com/ref.wav"},"role":"reference_audio"}
+]
 ```
 
 `text` 最多一项。媒体资源对象只接受 `url`，值须为公开 HTTP(S) URL。未指定 image role 时按官方规则视为 `first_frame`；参考图请显式使用 `reference_image`。不允许首尾帧与参考媒体混用、重复 frame role 或超过工作流输入槽位。当前自动路由模型没有可用的 reference-video workflow，传 `reference_video` 会明确报错。
+
+首尾帧请求将上面的媒体对象替换为两项 image：分别用 `role: "first_frame"` 和 `role: "last_frame"`。单帧、reference image、reference audio 和 reference video 的对象结构不变，只使用对应的 role；当前模型路由对 reference video 会明确拒绝。
 
 ### 官方模型约束和路由
 
