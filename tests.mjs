@@ -23,8 +23,8 @@ test('exact official catalog coverage', () => {
   assert.equal(p.meta.version, '1.0.0');
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
-  assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'MiniMax-H3', 'MiniMax-H3-Max'].sort());
-  assert.equal(p.meta.protocols[0].models.length, 18);
+  assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'MiniMax-H3', 'MiniMax-H3-Max', 'wan2.2-animate-move'].sort());
+  assert.equal(p.meta.protocols[0].models.length, 19);
   assert.ok(!p.meta.protocols[0].models.includes('indextts2-v1'));
 });
 for (const [model, config] of Object.entries(catalog)) {
@@ -488,10 +488,11 @@ function hostJSON(value) {
   return value;
 }
 const v2Context = request => ({ method: 'POST', path: '/v2/video_generation', body: { kind: 'json', value: hostJSON(request) } });
-test('declared public routes use the three requested interface styles', () => {
+test('declared public routes use the four requested interface styles', () => {
   assert.deepEqual(p.meta.routes.map(r => [r.method, r.path]), [
     ['POST', '/v2/video_generation'], ['GET', '/v2/query/video_generation/:task_id'],
     ['POST', '/api/v1/comfyui/comfyui_workflow/:workflow_id'], ['GET', '/api/v1/comfyui/comfyui_workflow/result/:task_id'],
+    ['POST', '/api/v1/services/aigc/image2video/video-synthesis'], ['GET', '/api/v1/tasks/:task_id'],
   ]);
   assert.equal(formats.minimax_api.create_path, '/v2/video_generation');
   assert.equal(formats.minimax_api.query_path, '/v2/query/video_generation/{task_id}');
@@ -634,5 +635,75 @@ for (const seconds of [undefined, 0, -1, 3601, '5', null]) {
 reject('motion completion cannot silently retain estimated seconds', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS' }], 'requires host video-duration@1');
 reject('motion request cannot inject host measurement', 'extractUsage', [{ ...motionContext, requestBody: { ...examples[motionModel], usageMeasurements: { seconds: 1 } } }], 'unsupported request field');
 test('motion usage profile declares actual-video seconds', () => assert.equal(p.meta.usageProfiles.find(profile => profile.models.includes(motionModel)).schema.seconds.unit, 'second'));
+// DashScope is a fourth surface over the unchanged motion lifecycle.
+const dashModel = 'wan2.2-animate-move';
+const dashPath = '/api/v1/services/aigc/image2video/video-synthesis';
+const dashBody = { model: dashModel, input: { image_url: 'https://cdn.example.com/person.png', video_url: 'https://cdn.example.com/input.mp4' }, parameters: { mode: 'wan-std' } };
+const dashContext = request => ({ method: 'POST', path: dashPath, body: { kind: 'json', value: hostJSON(request) } });
+const dashUpstream = { resolution: '464*832px(竖版)', ref_image: dashBody.input.image_url, ref_video: dashBody.input.video_url };
+const dashFacts = { requests: 1, resolution: '832p', orientation: 'portrait' };
+const dashIntent = { kind: 'submit', model: dashModel, action: 'video_to_video', requestBody: { model: dashModel, __autodl_fields: Object.entries(dashUpstream), ...dashFacts, __autodl_dashscope: JSON.stringify(hostJSON(dashBody)) } };
+nativeFixture('DashScope valid standard decode preserves external identity', 'dashCreate', [dashContext(dashBody)], dashIntent);
+for (const mapped of [dashModel, motionModel]) {
+  const context = { ...base, model: dashModel, upstreamModel: mapped, requestBody: dashIntent.requestBody, usageMeasurements: { seconds: 5 } };
+  fixture('DashScope submit mapping with upstream pin ' + mapped, 'buildSubmitRequest', [context], { url: base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + motionModel, method: 'POST', action: 'video_to_video', headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' }, body: dashUpstream, rewriteModel: motionModel });
+  fixture('DashScope reference video measurement with upstream pin ' + mapped, 'measureUsage', [context, null], { seconds: { videoUrl: dashBody.input.video_url } });
+  fixture('DashScope measured reservation with upstream pin ' + mapped, 'extractUsage', [context], { ...dashFacts, seconds: 5 });
+  fixture('DashScope common submit state with upstream pin ' + mapped, 'parseSubmitResponse', [context, { statusCode: 200, body: envelope('QUEUED') }], { taskId: 'upstream-123', taskData: envelope('QUEUED'), state: { facts: { ...dashFacts, seconds: 5 }, type: 'video', submittedAt: 2000, timeoutSeconds: 1800, workflowId: motionModel } });
+}
+const dashDriver = { ...base, model: dashModel, upstreamModel: motionModel, requestBody: dashIntent.requestBody, usageMeasurements: { seconds: 5 } };
+const dashState = { facts: { ...dashFacts, seconds: 5 }, type: 'video', submittedAt: 2000, timeoutSeconds: 1800, workflowId: motionModel };
+fixture('DashScope polled success uses unchanged result parser', 'parseTaskResult', [{ ...dashDriver, taskId: 'upstream-123', state: dashState }, envelope('SUCCESS', [{ url: 'https://cdn.example.com/final.mp4', type: 'video' }], { duration: 196 }), { status: 200 }], { status: 'SUCCESS', progress: '100%', url: 'https://cdn.example.com/final.mp4' });
+fixture('DashScope completion measures output, not processing time', 'measureUsage', [{ upstreamModel: motionModel, state: dashState }, { status: 'SUCCESS', url: 'https://cdn.example.com/final.mp4' }], { seconds: { videoUrl: 'https://cdn.example.com/final.mp4' } });
+for (const seconds of [3.25, 7]) fixture('DashScope settles actual output seconds ' + seconds, 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: dashState, usageMeasurements: { seconds } }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], { ...dashFacts, seconds });
+fixture('DashScope failure refunds all quantities', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: dashState }, { status: 'FAILURE' }], { ...dashFacts, requests: 0, seconds: 0 });
+for (const key of ['model', 'input', 'parameters']) {
+  const request = structuredClone(dashBody); delete request[key];
+  nativeFixture('DashScope requires ' + key, 'dashCreate', [dashContext(request)], null, 'AutoDL:');
+}
+for (const key of ['image_url', 'video_url']) {
+  const missing = structuredClone(dashBody); delete missing.input[key];
+  nativeFixture('DashScope requires input.' + key, 'dashCreate', [dashContext(missing)], null, 'invalid media URL');
+  for (const value of ['', 'data:image/png;base64,AAAA', 'file:///tmp/a', 'C:/a.png', 'AAAA', 'https://user:pass@cdn.example/a', ' https://cdn.example/a', null, 42, [], { file_id: 'file-1' }, 'http://127.0.0.1/a', 'http://localhost/a', 'http://192.168.1.1/a']) nativeFixture('DashScope rejects ' + key + ' ' + JSON.stringify(value), 'dashCreate', [dashContext({ ...dashBody, input: { ...dashBody.input, [key]: value } })], null, 'AutoDL:');
+}
+for (const key of ['input', 'parameters']) for (const value of [null, [], false, 'x']) nativeFixture('DashScope requires object ' + key + ' ' + JSON.stringify(value), 'dashCreate', [dashContext({ ...dashBody, [key]: value })], null, 'must be objects');
+for (const model of [motionModel, 'MiniMax-H3', 'wan2.2-animate-mix', '', null, 1]) nativeFixture('DashScope rejects wrong model ' + String(model), 'dashCreate', [dashContext({ ...dashBody, model })], null, 'model must be');
+for (const mode of [undefined, 'wan-pro', 'other', null, 1, true, []]) nativeFixture('DashScope rejects mode ' + JSON.stringify(mode), 'dashCreate', [dashContext({ ...dashBody, parameters: { mode } })], null, mode === 'wan-pro' ? 'wan-pro is not supported' : 'mode is required');
+for (const watermark of [true, 'false', 0, null, []]) nativeFixture('DashScope rejects watermark ' + JSON.stringify(watermark), 'dashCreate', [dashContext({ ...dashBody, input: { ...dashBody.input, watermark } })], null, 'no watermark control');
+for (const check_image of [false, 'true', 1, null, []]) nativeFixture('DashScope rejects check_image ' + JSON.stringify(check_image), 'dashCreate', [dashContext({ ...dashBody, parameters: { ...dashBody.parameters, check_image } })], null, 'cannot disable image checking');
+const explicitDefaults = { ...dashBody, input: { ...dashBody.input, watermark: false }, parameters: { mode: 'wan-std', check_image: true } };
+nativeFixture('DashScope explicit supported defaults stay out of upstream body', 'dashCreate', [dashContext(explicitDefaults)], { ...dashIntent, requestBody: { ...dashIntent.requestBody, __autodl_dashscope: JSON.stringify(hostJSON(explicitDefaults)) } });
+for (const key of ['resolution', 'seconds', 'duration', 'ref_image', 'ref_video', 'input_reference', 'videos', 'workflow', 'rewriteModel', 'facts', 'usageMeasurements', '__autodl_native', '__autodl_minimax', '__autodl_fields', '__autodl_dashscope', '__proto__', 'file_id', 'unknown']) {
+  for (const level of ['body', 'input', 'parameters']) {
+    const request = structuredClone(dashBody);
+    Object.defineProperty(level === 'body' ? request : request[level], key, { value: 1, enumerable: true });
+    nativeFixture('DashScope rejects injected ' + level + '.' + key, 'dashCreate', [dashContext(request)], null, 'unsupported DashScope');
+  }
+}
+for (const body of [{ kind: 'none' }, { kind: 'json', value: [] }, { kind: 'multipart', fields: {} }, { kind: 'form', fields: {} }]) nativeFixture('DashScope rejects body kind ' + JSON.stringify(body), 'dashCreate', [{ method: 'POST', path: dashPath, body }], null, 'JSON object');
+for (const key of ['requests', 'seconds', 'resolution', 'orientation']) reject('DashScope rejects forged internal ' + key, 'buildSubmitRequest', [{ ...dashDriver, requestBody: { ...dashIntent.requestBody, [key]: 0 } }], 'internal usage facts conflict');
+reject('DashScope rejects changed normalized media', 'buildSubmitRequest', [{ ...dashDriver, requestBody: { ...dashIntent.requestBody, __autodl_fields: [['resolution', dashUpstream.resolution], ['ref_image', dashUpstream.ref_image], ['ref_video', 'https://cdn.example.com/other.mp4']] } }], 'DashScope fields conflict');
+reject('DashScope rejects channel mapping to another workflow', 'buildSubmitRequest', [{ ...dashDriver, upstreamModel: 'minimax_h3_z0901' }], 'workflow identity conflicts');
+for (const source of ['{}', 'broken', '[]', null]) reject('DashScope rejects invalid internal source ' + source, 'buildSubmitRequest', [{ ...dashDriver, requestBody: { ...dashIntent.requestBody, __autodl_dashscope: source } }], 'AutoDL:');
+nativeFixture('DashScope created exposes only public ID', 'dashCreated', [{}, { task_id: 'task_public', data: envelope('QUEUED', [], { request_id: 'upstream-123' }) }], { output: { task_status: 'PENDING', task_id: 'task_public' }, request_id: '' });
+for (const [status, external] of Object.entries({ NOT_START: 'PENDING', SUBMITTED: 'PENDING', QUEUED: 'PENDING', IN_PROGRESS: 'RUNNING', CANCELLED: 'CANCELED', UNKNOWN: 'UNKNOWN', future: 'UNKNOWN' })) nativeFixture('DashScope query state ' + status, 'dashTask', [{}, { task_id: 'task_public', status }], { request_id: '', output: { task_id: 'task_public', task_status: external } });
+nativeFixture('DashScope success preserves existing public artifact URL and omits unverifiable usage', 'dashTask', [{}, { task_id: 'task_public', status: 'SUCCESS', data: envelope('SUCCESS', [{ type: 'image', url: 'https://cdn.example.com/preview.png' }, { type: 'video', url: 'https://newapi.example/v1/tasks/task_public/artifacts/video/content?access=capability' }], { duration: 196, request_id: 'upstream-123', usage: { video_duration: 999 } }) }], { request_id: '', output: { task_id: 'task_public', task_status: 'SUCCEEDED', results: { video_url: 'https://newapi.example/v1/tasks/task_public/artifacts/video/content?access=capability' } } });
+nativeFixture('DashScope failure keeps actual reason without fabricated vendor code', 'dashTask', [{}, { task_id: 'task_public', status: 'FAILURE', fail_reason: 'mock upstream failure' }], { request_id: '', output: { task_id: 'task_public', task_status: 'FAILED', code: 'GenerationFailed', message: 'mock upstream failure' } });
+test('DashScope shares the motion profile without copying billing schema', () => assert.deepEqual(p.meta.usageProfiles.find(profile => profile.models.includes(dashModel)).models, [motionModel, dashModel]));
+test('registered DashScope model preserves channel-mapped OpenAI motion alias selection', () => assert.ok(p.meta.protocols.find(protocol => protocol.name === 'openai_video').models.includes(dashModel)));
+test('OpenAI motion alias decodes during discovery and retains mapped driver behavior', () => {
+  const body = { ...examples[motionModel], model: dashModel };
+  const decoded = p.protocols.openai_video.decodeRequest({ model: dashModel, body: { kind: 'json', value: body } });
+  assert.deepEqual(decoded, { kind: 'submit', model: dashModel, action: 'video_to_video', requestBody: body });
+  const context = { ...motionContext, model: dashModel, requestBody: decoded.requestBody };
+  assert.equal(p.buildSubmitRequest(context).body.ref_video, body.videos[0]);
+  assert.equal(p.extractUsage(context).seconds, 5);
+  assert.throws(() => p.buildSubmitRequest({ ...context, upstreamModel: dashModel }), /unsupported model/);
+});
+test('DashScope examples match the decoder and official routes', () => {
+  assert.deepEqual(formats.dashscope[dashModel], explicitDefaults);
+  assert.equal(formats.dashscope_api.create_path, dashPath);
+  assert.equal(formats.dashscope_api.query_path, '/api/v1/tasks/{task_id}');
+});
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

@@ -1285,6 +1285,46 @@
           "orientation": "portrait"
         }
       }
-    ]
+    ],
+    "dashscope": {
+      "wan2.2-animate-move": {
+        "model": "wan2.2-animate-move",
+        "input": {
+          "image_url": "https://cdn.example.com/person.png",
+          "video_url": "https://cdn.example.com/input.mp4",
+          "watermark": false
+        },
+        "parameters": {
+          "mode": "wan-std",
+          "check_image": true
+        }
+      }
+    },
+    "dashscope_api": {
+      "create_path": "/api/v1/services/aigc/image2video/video-synthesis",
+      "query_path": "/api/v1/tasks/{task_id}",
+      "headers": {
+        "Authorization": "Bearer <NEW_API_KEY>",
+        "Content-Type": "application/json",
+        "X-DashScope-Async": "enable"
+      },
+      "created": {
+        "output": {
+          "task_status": "PENDING",
+          "task_id": "task_public"
+        },
+        "request_id": ""
+      },
+      "succeeded": {
+        "request_id": "",
+        "output": {
+          "task_id": "task_public",
+          "task_status": "SUCCEEDED",
+          "results": {
+            "video_url": "https://cdn.example.com/result.mp4"
+          }
+        }
+      }
+    }
   }
 }

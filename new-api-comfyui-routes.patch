@@ -1,64 +1,99 @@
 --- a/pkg/jsplugin/routing.go
 +++ b/pkg/jsplugin/routing.go
-@@ -705,6 +705,13 @@
+@@ -735,6 +735,15 @@
  	return true
  }
  
-+// Only the two exact, authenticated ComfyUI task endpoints may use /api.
++// Only the four exact, authenticated official task endpoints may use /api.
 +// All management routes, other methods, wildcard paths and dynamic routes remain reserved.
-+func isOfficialComfyUIRoute(route *Route) bool {
++func isAllowedOfficialTaskRoute(route *Route) bool {
 +	return route.Method == "POST" && route.Type == RouteTypeSubmit && route.Path == "/api/v1/comfyui/comfyui_workflow/:workflow_id" ||
-+		route.Method == "GET" && route.Type == RouteTypeQuery && route.Path == "/api/v1/comfyui/comfyui_workflow/result/:task_id"
++		route.Method == "GET" && route.Type == RouteTypeQuery && route.Path == "/api/v1/comfyui/comfyui_workflow/result/:task_id" ||
++		route.Method == "POST" && route.Type == RouteTypeSubmit && route.Path == "/api/v1/services/aigc/image2video/video-synthesis" ||
++		route.Method == "GET" && route.Type == RouteTypeQuery && route.Path == "/api/v1/tasks/:task_id"
 +}
 +
  func validateRoute(route *Route) error {
  	if route.Method != strings.ToUpper(strings.TrimSpace(route.Method)) {
  		return fmt.Errorf("plugin route method %q must use canonical uppercase spelling", route.Method)
-@@ -718,7 +725,7 @@
+@@ -748,7 +757,7 @@
  	if err != nil {
  		return err
  	}
 -	if namespace, reserved := intersectingReservedNamespace(route.Path); reserved {
-+	if namespace, reserved := intersectingReservedNamespace(route.Path); reserved && !isOfficialComfyUIRoute(route) {
++	if namespace, reserved := intersectingReservedNamespace(route.Path); reserved && !isAllowedOfficialTaskRoute(route) {
  		return fmt.Errorf("plugin route path %q intersects reserved namespace %s", route.Path, namespace)
  	}
  	switch route.Type {
 --- /dev/null
 +++ b/pkg/jsplugin/comfyui_routing_test.go
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,69 @@
 +package jsplugin
 +
 +import (
-+    "strings"
-+    "testing"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"testing"
 +)
 +
-+func TestOfficialComfyUIReservedNamespaceException(t *testing.T) {
-+    cases := []struct {
-+        name, method, path string
-+        kind RouteType
-+        allowed bool
-+    }{
-+        {"submit", "POST", "/api/v1/comfyui/comfyui_workflow/:workflow_id", RouteTypeSubmit, true},
-+        {"query", "GET", "/api/v1/comfyui/comfyui_workflow/result/:task_id", RouteTypeQuery, true},
-+        {"management", "POST", "/api/channel/:workflow_id", RouteTypeSubmit, false},
-+        {"other method", "PUT", "/api/v1/comfyui/comfyui_workflow/:workflow_id", RouteTypeSubmit, false},
-+        {"wrong type", "POST", "/api/v1/comfyui/comfyui_workflow/:workflow_id", RouteTypeDynamic, false},
-+        {"wrong query method", "POST", "/api/v1/comfyui/comfyui_workflow/result/:task_id", RouteTypeSubmit, false},
-+        {"catchall", "POST", "/api/v1/comfyui/comfyui_workflow/*workflow_id", RouteTypeSubmit, false},
-+        {"different parameter", "POST", "/api/v1/comfyui/comfyui_workflow/:model", RouteTypeSubmit, false},
-+        {"extra segment", "POST", "/api/v1/comfyui/comfyui_workflow/:workflow_id/extra", RouteTypeSubmit, false},
-+        {"other API", "GET", "/api/v1/comfyui/other/:task_id", RouteTypeQuery, false},
-+    }
-+    for _, row := range cases {
-+        t.Run(row.name, func(t *testing.T) {
-+            route := Route{Method: row.method, Path: row.path, Type: row.kind, Render: "present"}
-+            if row.kind != RouteTypeQuery { route.Decode = "decode" }
-+            err := validateRoute(&route)
-+            if row.allowed && err != nil { t.Fatalf("official route rejected: %v", err) }
-+            if !row.allowed && (err == nil || !strings.Contains(err.Error(), "reserved namespace /api")) {
-+                t.Fatalf("reserved route accepted or wrong error: %v", err)
-+            }
-+        })
-+    }
++func TestOfficialTaskReservedNamespaceException(t *testing.T) {
++	allowed := []Route{
++		{Method: "POST", Path: "/api/v1/comfyui/comfyui_workflow/:workflow_id", Type: RouteTypeSubmit},
++		{Method: "GET", Path: "/api/v1/comfyui/comfyui_workflow/result/:task_id", Type: RouteTypeQuery},
++		{Method: "POST", Path: "/api/v1/services/aigc/image2video/video-synthesis", Type: RouteTypeSubmit},
++		{Method: "GET", Path: "/api/v1/tasks/:task_id", Type: RouteTypeQuery},
++	}
++	for _, row := range allowed {
++		row.Render = "present"
++		if row.Type == RouteTypeSubmit {
++			row.Decode = "decode"
++		}
++		require.NoError(t, validateRoute(&row), row.Path)
++		for _, method := range []string{"GET", "POST", "PUT", "DELETE", "PATCH"} {
++			if method == row.Method {
++				continue
++			}
++			candidate := row
++			candidate.Method = method
++			err := validateRoute(&candidate)
++			require.Error(t, err)
++			assert.Contains(t, err.Error(), "reserved namespace /api")
++		}
++		for _, kind := range []RouteType{RouteTypeSubmit, RouteTypeQuery, RouteTypeDynamic} {
++			if kind == row.Type {
++				continue
++			}
++			candidate := row
++			candidate.Type = kind
++			err := validateRoute(&candidate)
++			require.Error(t, err)
++			assert.Contains(t, err.Error(), "reserved namespace /api")
++		}
++	}
++	paths := []string{
++		"/api/channel/:workflow_id",
++		"/api/v1/comfyui/comfyui_workflow/*workflow_id",
++		"/api/v1/comfyui/comfyui_workflow/:model",
++		"/api/v1/comfyui/comfyui_workflow/:workflow_id/extra",
++		"/api/v1/comfyui/other/:task_id",
++		"/api/v1/tasks/*task_id",
++		"/api/v1/tasks/:id",
++		"/api/v1/tasks/:task_id/extra",
++		"/api/v1/services/aigc/*service",
++		"/api/v1/services/aigc/text2video/video-synthesis",
++		"/api/v1/services/aigc/image2video/video-synthesis/extra",
++		"/api/*path", "/api/v1/*path",
++	}
++	for _, path := range paths {
++		for _, method := range []string{"GET", "POST"} {
++			row := Route{Method: method, Path: path, Type: RouteTypeSubmit, Decode: "decode", Render: "present"}
++			if method == "GET" {
++				row.Type = RouteTypeQuery
++				row.Decode = ""
++			}
++			err := validateRoute(&row)
++			require.Error(t, err, path)
++			assert.Contains(t, err.Error(), "reserved namespace /api")
++		}
++	}
 +}

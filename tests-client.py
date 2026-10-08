@@ -126,4 +126,52 @@ with tempfile.TemporaryDirectory(prefix='autodl-client-audit-') as directory:
         if race=='output':assert output.read_bytes()==b'concurrent-output' and not part.exists()
         else:assert part.read_bytes()==b'concurrent-part' and not output.exists()
         checks+=1
+with tempfile.TemporaryDirectory(prefix='autodl-dashscope-client-') as directory:
+    folder = pathlib.Path(directory)
+    wan = 'wan2.2-animate-move'
+    body = examples['_formats']['dashscope'][wan]
+    request_file = folder/'dashscope.json'
+    request_file.write_text(json.dumps(body), encoding='utf-8')
+    for source in ['example', 'request']:
+        argv = ['test-task.py', '--format', 'dashscope', '--'+source, wan if source=='example' else str(request_file), '--out', str(folder/'capture.mp4')]
+        def capture_dash(request, **kwargs):
+            assert request.full_url == 'https://newapi.example/api/v1/services/aigc/image2video/video-synthesis'
+            assert request.get_header('X-dashscope-async') == 'enable'
+            assert request.get_header('Authorization') == 'Bearer fake-newapi-key'
+            assert json.loads(request.data) == body
+            raise Captured()
+        with patch.dict(os.environ, {'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-newapi-key'}), patch.object(sys,'argv',argv), patch.object(client.urllib.request,'urlopen',capture_dash):
+            try: client.main()
+            except Captured: checks += 1
+            else: raise AssertionError('Expected DashScope submit capture')
+    output = folder/'dashscope.mp4'
+    states = iter(['PENDING', 'RUNNING', 'SUCCEEDED'])
+    calls = []
+    def dash_network(request, **kwargs):
+        calls.append(request.full_url)
+        if request.get_method()=='POST':
+            return io.BytesIO(b'{"output":{"task_status":"PENDING","task_id":"task_dash"},"request_id":""}')
+        if request.full_url == 'https://newapi.example/api/v1/tasks/task_dash':
+            assert request.get_header('Authorization')=='Bearer fake-newapi-key'
+            result={'task_id':'task_dash','task_status':next(states)}
+            if result['task_status']=='SUCCEEDED':result['results']={'video_url':'https://cdn.example.com/result.mp4'}
+            return io.BytesIO(json.dumps({'output':result,'request_id':''}).encode())
+        assert request.full_url=='https://cdn.example.com/result.mp4'
+        assert not request.has_header('Authorization') and not request.has_header('X-dashscope-async')
+        return io.BytesIO(b'fake-dashscope-video')
+    argv=['test-task.py','--format','dashscope','--request',str(request_file),'--out',str(output),'--interval','1']
+    with patch.dict(os.environ, {'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',dash_network),patch.object(client.time,'sleep'):
+        client.main()
+    assert output.read_bytes()==b'fake-dashscope-video' and len(calls)==5
+    checks+=1
+    for status in ['FAILED','CANCELED']:
+        def failed_dash(request, **kwargs):
+            if request.get_method()=='POST':return io.BytesIO(b'{"output":{"task_id":"task_dash"}}')
+            return io.BytesIO(json.dumps({'output':{'task_status':status,'message':'actual failure'}}).encode())
+        argv=['test-task.py','--format','dashscope','--request',str(request_file),'--out',str(folder/(status+'.mp4'))]
+        with patch.dict(os.environ,{'NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',failed_dash):
+            try:client.main()
+            except RuntimeError as error:assert 'actual failure' in str(error)
+            else:raise AssertionError('DashScope failed task accepted')
+        checks+=1
 print(f'PASS: {checks} zero-network client request, full-flow and audit checks')
