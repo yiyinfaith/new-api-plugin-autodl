@@ -22,8 +22,8 @@ test('exact official catalog coverage', () => {
   assert.equal(p.meta.version, '1.0.0');
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
-  assert.deepEqual(p.meta.models.sort(), Object.keys(catalog).sort());
-  assert.equal(p.meta.protocols[0].models.length, 16);
+  assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'MiniMax-H3', 'MiniMax-H3-Max'].sort());
+  assert.equal(p.meta.protocols[0].models.length, 18);
   assert.ok(!p.meta.protocols[0].models.includes('indextts2-v1'));
 });
 for (const [model, config] of Object.entries(catalog)) {
@@ -212,11 +212,11 @@ test('multiple output stable artifact keys and audio string fallback', () => {
 fixture('running task has no artifacts', 'listArtifacts', [{ status: 'IN_PROGRESS', data: envelope('RUNNING') }], []);
 const formats = examples._formats;
 test('three format example catalog coverage', () => {
-  assert.deepEqual(Object.keys(formats.minimax).sort(), Object.keys(catalog).sort());
+  assert.deepEqual(Object.keys(formats.minimax).sort(), [...Object.keys(catalog), 'MiniMax-H3', 'MiniMax-H3-Max'].sort());
   assert.deepEqual(Object.keys(formats.autodl).sort(), Object.keys(catalog).sort());
-  assert.ok(p.meta.routes.some(r => r.path === '/autodl/v1/raw/:model' && r.decode === 'rawCreate'));
+  assert.ok(p.meta.routes.some(r => r.path === '/api/v1/comfyui/comfyui_workflow/:workflow_id' && r.decode === 'rawCreate'));
 });
-const rawContext = (model, body) => ({ method: 'POST', path: '/autodl/v1/raw/' + model, params: { model }, body: { kind: 'json', value: body } });
+const rawContext = (model, body) => ({ method: 'POST', path: '/api/v1/comfyui/comfyui_workflow/' + model, params: { workflow_id: model }, body: { kind: 'json', value: body } });
 const nativeInput = body => ({ __autodl_fields: Object.entries(body) });
 for (const [model, config] of Object.entries(catalog)) {
   const original = p.buildSubmitRequest(ctx(model));
@@ -233,7 +233,7 @@ for (const [model, config] of Object.entries(catalog)) {
   fixture(model + ': raw equivalent billing', 'extractUsage', [ctx(model, intent.requestBody)], facts);
   test(model + ': MiniMax persisted task facts', () => assert.deepEqual(p.parseSubmitResponse(ctx(model, mini), { statusCode: 200, body: envelope('QUEUED') }), p.parseSubmitResponse(ctx(model), { statusCode: 200, body: envelope('QUEUED') })));
   test(model + ': native MiniMax decode normalizes request and facts', () => {
-    const decoded = p.native.create({ body: { kind: 'json', value: mini } }).requestBody;
+    const decoded = p.native.miniCreate({ path: '/v2/video_generation', body: { kind: 'json', value: mini } }).requestBody;
     assert.deepEqual(Object.fromEntries(decoded.__autodl_fields), raw); assert.deepEqual(p.extractUsage(ctx(model, decoded)), facts);
   });
   if (config.type === 'video') test(model + ': OpenAI protocol carries MiniMax JSON', () => {
@@ -265,14 +265,18 @@ for (const [model, config] of Object.entries(catalog)) {
   const ratioNames = { landscape: '16:9', portrait: '9:16', square: '1:1' };
   for (const r of config.resolutions) {
     const expected = { ...original, body: { ...original.body, resolution: r.upstream } };
-    fixture(model + ': MiniMax tier/ratio ' + r.upstream, 'buildSubmitRequest', [ctx(model, { ...mini, resolution: qualityNames[r.resolution] || r.resolution, ratio: ratioNames[r.orientation] })], expected);
+    const defaultDirection = config.resolutions.find(entry => entry.upstream === config.rules.resolution.default).orientation;
+    const miniChoice = config.input_reference.includes('first_frame') ? config.resolutions.find(entry => entry.resolution === r.resolution && entry.orientation === defaultDirection) : r;
+    const miniExpected = { ...original, body: { ...original.body, resolution: miniChoice.upstream } };
+    fixture(model + ': MiniMax tier/ratio ' + r.upstream, 'buildSubmitRequest', [ctx(model, { ...mini, resolution: qualityNames[r.resolution] || r.resolution, ratio: ratioNames[r.orientation] })], miniExpected);
     fixture(model + ': raw exact resolution ' + r.upstream, 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, resolution: r.upstream }))], expected);
-    if (!qualityNames[r.resolution]) fixture(model + ': MiniMax exact extension tier ' + r.upstream, 'buildSubmitRequest', [ctx(model, { ...mini, resolution: r.upstream, ratio: ratioNames[r.orientation] })], expected);
+    if (!qualityNames[r.resolution]) fixture(model + ': MiniMax exact extension tier ' + r.upstream, 'buildSubmitRequest', [ctx(model, { ...mini, resolution: r.upstream, ratio: ratioNames[r.orientation] })], miniExpected);
   }
   if (config.resolutions.length) {
-    for (const ratio of ['adaptive', '4:3', '21:9', '3:4', null]) reject(model + ': unsupported ratio ' + ratio, 'buildSubmitRequest', [ctx(model, { ...mini, ratio })], 'MiniMax ratio');
+    for (const ratio of ['2:1', '', false, null]) reject(model + ': unsupported ratio ' + ratio, 'buildSubmitRequest', [ctx(model, { ...mini, ratio })], 'MiniMax ratio');
     const missingRatio = { ...mini }; delete missingRatio.ratio;
-    reject(model + ': explicit ratio required', 'buildSubmitRequest', [ctx(model, missingRatio)], 'MiniMax ratio');
+    if (mini.content.some(item => item.type !== 'text')) fixture(model + ': media ratio defaults to adaptive', 'buildSubmitRequest', [ctx(model, missingRatio)], original);
+    else reject(model + ': explicit text ratio required', 'buildSubmitRequest', [ctx(model, missingRatio)], 'text-to-video ratio');
     reject(model + ': invalid resolution', 'buildSubmitRequest', [ctx(model, { ...mini, resolution: '4K' })], 'resolution/ratio');
   } else reject(model + ': no ratio control', 'buildSubmitRequest', [ctx(model, { ...mini, ratio: '16:9' })], 'no resolution or ratio');
   for (const field of Object.keys(config.rules).filter(k => config.rules[k].required && ['image', 'audio', 'video', 'prompt', 'string'].includes(config.rules[k].type))) {
@@ -285,7 +289,7 @@ for (const [model, config] of Object.entries(catalog)) {
     if (config.input_reference.includes('first_frame') && kind === 'input_reference') continue;
     const content = mini.content.filter(item => item.type !== type);
     const tooMany = [...content, ...Array.from({ length: config[kind].length + 1 }, () => ({ type, [type]: { url: 'https://cdn.example.com/extra' }, role }))];
-    reject(model + ': MiniMax too many ' + type, 'buildSubmitRequest', [ctx(model, { ...mini, content: tooMany })], config.input_reference.includes('first_frame') ? 'cannot be mixed' : 'too many ' + type);
+    reject(model + ': MiniMax too many ' + type, 'buildSubmitRequest', [ctx(model, { ...mini, content: tooMany })], config.input_reference.includes('first_frame') ? 'cannot be mixed' : kind === 'videos' && !config.videos.length ? '当前 AutoDL 适配器没有对应的 reference_video workflow' : 'too many ' + type);
   }
 }
 const miniBase = formats.minimax[referenceModel];
@@ -313,7 +317,7 @@ for (const field of ['ratio', 'contentX', '__autodl_fields', 'ref_image_0']) tes
 test('raw body cannot be guessed from prompt/duration', () => assert.throws(() => p.native.create({ body: { kind: 'json', value: { model: referenceModel, ...rawBase } } }), /unsupported request field/));
 test('raw endpoint requires explicit model in URL and JSON', () => {
   assert.throws(() => p.native.rawCreate({ body: { kind: 'json', value: rawBase } }), /workflow ID in the URL/);
-  assert.throws(() => p.native.rawCreate({ params: { model: referenceModel }, body: { kind: 'form', fields: {} } }), /requires a JSON object/);
+  assert.throws(() => p.native.rawCreate({ params: { workflow_id: referenceModel }, body: { kind: 'form', fields: {} } }), /requires a JSON object/);
 });
 const frameModel = 'minimax_h3_lightx2v';
 const frameMini = formats.minimax[frameModel];
@@ -326,5 +330,188 @@ fixture('raw optional image slots retain original indices', 'buildSubmitRequest'
 const ttsRaw = JSON.parse(official.find(r => r.uuid === 'indextts2-v1').input_example);
 fixture('official native indexTTS2 body is preserved', 'buildSubmitRequest', [ctx('indextts2-v1', nativeInput(ttsRaw))], { ...p.buildSubmitRequest(ctx('indextts2-v1')), body: ttsRaw });
 reject('native emotion reference requires audio', 'buildSubmitRequest', [ctx('indextts2-v1', nativeInput({ prompt_text: 'Hello', prompt_simple: 'https://cdn.example.com/a.wav', emo_control_method: '使用情感参考音频' }))], 'emo_ref_audio is required');
+const officialRatios = { '21:9': 'landscape', '16:9': 'landscape', '4:3': 'landscape', '1:1': 'square', '3:4': 'portrait', '9:16': 'portrait' };
+const officialCases = formats.minimax_scenarios;
+test('official alias examples cover all routing branches and square precedence', () => {
+  assert.equal(officialCases.length, 15);
+  const reachable = new Set(officialCases.map(row => p.buildSubmitRequest(ctx(row.request.model, row.request)).url.split('/').pop()));
+  const special = p.buildSubmitRequest(ctx('minimax_h3_image_audio_to_video', formats.minimax['minimax_h3_image_audio_to_video']));
+  assert.ok(!('rewriteModel' in special)); reachable.add(special.url.split('/').pop());
+  const excluded = ['indextts2-v1', 'wan2.2animate-v4-motion_retargeting', 'minimax_h3_b99_001', 'minimax_h3_b99_002', 'minimax_h3_b99_003_12s'];
+  assert.deepEqual([...reachable].sort(), Object.keys(catalog).filter(model => !excluded.includes(model)).sort());
+});
+function ratioTarget(request, target) {
+  const images = request.content.filter(item => item.role === 'reference_image').length;
+  const audio = request.content.some(item => item.role === 'reference_audio');
+  if (request.model === 'MiniMax-H3' && images) return images >= 7 || request.ratio === '1:1' ? 'minimax_h3_zm_u24' : audio ? 'minimax_h3_z0903' : 'minimax_h3_z0902';
+  if (request.model === 'MiniMax-H3-Max' && images && audio) return request.ratio === '1:1' ? 'minimax_h3_zm_u08' : request.duration <= 10 ? 'minimax_h3_image_audio_to_video_v2' : 'minimax_h3_image_audio_to_video_v2_15s';
+  return target;
+}
+function equivalentOfficial(request, target) {
+  const config = catalog[target], quality = { '480P': '480p', '768P': '768p', '2K': '1440p' }[request.resolution];
+  const defaultDirection = config.resolutions.find(r => r.upstream === config.rules.resolution.default).orientation;
+  const frames = request.content.some(item => ['first_frame', 'last_frame'].includes(item.role));
+  let orientation = frames || !request.ratio || request.ratio === 'adaptive' ? defaultDirection : officialRatios[request.ratio];
+  if (orientation === 'square' && !config.resolutions.some(r => r.resolution === quality && r.orientation === orientation)) orientation = defaultDirection;
+  const input = { model: target, prompt: request.content.find(item => item.type === 'text').text, seconds: request.duration, resolution: quality, orientation };
+  const imageItems = request.content.filter(item => item.type === 'image_url');
+  if (imageItems.length) input.input_reference = (frames ? ['first_frame', 'last_frame'].map(role => imageItems.find(item => item.role === role)) : imageItems).map(item => ({ image_url: item.image_url.url }));
+  const audios = request.content.filter(item => item.type === 'audio_url');
+  if (audios.length) input.audios = audios.map(item => item.audio_url.url);
+  return p.buildSubmitRequest(ctx(target, input));
+}
+for (const { name, request, expected_workflow: target } of officialCases) {
+  const expected = { ...equivalentOfficial(request, target), rewriteModel: target };
+  fixture(name + ': automatic workflow selection', 'buildSubmitRequest', [ctx(request.model, request)], expected);
+  const intent = p.native.miniCreate({ path: '/v2/video_generation', body: { kind: 'json', value: request } });
+  const facts = p.extractUsage(ctx(target, { ...examples[target], seconds: request.duration }));
+  fixture(name + ': canonical official request maps identically', 'buildSubmitRequest', [ctx(request.model, intent.requestBody)], expected);
+  fixture(name + ': official billing facts', 'extractUsage', [ctx(request.model, intent.requestBody)], { ...facts, orientation: p.extractUsage(ctx(request.model, request)).orientation });
+  test(name + ': protocol preserves public model', () => {
+    const decoded = p.protocols.openai_video.decodeRequest({ model: request.model, body: { kind: 'json', value: request } });
+    assert.equal(decoded.model, request.model);
+    assert.deepEqual(p.buildSubmitRequest(ctx(request.model, decoded.requestBody)), expected);
+  });
+  test(name + ': rewritten upstream survives submission and polling', () => {
+    const submittedContext = { ...ctx(request.model, intent.requestBody), upstreamModel: target };
+    const parsed = p.parseSubmitResponse(submittedContext, { statusCode: 200, body: envelope('QUEUED') });
+    assert.equal(parsed.state.workflowId, target); assert.deepEqual(parsed.state.facts, p.extractUsage(submittedContext));
+    const queryContext = { ...submittedContext, taskId: 'upstream-123', state: parsed.state };
+    assert.equal(p.parseTaskResult(queryContext, envelope('SUCCESS', [{ type: 'video', url: 'https://cdn.example.com/a.mp4' }]), { status: 200 }).status, 'SUCCESS');
+    assert.deepEqual(p.extractUsageOnComplete(queryContext, { status: 'SUCCESS' }), parsed.state.facts);
+  });
+  const isText = request.content.every(item => item.type === 'text');
+  for (const ratio of ['adaptive', ...Object.keys(officialRatios)]) {
+    const input = { ...request, ratio };
+    if (isText && ratio === 'adaptive') reject(name + ': text adaptive rejected by official semantics', 'buildSubmitRequest', [ctx(request.model, input)], 'text-to-video ratio');
+    else {
+      const selected = ratioTarget(input, target);
+      fixture(name + ': official ratio ' + ratio, 'buildSubmitRequest', [ctx(request.model, input)], { ...equivalentOfficial(input, selected), rewriteModel: selected });
+    }
+  }
+  const omitted = { ...request }; delete omitted.ratio;
+  if (isText) reject(name + ': text ratio is required', 'buildSubmitRequest', [ctx(request.model, omitted)], 'text-to-video ratio');
+  else {
+    const selected = ratioTarget(omitted, target);
+    fixture(name + ': reference ratio defaults to adaptive', 'buildSubmitRequest', [ctx(request.model, omitted)], { ...equivalentOfficial(omitted, selected), rewriteModel: selected });
+  }
+}
+for (const alias of ['MiniMax-H3', 'MiniMax-H3-Max']) {
+  const input = formats.minimax[alias];
+  for (const duration of alias === 'MiniMax-H3' ? [4, 15] : [5, 15]) fixture(alias + ': official duration ' + duration, 'buildSubmitRequest', [ctx(alias, { ...input, duration })], { ...equivalentOfficial({ ...input, duration }, alias === 'MiniMax-H3' ? 'minimax_h3_z0901' : 'minimax_h3_lightx2v_no_pic'), rewriteModel: alias === 'MiniMax-H3' ? 'minimax_h3_z0901' : 'minimax_h3_lightx2v_no_pic' });
+  for (const duration of [0, 3, 16, 5.5, '5', null, false, undefined]) reject(alias + ': invalid official duration ' + duration, 'buildSubmitRequest', [ctx(alias, { ...input, duration })], 'duration must be an integer');
+  if (alias === 'MiniMax-H3-Max') reject(alias + ': four seconds rejected', 'buildSubmitRequest', [ctx(alias, { ...input, duration: 4 })], 'duration must be an integer');
+  for (const resolution of alias === 'MiniMax-H3' ? ['480P', '768p', '1080p', null, undefined] : ['2K', '768p', '1080p', null, undefined]) reject(alias + ': invalid official resolution ' + resolution, 'buildSubmitRequest', [ctx(alias, { ...input, resolution })], 'resolution must be');
+  for (const text of ['', ' ', 'a'.repeat(7001), null]) reject(alias + ': invalid official prompt', 'buildSubmitRequest', [ctx(alias, { ...input, content: [{ type: 'text', text }] })], 'one non-empty text');
+  reject(alias + ': missing official prompt', 'buildSubmitRequest', [ctx(alias, { ...input, content: [] })], 'one non-empty text');
+  reject(alias + ': duplicate official prompt', 'buildSubmitRequest', [ctx(alias, { ...input, content: [...input.content, input.content[0]] })], 'one non-empty text');
+  reject(alias + ': reference video has no workflow', 'buildSubmitRequest', [ctx(alias, { ...input, content: [...input.content, { type: 'video_url', role: 'reference_video', video_url: { url: 'https://cdn.example.com/v.mp4' } }] })], '当前 AutoDL 适配器没有对应的 reference_video workflow');
+  test(alias + ': OpenAI cannot use official alias after shared-model discovery', () => {
+    const intent = p.protocols.openai_video.decodeRequest({ model: alias, body: { kind: 'json', value: { model: alias, prompt: 'test', seconds: 5 } } });
+    assert.throws(() => p.buildSubmitRequest(ctx(alias, intent.requestBody)), /content must be an array/);
+  });
+  test(alias + ': raw cannot use official alias', () => assert.throws(() => p.native.rawCreate(rawContext(alias, { prompt: 'test' })), /unsupported model/));
+  const profile = p.meta.usageProfiles.find(profile => profile.models.includes(alias));
+  test(alias + ': alias usage profile has official qualities', () => assert.deepEqual(profile.schema.resolution.enum, alias === 'MiniMax-H3' ? ['768p', '1440p'] : ['480p', '768p']));
+}
+const h3Text = formats.minimax['MiniMax-H3'];
+const h3Frames = officialCases.find(row => row.name === 'MiniMax-H3_frames').request;
+const h3Seven = officialCases.find(row => row.name === 'MiniMax-H3_seven_images').request;
+for (const name of ['MiniMax-H3-Max_images', 'MiniMax-H3-Max_images_audio', 'MiniMax-H3-Max_images_audio_square']) {
+  const sample = officialCases.find(row => row.name === name);
+  for (const duration of [5, 10, 11, 15]) {
+    const request = { ...sample.request, duration };
+    const target = name.endsWith('_square') ? 'minimax_h3_zm_u08' : name.endsWith('_audio') ? duration <= 10 ? 'minimax_h3_image_audio_to_video_v2' : 'minimax_h3_image_audio_to_video_v2_15s' : duration <= 10 ? 'minimax_h3_lightx2v_v5' : 'minimax_h3_lightx2v_v5_15s';
+    fixture(name + ': duration routing boundary ' + duration, 'buildSubmitRequest', [ctx(request.model, request)], { ...equivalentOfficial(request, target), rewriteModel: target });
+  }
+}
+const referenceImage = i => ({ type: 'image_url', role: 'reference_image', image_url: { url: 'https://cdn.example.com/reference-' + i + '.png' } });
+const referenceAudio = i => ({ type: 'audio_url', role: 'reference_audio', audio_url: { url: 'https://cdn.example.com/reference-' + i + '.wav' } });
+for (const count of [1, 6, 7, 9]) {
+  for (const audioCount of [0, 3]) {
+    const request = { ...h3Text, ratio: 'adaptive', content: [...h3Text.content, ...Array.from({ length: count }, (_, i) => referenceImage(i)), ...Array.from({ length: audioCount }, (_, i) => referenceAudio(i))] };
+    const target = count >= 7 ? 'minimax_h3_zm_u24' : audioCount ? 'minimax_h3_z0903' : 'minimax_h3_z0902';
+    fixture('H3 media routing boundary images=' + count + ' audio=' + audioCount, 'buildSubmitRequest', [ctx(request.model, request)], { ...equivalentOfficial(request, target), rewriteModel: target });
+  }
+}
+for (const alias of ['MiniMax-H3', 'MiniMax-H3-Max']) {
+  const input = formats.minimax[alias];
+  reject(alias + ': ten images exceed official count', 'buildSubmitRequest', [ctx(alias, { ...input, content: [...input.content, ...Array.from({ length: 10 }, (_, i) => referenceImage(i))] })], 'reference limits');
+  reject(alias + ': four audio clips exceed official count', 'buildSubmitRequest', [ctx(alias, { ...input, content: [...input.content, referenceImage(1), ...Array.from({ length: 4 }, (_, i) => referenceAudio(i))] })], 'reference limits');
+  reject(alias + ': only last frame has no target', 'buildSubmitRequest', [ctx(alias, { ...input, content: [...input.content, { ...referenceImage(1), role: 'last_frame' }] })], 'requires both first_frame and last_frame');
+  reject(alias + ': only audio has no target', 'buildSubmitRequest', [ctx(alias, { ...input, content: [...input.content, referenceAudio(1)] })], '暂无对应 AutoDL workflow for reference_audio without reference_image');
+}
+fixture('official H3 2K text preserves requested quality', 'buildSubmitRequest', [ctx('MiniMax-H3', { ...h3Text, resolution: '2K' })], { ...equivalentOfficial({ ...h3Text, resolution: '2K' }, 'minimax_h3_z0901'), rewriteModel: 'minimax_h3_z0901' });
+reject('official H3 2K frame workflow cannot fulfill quality', 'buildSubmitRequest', [ctx('MiniMax-H3', { ...h3Frames, resolution: '2K' })], 'cannot provide 2K');
+reject('official H3 seven images cannot use 2K', 'buildSubmitRequest', [ctx('MiniMax-H3', { ...h3Seven, resolution: '2K' })], 'cannot provide 2K');
+reject('official H3 square reference routing cannot provide 2K', 'buildSubmitRequest', [ctx('MiniMax-H3', { ...officialCases.find(row => row.name === 'MiniMax-H3_images_square').request, resolution: '2K' })], 'cannot provide 2K');
+reject('official aliases cannot silently fill missing last frame', 'buildSubmitRequest', [ctx('MiniMax-H3', { ...h3Frames, content: h3Frames.content.filter(item => item.role !== 'last_frame') })], 'requires both first_frame and last_frame');
+const savedOfficial = p.native.miniCreate({ path: '/v2/video_generation', body: { kind: 'json', value: h3Text } }).requestBody;
+for (const [name, override, message] of [['adaptive', { ratio: 'adaptive' }, 'text-to-video ratio'], ['duration', { duration: 3 }, 'duration must be'], ['resolution', { resolution: '480P' }, 'resolution must be'], ['unsupported extension', { extra: {} }, 'mixed MiniMax field']]) {
+  const intent = p.protocols.openai_video.decodeRequest({ model: 'MiniMax-H3', body: { kind: 'json', value: { ...h3Text, ...override } } });
+  reject('shared-model preflight preserves real error: ' + name, 'buildSubmitRequest', [ctx('MiniMax-H3', intent.requestBody)], message);
+}
+reject('official canonical fields cannot bypass source request', 'buildSubmitRequest', [ctx('MiniMax-H3', { ...savedOfficial, __autodl_fields: savedOfficial.__autodl_fields.map(([key, value]) => [key, key === 'duration' ? 6 : value]) })], 'fields conflict');
+reject('official canonical source cannot be malformed', 'buildSubmitRequest', [ctx('MiniMax-H3', { ...savedOfficial, __autodl_minimax: '{broken' })], 'invalid internal MiniMax source');
+reject('official canonical source cannot select another alias', 'buildSubmitRequest', [ctx('MiniMax-H3-Max', savedOfficial)], 'workflow identity conflicts');
+test('public channel alias retains official machine routing', () => {
+  const intent = p.protocols.openai_video.decodeRequest({ model: 'public-client-alias', upstreamModel: 'MiniMax-H3', body: { kind: 'json', value: h3Text } });
+  assert.equal(intent.model, 'public-client-alias');
+  assert.equal(p.buildSubmitRequest({ ...ctx('public-client-alias', intent.requestBody), upstreamModel: 'MiniMax-H3' }).rewriteModel, 'minimax_h3_z0901');
+});
+for (const [model, config] of Object.entries(catalog).filter(([, config]) => config.resolutions.length)) {
+  const mini = formats.minimax[model], media = mini.content.some(item => item.type !== 'text');
+  if (media) fixture(model + ': adaptive accepted with documented default direction', 'buildSubmitRequest', [ctx(model, { ...mini, ratio: 'adaptive' })], p.buildSubmitRequest(ctx(model, mini)));
+  else reject(model + ': workflow-name pure text adaptive follows official rule', 'buildSubmitRequest', [ctx(model, { ...mini, ratio: 'adaptive' })], 'text-to-video ratio');
+}
+function nativeFixture(name, member, args, expected, expectedError) {
+  if (expectedError) assert.throws(() => p.native[member](...args), error => error.message.includes(expectedError), name);
+  else assert.deepEqual(p.native[member](...args), expected, name);
+  fixtures.push({ name, hook: 'native', member, args, ...(expectedError ? { expectedError } : { expected }) }); checks++;
+}
+// rc.41 marshals request maps with sorted keys before crossing the JS boundary.
+// Mirror that order for fixtures that include the saved JSON source string.
+function hostJSON(value) {
+  if (Array.isArray(value)) return value.map(hostJSON);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, hostJSON(value[key])]));
+  return value;
+}
+const v2Context = request => ({ method: 'POST', path: '/v2/video_generation', body: { kind: 'json', value: hostJSON(request) } });
+test('declared public routes use the three requested interface styles', () => {
+  assert.deepEqual(p.meta.routes.map(r => [r.method, r.path]), [
+    ['POST', '/v2/video_generation'], ['GET', '/v2/query/video_generation/:task_id'],
+    ['POST', '/api/v1/comfyui/comfyui_workflow/:workflow_id'], ['GET', '/api/v1/comfyui/comfyui_workflow/result/:task_id'],
+  ]);
+  assert.equal(formats.minimax_api.create_path, '/v2/video_generation');
+  assert.equal(formats.minimax_api.query_path, '/v2/query/video_generation/{task_id}');
+  for (const [model, entry] of Object.entries(formats.autodl)) {
+    assert.equal(entry.path, '/api/v1/comfyui/comfyui_workflow/' + model);
+    assert.equal(entry.query_path, '/api/v1/comfyui/comfyui_workflow/result/{task_id}');
+  }
+});
+for (const [model, request] of Object.entries(formats.minimax)) {
+  const expected = p.native.create(v2Context(request));
+  nativeFixture(model + ': official V2 decoder shares normalized intent', 'miniCreate', [v2Context(request)], expected);
+}
+for (const row of officialCases) {
+  test(row.name + ': official V2 example has the official path', () => assert.equal(row.path, '/v2/video_generation'));
+  const intent = p.native.miniCreate(v2Context(row.request));
+  fixture(row.name + ': V2 submit maps identically', 'buildSubmitRequest', [ctx(row.request.model, intent.requestBody)], { ...equivalentOfficial(row.request, row.expected_workflow), rewriteModel: row.expected_workflow });
+  if (row.request.model === 'MiniMax-H3-Max') {
+    const request = { ...row.request, model: 'MiniMax-H3-MAX' };
+    const aliasIntent = p.native.miniCreate(v2Context(request));
+    assert.equal(aliasIntent.model, 'MiniMax-H3-Max');
+    fixture(row.name + ': uppercase MAX compatibility alias', 'buildSubmitRequest', [ctx(request.model, aliasIntent.requestBody)], { ...equivalentOfficial(row.request, row.expected_workflow), rewriteModel: row.expected_workflow });
+  }
+}
+for (const body of [{ kind: 'none' }, { kind: 'form', fields: {} }, { kind: 'json', value: [] }, { kind: 'json', value: { model: 'MiniMax-H3', prompt: 'test' } }]) nativeFixture('V2 rejects non-content request ' + JSON.stringify(body), 'miniCreate', [{ path: '/v2/video_generation', body }], null, 'requires a JSON object with model and content');
+nativeFixture('V2 create response is the official task_id object', 'miniCreated', [{}, { task_id: 'task_public', data: envelope('QUEUED') }], { task_id: 'task_public' });
+const v2QueryContext = { method: 'GET', path: '/v2/query/video_generation/task_public', params: { task_id: 'task_public' } };
+for (const [status, external] of Object.entries({ NOT_START: 'queued', SUBMITTED: 'queued', QUEUED: 'queued', IN_PROGRESS: 'running', UNKNOWN: 'running', CANCELLED: 'cancelled' })) nativeFixture('V2 pending status ' + status, 'miniTask', [v2QueryContext, { task_id: 'task_public', status, created_at: 10, updated_at: 11 }], { task: { id: 'task_public', status: external, task_type: 'generation', modality: 'video', created_at: 10, updated_at: 11 } });
+nativeFixture('V2 success returns official task content URL without invented metadata', 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'SUCCESS', created_at: 10, updated_at: 11, data: envelope('SUCCESS', [{ type: 'video', url: 'https://cdn.example.com/result.mp4' }], { duration: 196 }) }], { task: { id: 'task_public', status: 'succeeded', task_type: 'generation', modality: 'video', created_at: 10, updated_at: 11, content: { url: 'https://cdn.example.com/result.mp4' } } });
+nativeFixture('V2 failure includes official task error structure', 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'FAILURE', fail_reason: 'mock failure' }], { task: { id: 'task_public', status: 'failed', task_type: 'generation', modality: 'video', error: { code: 'video_generation_failed', message: 'mock failure' } } });
+for (const type of ['video', 'audio']) nativeFixture('V2 ignores auxiliary image before ' + type, 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'SUCCESS', data: envelope('SUCCESS', [{ type: 'image', url: 'https://cdn.example.com/preview.png' }, { type, url: 'https://cdn.example.com/output.' + (type === 'video' ? 'mp4' : 'wav') }]) }], { task: { id: 'task_public', status: 'succeeded', task_type: 'generation', modality: type, content: { url: 'https://cdn.example.com/output.' + (type === 'video' ? 'mp4' : 'wav') } } });
+nativeFixture('V2 video takes precedence over auxiliary audio', 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'SUCCESS', data: envelope('SUCCESS', [{ type: 'audio', url: 'https://cdn.example.com/aux.wav' }, { type: 'video', url: 'https://cdn.example.com/result.mp4' }]) }], { task: { id: 'task_public', status: 'succeeded', task_type: 'generation', modality: 'video', content: { url: 'https://cdn.example.com/result.mp4' } } });
+nativeFixture('ComfyUI query retains original task response', 'task', [{ path: '/api/v1/comfyui/comfyui_workflow/result/task_public' }, { task_id: 'task_public', status: 'SUCCESS', data: envelope('SUCCESS', [{ type: 'video', url: 'https://cdn.example.com/result.mp4' }]) }], { task_id: 'task_public', status: 'SUCCESS', progress: '', fail_reason: '', results: [{ url: 'https://cdn.example.com/result.mp4', type: 'video' }] });
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

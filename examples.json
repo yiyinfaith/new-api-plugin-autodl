@@ -480,156 +480,703 @@
           }
         ],
         "emo_control_method": "与音色参考音频相同"
+      },
+      "MiniMax-H3": {
+        "model": "MiniMax-H3",
+        "content": [
+          {
+            "type": "text",
+            "text": "镜头平稳推进"
+          }
+        ],
+        "resolution": "768P",
+        "duration": 5,
+        "ratio": "16:9"
+      },
+      "MiniMax-H3-Max": {
+        "model": "MiniMax-H3-Max",
+        "content": [
+          {
+            "type": "text",
+            "text": "镜头平稳推进"
+          }
+        ],
+        "resolution": "768P",
+        "duration": 5,
+        "ratio": "16:9"
       }
     },
     "autodl": {
       "minimax_h3_z0903": {
-        "path": "/autodl/v1/raw/minimax_h3_z0903",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_z0903",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖(768*1376)",
           "ref_image_0": "https://your-public-file-host.example/reference-1.png",
           "ref_audio_0": "https://your-public-file-host.example/reference-1.wav"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_z0902": {
-        "path": "/autodl/v1/raw/minimax_h3_z0902",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_z0902",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖(768*1376)",
           "ref_image_0": "https://your-public-file-host.example/reference-1.png"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_z0901": {
-        "path": "/autodl/v1/raw/minimax_h3_z0901",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_z0901",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖(768*1344)"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_zm_u24": {
-        "path": "/autodl/v1/raw/minimax_h3_zm_u24",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_zm_u24",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖",
           "ref_image_0": "https://your-public-file-host.example/reference-1.png"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_zm_u08": {
-        "path": "/autodl/v1/raw/minimax_h3_zm_u08",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_zm_u08",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖",
           "ref_image_0": "https://your-public-file-host.example/reference-1.png"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_b99_002": {
-        "path": "/autodl/v1/raw/minimax_h3_b99_002",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_b99_002",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "736p竖",
           "first_frame": "https://your-public-file-host.example/reference-1.png",
           "last_frame": "https://your-public-file-host.example/reference-2.png"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_b99_001": {
-        "path": "/autodl/v1/raw/minimax_h3_b99_001",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_b99_001",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "736p竖"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_b99_003_12s": {
-        "path": "/autodl/v1/raw/minimax_h3_b99_003_12s",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_b99_003_12s",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "736p竖",
           "ref_image_0": "https://your-public-file-host.example/reference-1.png"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "wan2.2animate-v4-motion_retargeting": {
-        "path": "/autodl/v1/raw/wan2.2animate-v4-motion_retargeting",
+        "path": "/api/v1/comfyui/comfyui_workflow/wan2.2animate-v4-motion_retargeting",
         "body": {
           "resolution": "464*832px(竖版)",
           "ref_image": "https://your-public-file-host.example/reference-1.png",
           "ref_video": "https://your-public-file-host.example/reference-1.mp4"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_image_audio_to_video_v2_15s": {
-        "path": "/autodl/v1/raw/minimax_h3_image_audio_to_video_v2_15s",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_image_audio_to_video_v2_15s",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_lightx2v_v5_15s": {
-        "path": "/autodl/v1/raw/minimax_h3_lightx2v_v5_15s",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v_v5_15s",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖",
           "ref_image_0": "https://your-public-file-host.example/reference-1.png"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_image_audio_to_video_v2": {
-        "path": "/autodl/v1/raw/minimax_h3_image_audio_to_video_v2",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_image_audio_to_video_v2",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_image_audio_to_video": {
-        "path": "/autodl/v1/raw/minimax_h3_image_audio_to_video",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_image_audio_to_video",
         "body": {
           "audio_duration": 5,
           "resolution": "768p竖",
           "ref_image_0": "https://your-public-file-host.example/reference-1.png",
           "ref_audio_0": "https://your-public-file-host.example/reference-1.wav"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_lightx2v_v5": {
-        "path": "/autodl/v1/raw/minimax_h3_lightx2v_v5",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v_v5",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖",
           "ref_image_0": "https://your-public-file-host.example/reference-1.png"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_lightx2v_no_pic": {
-        "path": "/autodl/v1/raw/minimax_h3_lightx2v_no_pic",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v_no_pic",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "minimax_h3_lightx2v": {
-        "path": "/autodl/v1/raw/minimax_h3_lightx2v",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v",
         "body": {
           "prompt": "一只猫在雪地中奔跑",
           "duration": 5,
           "resolution": "768p竖",
           "first_frame": "https://your-public-file-host.example/reference-1.png",
           "last_frame": "https://your-public-file-host.example/reference-2.png"
-        }
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "indextts2-v1": {
-        "path": "/autodl/v1/raw/indextts2-v1",
+        "path": "/api/v1/comfyui/comfyui_workflow/indextts2-v1",
         "body": {
           "prompt_text": "你好，这是语音合成测试",
           "prompt_simple": "https://your-public-file-host.example/reference-1.wav",
           "emo_control_method": "与音色参考音频相同"
+        },
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
+      }
+    },
+    "minimax_scenarios": [
+      {
+        "name": "MiniMax-H3_text",
+        "request": {
+          "model": "MiniMax-H3",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "16:9"
+        },
+        "expected_workflow": "minimax_h3_z0901",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3_frames",
+        "request": {
+          "model": "MiniMax-H3",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "first_frame"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-2.png"
+              },
+              "role": "last_frame"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_lightx2v",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3_images",
+        "request": {
+          "model": "MiniMax-H3",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_z0902",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3_images_audio",
+        "request": {
+          "model": "MiniMax-H3",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "https://your-public-file-host.example/reference-1.wav"
+              },
+              "role": "reference_audio"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_z0903",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3_seven_images",
+        "request": {
+          "model": "MiniMax-H3",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-2.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-3.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-4.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-5.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-6.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-7.png"
+              },
+              "role": "reference_image"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_zm_u24",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3_images_square",
+        "request": {
+          "model": "MiniMax-H3",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "1:1"
+        },
+        "expected_workflow": "minimax_h3_zm_u24",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3_images_audio_square",
+        "request": {
+          "model": "MiniMax-H3",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "https://your-public-file-host.example/reference-1.wav"
+              },
+              "role": "reference_audio"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "1:1"
+        },
+        "expected_workflow": "minimax_h3_zm_u24",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3_seven_images_audio",
+        "request": {
+          "model": "MiniMax-H3",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-2.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-3.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-4.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-5.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-6.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-7.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "https://your-public-file-host.example/reference-1.wav"
+              },
+              "role": "reference_audio"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_zm_u24",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3-Max_text",
+        "request": {
+          "model": "MiniMax-H3-Max",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "16:9"
+        },
+        "expected_workflow": "minimax_h3_lightx2v_no_pic",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3-Max_frames",
+        "request": {
+          "model": "MiniMax-H3-Max",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "first_frame"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-2.png"
+              },
+              "role": "last_frame"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_lightx2v",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3-Max_images",
+        "request": {
+          "model": "MiniMax-H3-Max",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_lightx2v_v5",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3-Max_images_long",
+        "request": {
+          "model": "MiniMax-H3-Max",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 12,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_lightx2v_v5_15s",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3-Max_images_audio",
+        "request": {
+          "model": "MiniMax-H3-Max",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "https://your-public-file-host.example/reference-1.wav"
+              },
+              "role": "reference_audio"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_image_audio_to_video_v2",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3-Max_images_audio_long",
+        "request": {
+          "model": "MiniMax-H3-Max",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "https://your-public-file-host.example/reference-1.wav"
+              },
+              "role": "reference_audio"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 12,
+          "ratio": "adaptive"
+        },
+        "expected_workflow": "minimax_h3_image_audio_to_video_v2_15s",
+        "path": "/v2/video_generation"
+      },
+      {
+        "name": "MiniMax-H3-Max_images_audio_square",
+        "request": {
+          "model": "MiniMax-H3-Max",
+          "content": [
+            {
+              "type": "text",
+              "text": "镜头平稳推进"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://your-public-file-host.example/reference-1.png"
+              },
+              "role": "reference_image"
+            },
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "https://your-public-file-host.example/reference-1.wav"
+              },
+              "role": "reference_audio"
+            }
+          ],
+          "resolution": "768P",
+          "duration": 5,
+          "ratio": "1:1"
+        },
+        "expected_workflow": "minimax_h3_zm_u08",
+        "path": "/v2/video_generation"
+      }
+    ],
+    "minimax_api": {
+      "create_path": "/v2/video_generation",
+      "query_path": "/v2/query/video_generation/{task_id}",
+      "create_response": {
+        "task_id": "task_example"
+      },
+      "query_response": {
+        "task": {
+          "id": "task_example",
+          "status": "succeeded",
+          "content": {
+            "url": "https://your-public-file-host.example/result.mp4"
+          },
+          "task_type": "generation",
+          "modality": "video"
         }
       }
     }

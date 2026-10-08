@@ -2461,7 +2461,8 @@ const WORKFLOWS = {
 };
 
 
-const VIDEO_MODELS = Object.keys(WORKFLOWS).filter(function (model) { return WORKFLOWS[model].type === "video"; });
+const MINIMAX_MODELS = ["MiniMax-H3", "MiniMax-H3-Max"];
+const VIDEO_MODELS = Object.keys(WORKFLOWS).filter(function (model) { return WORKFLOWS[model].type === "video"; }).concat(MINIMAX_MODELS);
 const REQUEST_SCHEMA = { requests: { type: "number", unit: "count", unitLabel: { en: "request", zh: "次" }, description: { en: "Generation request unit price", zh: "生成请求单价" } } };
 
 function usageProfile(model) {
@@ -2482,6 +2483,15 @@ function usageProfile(model) {
   return { models: [model], schema: schema, examples: [{ label: config.name, facts: facts }] };
 }
 
+function officialUsageProfile(model) {
+  const profile = usageProfile(model === "MiniMax-H3" ? "minimax_h3_z0901" : "minimax_h3_zm_u08");
+  profile.models = [model];
+  profile.schema.resolution.enum = model === "MiniMax-H3" ? ["768p", "1440p"] : ["480p", "768p"];
+  profile.schema.orientation.enum = ["landscape", "portrait", "square"];
+  profile.examples[0].label = model;
+  return profile;
+}
+
 export const meta = {
   apiVersion: 1,
   key: "autodl",
@@ -2493,16 +2503,17 @@ export const meta = {
   website: "https://autodl.art/large-model/comfyui",
   baseUrl: "https://autodl.art",
   auth: "api_key",
-  models: Object.keys(WORKFLOWS),
+  models: Object.keys(WORKFLOWS).concat(MINIMAX_MODELS),
   fetchMode: "per_task",
   protocols: [{ name: "openai_video", models: VIDEO_MODELS }],
   routes: [
-    { method: "POST", path: "/autodl/v1/tasks", type: "submit", decode: "create", render: "task" },
-    { method: "POST", path: "/autodl/v1/raw/:model", type: "submit", decode: "rawCreate", render: "task" },
-    { method: "GET", path: "/autodl/v1/tasks/:task_id", type: "query", render: "task" },
+    { method: "POST", path: "/v2/video_generation", type: "submit", decode: "miniCreate", render: "miniCreated" },
+    { method: "GET", path: "/v2/query/video_generation/:task_id", type: "query", render: "miniTask" },
+    { method: "POST", path: "/api/v1/comfyui/comfyui_workflow/:workflow_id", type: "submit", decode: "rawCreate", render: "task" },
+    { method: "GET", path: "/api/v1/comfyui/comfyui_workflow/result/:task_id", type: "query", render: "task" },
   ],
   usageSchema: REQUEST_SCHEMA,
-  usageProfiles: Object.keys(WORKFLOWS).map(usageProfile),
+  usageProfiles: Object.keys(WORKFLOWS).map(usageProfile).concat(MINIMAX_MODELS.map(officialUsageProfile)),
 };
 
 function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
@@ -2682,10 +2693,92 @@ function normalizeRaw(config, input) {
 }
 
 const MINIMAX_RESOLUTIONS = { "480P": "480p", "768P": "768p", "2K": "1440p" };
-const MINIMAX_RATIOS = { "16:9": "landscape", "9:16": "portrait", "1:1": "square" };
+const MINIMAX_RATIOS = { "21:9": "landscape", "16:9": "landscape", "4:3": "landscape", "1:1": "square", "3:4": "portrait", "9:16": "portrait" };
+
+function isMiniMaxModel(model) { return MINIMAX_MODELS.includes(miniMaxModel(model)); }
+function miniMaxModel(model) { return model === "MiniMax-H3-MAX" ? "MiniMax-H3-Max" : model; }
+
+function miniScenario(input) {
+  if (!object(input) || !Array.isArray(input.content)) throw new Error("AutoDL: MiniMax content must be an array");
+  const summary = { text: [], first_frame: 0, last_frame: 0, reference_image: 0, reference_audio: 0, reference_video: 0 };
+  for (const item of input.content) {
+    if (!object(item)) throw new Error("AutoDL: MiniMax content entries must be objects");
+    if (item.type === "text") { summary.text.push(item.text); continue; }
+    const role = item.role === undefined && item.type === "image_url" ? "first_frame" : item.role;
+    const valid = item.type === "image_url" ? ["first_frame", "last_frame", "reference_image"] : item.type === "audio_url" ? ["reference_audio"] : item.type === "video_url" ? ["reference_video"] : [];
+    if (!valid.includes(role)) throw new Error("AutoDL: invalid MiniMax media type or role");
+    summary[role]++;
+  }
+  summary.frames = summary.first_frame + summary.last_frame;
+  summary.references = summary.reference_image + summary.reference_audio + summary.reference_video;
+  if (summary.frames && summary.references) throw new Error("AutoDL: first/last frames and reference media cannot be mixed in MiniMax content");
+  return summary;
+}
+
+function officialWorkflow(model, input) {
+  const scenario = miniScenario(input), maximum = model !== "MiniMax-H3";
+  const resolutions = maximum ? ["480P", "768P"] : ["768P", "2K"];
+  if (!resolutions.includes(input.resolution)) throw new Error("AutoDL: " + model + " resolution must be " + resolutions.join(" or "));
+  if (!Number.isInteger(input.duration) || input.duration < (maximum ? 5 : 4) || input.duration > 15) throw new Error("AutoDL: " + model + " duration must be an integer from " + (maximum ? 5 : 4) + " to 15 seconds");
+  if (scenario.text.length !== 1 || typeof scenario.text[0] !== "string" || !scenario.text[0].trim() || scenario.text[0].length > 7000) throw new Error("AutoDL: " + model + " requires one non-empty text item, at most 7000 characters");
+  if (scenario.reference_video) throw new Error("AutoDL: 当前 AutoDL 适配器没有对应的 reference_video workflow");
+  if (scenario.reference_audio > 3 || scenario.reference_image > 9) throw new Error("AutoDL: official MiniMax reference limits are 9 images and 3 audio clips");
+  let selected;
+  if (scenario.frames) {
+    if (scenario.first_frame !== 1 || scenario.last_frame !== 1) throw new Error("AutoDL: this adapter requires both first_frame and last_frame; no single-frame AutoDL workflow is configured");
+    selected = "minimax_h3_lightx2v";
+  } else if (scenario.reference_image) {
+    if (maximum) {
+      if (!scenario.reference_audio) selected = input.duration <= 10 ? "minimax_h3_lightx2v_v5" : "minimax_h3_lightx2v_v5_15s";
+      else if (input.ratio === "1:1") selected = "minimax_h3_zm_u08";
+      else selected = input.duration <= 10 ? "minimax_h3_image_audio_to_video_v2" : "minimax_h3_image_audio_to_video_v2_15s";
+    } else if (scenario.reference_image >= 7 || input.ratio === "1:1") selected = "minimax_h3_zm_u24";
+    else selected = scenario.reference_audio ? "minimax_h3_z0903" : "minimax_h3_z0902";
+  } else if (scenario.reference_audio) throw new Error("AutoDL: 当前适配器暂无对应 AutoDL workflow for reference_audio without reference_image");
+  else selected = maximum ? "minimax_h3_lightx2v_no_pic" : "minimax_h3_z0901";
+  const config = workflow(selected), quality = MINIMAX_RESOLUTIONS[input.resolution];
+  if (!config.resolutions.some(function (entry) { return entry.resolution === quality; })) throw new Error("AutoDL: selected workflow " + selected + " cannot provide " + input.resolution + " for " + model + "; resolution will not be downgraded");
+  return config;
+}
+
+function miniOrientation(config, input, scenario, quality) {
+  const ratio = input.ratio;
+  if (ratio !== undefined && ratio !== "adaptive" && !(typeof ratio === "string" && has(MINIMAX_RATIOS, ratio))) throw new Error("AutoDL: MiniMax ratio must be adaptive, 21:9, 16:9, 4:3, 1:1, 3:4 or 9:16");
+  if (!scenario.frames && !scenario.references && (ratio === undefined || ratio === "adaptive")) throw new Error("AutoDL: MiniMax text-to-video ratio is required and cannot be adaptive");
+  const defaults = config.resolutions.find(function (entry) { return entry.upstream === config.rules.resolution.default; });
+  // MiniMax treats every valid i2va ratio as adaptive. Plugin API v1 has no
+  // remote-media probe; keep the official workflow's default direction instead
+  // of pretending that URL text or a caller-specified ratio is a measured size.
+  const adaptive = scenario.frames || ratio === undefined || ratio === "adaptive";
+  let orientation = adaptive ? defaults.orientation : MINIMAX_RATIOS[ratio];
+  if (orientation === "square" && !config.resolutions.some(function (entry) { return entry.resolution === quality && entry.orientation === orientation; })) orientation = defaults.orientation;
+  return orientation;
+}
+
+function savedMiniMax(input) {
+  let source;
+  try { source = JSON.parse(input.__autodl_minimax); } catch (_) { throw new Error("AutoDL: invalid internal MiniMax source"); }
+  if (!object(source) || !isMiniMaxModel(source.model)) throw new Error("AutoDL: invalid internal MiniMax model");
+  return source;
+}
+
+function requestWorkflow(ctx) {
+  const model = miniMaxModel(ctx.upstreamModel || ctx.model), input = ctx.requestBody;
+  if (object(input) && has(input, "__autodl_minimax")) {
+    const source = savedMiniMax(input), config = officialWorkflow(source.model, source);
+    if (isMiniMaxModel(model) ? model !== source.model : model !== config.workflowId) throw new Error("AutoDL: internal MiniMax workflow identity conflicts");
+    return config;
+  }
+  if (isMiniMaxModel(model)) {
+    if (!object(input) || !has(input, "content")) throw new Error("AutoDL: official MiniMax model names require the MiniMax content format");
+    return officialWorkflow(model, input);
+  }
+  return workflow(model);
+}
 
 function normalizeMiniMax(config, input) {
-  if (!object(input) || !Array.isArray(input.content)) throw new Error("AutoDL: MiniMax content must be an array");
+  const scenario = miniScenario(input);
+  if (scenario.reference_video && !config.videos.length) throw new Error("AutoDL: 当前 AutoDL 适配器没有对应的 reference_video workflow");
   const reserved = ["model", "content", "resolution", "duration", "audio_duration", "ratio", "seed"];
   const mediaFields = config.input_reference.concat(config.audios, config.videos);
   const body = {};
@@ -2700,9 +2793,7 @@ function normalizeMiniMax(config, input) {
     body[key] = input[key];
   }
   if (config.resolutions.length) {
-    if (typeof input.ratio !== "string" || !has(MINIMAX_RATIOS, input.ratio)) throw new Error("AutoDL: MiniMax ratio must be an explicit 16:9, 9:16 or 1:1; adaptive and other ratios cannot be mapped by this workflow");
     if (typeof input.resolution !== "string") throw new Error("AutoDL: MiniMax resolution is required for this workflow");
-    const orientation = MINIMAX_RATIOS[input.ratio];
     let quality = has(MINIMAX_RESOLUTIONS, input.resolution) ? MINIMAX_RESOLUTIONS[input.resolution] : undefined;
     const rawChoice = config.resolutions.find(function (entry) { return entry.upstream === input.resolution; });
     if (quality === undefined) {
@@ -2710,7 +2801,8 @@ function normalizeMiniMax(config, input) {
       quality = rawChoice ? rawChoice.resolution : input.resolution;
       if (Object.values(MINIMAX_RESOLUTIONS).includes(quality)) throw new Error("AutoDL: use MiniMax resolution spelling 480P, 768P or 2K");
     }
-    if (rawChoice && rawChoice.orientation !== orientation) throw new Error("AutoDL: MiniMax ratio conflicts with the AutoDL resolution label");
+    const orientation = miniOrientation(config, input, scenario, quality);
+    if (rawChoice && !scenario.frames && input.ratio !== undefined && input.ratio !== "adaptive" && rawChoice.orientation !== orientation) throw new Error("AutoDL: MiniMax ratio conflicts with the AutoDL resolution label");
     const selected = config.resolutions.find(function (entry) { return entry.resolution === quality && entry.orientation === orientation; });
     if (!selected) throw new Error("AutoDL: unsupported MiniMax resolution/ratio combination for this workflow");
     body.resolution = selected.upstream;
@@ -2756,13 +2848,23 @@ function normalizeMiniMax(config, input) {
 
 function normalizeRequest(config, input) {
   if (object(input) && has(input, "__autodl_fields")) {
-    if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
+    if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "__autodl_minimax", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
+    let expected;
+    if (has(input, "__autodl_minimax")) {
+      if (typeof input.__autodl_minimax !== "string") throw new Error("AutoDL: invalid internal MiniMax source");
+      const source = savedMiniMax(input), selected = officialWorkflow(source.model, source);
+      if (selected.workflowId !== config.workflowId) throw new Error("AutoDL: internal MiniMax workflow identity conflicts");
+      expected = normalizeMiniMax(config, source).body;
+    }
     const body = {};
     for (const pair of input.__autodl_fields) {
       if (!Array.isArray(pair) || pair.length !== 2 || typeof pair[0] !== "string" || !has(config.rules, pair[0]) || has(body, pair[0])) throw new Error("AutoDL: invalid or duplicate internal AutoDL field");
       body[pair[0]] = pair[1];
     }
     const result = normalizeRaw(config, body);
+    if (expected) {
+      if (Object.keys(result.body).length !== Object.keys(expected).length || Object.keys(expected).some(function (key) { return !has(result.body, key) || result.body[key] !== expected[key]; })) throw new Error("AutoDL: internal MiniMax fields conflict with the official request");
+    }
     for (const key of ["requests", "seconds", "resolution", "orientation"]) if (has(input, key) && input[key] !== result.facts[key]) throw new Error("AutoDL: internal usage facts conflict");
     return result;
   }
@@ -2770,7 +2872,7 @@ function normalizeRequest(config, input) {
   return normalizeInput(config, input);
 }
 
-function normalized(ctx) { return normalizeRequest(workflow(ctx.upstreamModel || ctx.model), ctx.requestBody); }
+function normalized(ctx) { return normalizeRequest(requestWorkflow(ctx), ctx.requestBody); }
 
 function credentials(ctx) {
   // authHeader may be host-generated Bearer; use the original channel key instead.
@@ -2857,14 +2959,16 @@ function taskAction(config, input) {
 
 export function buildSubmitRequest(ctx) {
   if ((ctx.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; upload images to public storage and use input_reference URLs");
-  const config = workflow(ctx.upstreamModel || ctx.model);
-  return {
+  const config = requestWorkflow(ctx);
+  const request = {
     url: endpoint(ctx, "/api/v1/comfyui/comfyui_workflow/" + encodeURIComponent(config.workflowId)),
     method: "POST",
     action: taskAction(config, ctx.requestBody),
     headers: credentials(ctx),
     body: normalized(ctx).body,
   };
+  if (isMiniMaxModel(ctx.upstreamModel || ctx.model) || (object(ctx.requestBody) && has(ctx.requestBody, "__autodl_minimax"))) request.rewriteModel = config.workflowId;
+  return request;
 }
 
 export function parseSubmitResponse(ctx, response) {
@@ -2872,7 +2976,7 @@ export function parseSubmitResponse(ctx, response) {
   const body = envelope(response.body);
   const id = taskId(body.data.task_id);
   const request = normalized(ctx);
-  const config = workflow(ctx.upstreamModel || ctx.model);
+  const config = requestWorkflow(ctx);
   const state = { facts: request.facts, type: config.type, submittedAt: utils.unixNow(), timeoutSeconds: config.timeoutSeconds, workflowId: config.workflowId };
   const parsed = parseTaskResult(Object.assign({}, ctx, { taskId: id, state: state }), body, { status: response.statusCode, headers: {} });
   const output = { taskId: id, taskData: body, state: state };
@@ -2987,6 +3091,7 @@ function decode(ctx, pinnedModel) {
   const model = pinnedModel || text(request.model);
   if (!model) throw new Error("AutoDL: model is required");
   request.model = model;
+  if (isMiniMaxModel(ctx.upstreamModel || model)) throw new Error("AutoDL: official MiniMax model names require the MiniMax content format");
   const config = workflow(ctx.upstreamModel || model);
   normalizeInput(config, request);
   const action = taskAction(config, request);
@@ -3000,13 +3105,32 @@ function renderTask(_ctx, task) {
 }
 
 function decodeCompatible(ctx, pinnedModel) {
-  if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value) && has(ctx.body.value, "content"))) return decode(ctx, pinnedModel);
+  const jsonBody = ctx.body && ctx.body.kind === "json" && object(ctx.body.value);
+  const candidateModel = pinnedModel || (jsonBody ? text(ctx.body.value.model) : "");
+  const official = isMiniMaxModel(ctx.upstreamModel || candidateModel);
+  if (!(jsonBody && (has(ctx.body.value, "content") || official))) return decode(ctx, pinnedModel);
   const request = Object.assign({}, ctx.body.value);
   const model = pinnedModel || text(request.model);
   if (!model) throw new Error("AutoDL: model is required");
   request.model = model;
-  const config = workflow(ctx.upstreamModel || model);
+  const machineModel = miniMaxModel(ctx.upstreamModel || model);
+  const source = Object.assign({}, request, { model: machineModel });
+  if (official) {
+    // Shared-model discovery must keep this provider eligible. Invalid requests
+    // are revalidated by the driver before billing/HTTP, so rc.41 can return the
+    // actual parameter error instead of disguising it as "no available channel".
+    try {
+      const config = officialWorkflow(machineModel, source);
+      const canonical = canonicalRequest(model, normalizeMiniMax(config, request));
+      canonical.__autodl_minimax = JSON.stringify(source);
+      return { kind: "submit", model: model, action: taskAction(config, canonical), requestBody: canonical };
+    } catch (_) {
+      return { kind: "submit", model: model, action: "text_to_video", requestBody: { model: model, __autodl_fields: [], __autodl_minimax: JSON.stringify(source) } };
+    }
+  }
+  const config = isMiniMaxModel(machineModel) ? officialWorkflow(machineModel, source) : workflow(machineModel);
   const canonical = canonicalRequest(model, normalizeMiniMax(config, request));
+  if (isMiniMaxModel(machineModel)) canonical.__autodl_minimax = JSON.stringify(source);
   return { kind: "submit", model: model, action: taskAction(config, canonical), requestBody: canonical };
 }
 
@@ -3018,7 +3142,7 @@ function canonicalRequest(model, normalized) {
 
 function decodeRaw(ctx) {
   if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value))) throw new Error("AutoDL: native/raw endpoint requires a JSON object");
-  const model = text((ctx.params || {}).model);
+  const model = text((ctx.params || {}).workflow_id);
   if (!model) throw new Error("AutoDL: raw endpoint requires a workflow ID in the URL");
   const config = workflow(model);
   const request = canonicalRequest(model, normalizeRaw(config, ctx.body.value));
@@ -3029,6 +3153,31 @@ export const native = {
   create: function (ctx) { return decodeCompatible(ctx); },
   rawCreate: decodeRaw,
   task: renderTask,
+  miniCreate: function (ctx) {
+    if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value) && has(ctx.body.value, "content"))) throw new Error("AutoDL: MiniMax V2 requires a JSON object with model and content");
+    const value = Object.assign({}, ctx.body.value, { model: miniMaxModel(ctx.body.value.model) });
+    return decodeCompatible(Object.assign({}, ctx, { body: { kind: "json", value: value } }));
+  },
+  miniCreated: function (_ctx, task) { return { task_id: task.task_id }; },
+  miniTask: function (_ctx, task) {
+    const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", CANCELLED: "cancelled" };
+    const result = { id: task.task_id, status: statuses[task.status] || "running", task_type: "generation", modality: "video" };
+    if (Number.isFinite(task.created_at)) result.created_at = task.created_at;
+    if (Number.isFinite(task.updated_at)) result.updated_at = task.updated_at;
+    if (task.status === "SUCCESS") {
+      const outputs = artifacts(task);
+      const output = outputs.find(function (item) { return item.type === "video"; }) || outputs.find(function (item) { return item.type === "audio"; });
+      if (output) {
+        result.content = { url: output.url };
+        result.modality = output.type;
+      }
+    }
+    if (task.status === "FAILURE") result.error = { code: "video_generation_failed", message: task.fail_reason || "AutoDL: video generation failed" };
+    // rc.41 TaskView excludes request/model/usage/private state. AutoDL's
+    // data.duration measures processing time, not video duration. Omit fields
+    // we cannot confirm instead of inventing official metadata or token usage.
+    return { task: result };
+  },
 };
 
 export const protocols = {

@@ -32,8 +32,9 @@ def main():
         body = json.loads(pathlib.Path(args.request).read_text(encoding='utf-8-sig'))
     else:
         examples = json.loads(pathlib.Path(__file__).with_name('examples.json').read_text(encoding='utf-8'))
-        if args.example not in examples:
-            raise ValueError('工作流 ID 未列入 examples.json')
+        selected_examples = examples if args.format == 'openai' else examples['_formats'][args.format]
+        if args.example not in selected_examples:
+            raise ValueError('模型未列入 examples.json 的所选格式')
         if args.format == 'openai':
             body = examples[args.example]
         else:
@@ -42,12 +43,12 @@ def main():
                 body = body['body']
     if not isinstance(body, dict):
         raise ValueError('JSON 请求必须是对象')
-    submit_path = '/autodl/v1/tasks' if args.format == 'minimax' else '/v1/tasks/autodl'
+    submit_path = '/v2/video_generation' if args.format == 'minimax' else '/v1/videos'
     if args.format == 'autodl':
         model = args.model or args.example
         if not model:
             raise ValueError('AutoDL 原生 --request 必须同时提供 --model 工作流 ID')
-        submit_path = '/autodl/v1/raw/' + urllib.parse.quote(model, safe='')
+        submit_path = '/api/v1/comfyui/comfyui_workflow/' + urllib.parse.quote(model, safe='')
     elif not body.get('model'):
         raise ValueError('JSON 请求必须包含 model')
     if 'your-public-file-host.example' in json.dumps(body):
@@ -72,15 +73,20 @@ def main():
             raise RuntimeError('New API HTTP ' + str(error.code) + '；请检查渠道 Token、价格、分组和工作流参数') from None
 
     submitted = call('POST', submit_path, body)
-    public_id = submitted.get('task_id')
+    public_id = submitted.get('id' if args.format == 'openai' else 'task_id')
     if not isinstance(public_id, str) or not public_id:
         raise RuntimeError('提交响应缺少 New API 公开 task_id')
     print('task_id: ' + public_id, flush=True)
-    path = '/v1/tasks/' + urllib.parse.quote(public_id, safe='')
+    query_prefix = {'openai': '/v1/videos/', 'minimax': '/v2/query/video_generation/', 'autodl': '/api/v1/comfyui/comfyui_workflow/result/'}[args.format]
+    path = query_prefix + urllib.parse.quote(public_id, safe='')
     failures = 0
     while time.monotonic() < deadline:
         try:
             task = call('GET', path)
+            if args.format == 'minimax':
+                task = task.get('task')
+                if not isinstance(task, dict):
+                    raise RuntimeError('MiniMax V2 查询响应缺少 task 对象')
             failures = 0
         except (RuntimeError, urllib.error.URLError, TimeoutError):
             failures += 1
@@ -90,19 +96,36 @@ def main():
             continue
         status = task.get('status')
         print('status: ' + str(status), flush=True)
-        if status == 'FAILURE':
-            raise RuntimeError('任务失败，请查看 New API 任务记录中的 fail_reason')
-        if status == 'SUCCESS':
-            items = call('GET', path + '/artifacts').get('artifacts', [])
-            artifact = next((item for item in items if not args.artifact or item.get('key') == args.artifact), None)
-            if not artifact:
-                raise RuntimeError('没有匹配的产物')
-            content = path + '/artifacts/' + urllib.parse.quote(artifact['key'], safe='') + '/content'
+        if status in ['FAILURE', 'failed', 'cancelled']:
+            raise RuntimeError('任务失败，请查看任务错误信息：' + str(task.get('error') or task.get('fail_reason') or status))
+        if status in ['SUCCESS', 'succeeded', 'completed']:
+            if args.format == 'minimax':
+                if args.artifact and args.artifact != 'video':
+                    raise ValueError('MiniMax V2 只提供首个结果 URL；--artifact 只支持 video')
+                url = (task.get('content') or {}).get('url')
+                parsed = urllib.parse.urlsplit(url) if isinstance(url, str) else None
+                if not parsed or parsed.scheme not in ['http', 'https'] or not parsed.hostname or parsed.username or parsed.password:
+                    raise RuntimeError('MiniMax V2 查询响应缺少公开 HTTP(S) content.url')
+                # Official V2 returns a public provider URL. Never forward the
+                # New API bearer token to the provider's media host.
+                download = urllib.request.Request(url)
+            elif args.format == 'autodl':
+                items = task.get('results', [])
+                artifact = next((item for item in items if not args.artifact or item.get('type') == args.artifact), None)
+                url = artifact.get('url') if isinstance(artifact, dict) else None
+                parsed = urllib.parse.urlsplit(url) if isinstance(url, str) else None
+                if not parsed or parsed.scheme not in ['http', 'https'] or not parsed.hostname or parsed.username or parsed.password:
+                    raise RuntimeError('原生查询响应缺少公开 HTTP(S) 产物 URL')
+                download = urllib.request.Request(url)
+            else:
+                if args.artifact and args.artifact != 'video':
+                    raise ValueError('OpenAI Video --artifact 只支持 video')
+                download = urllib.request.Request(base + path + '/content', headers=headers)
             created = False
             try:
                 with temporary.open('xb') as file:
                     created = True
-                    with urllib.request.urlopen(urllib.request.Request(base + content, headers=headers), timeout=60) as response:
+                    with urllib.request.urlopen(download, timeout=60) as response:
                         while True:
                             chunk = response.read(1024 * 1024)
                             if not chunk:

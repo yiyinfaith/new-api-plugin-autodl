@@ -1,0 +1,64 @@
+--- a/pkg/jsplugin/routing.go
++++ b/pkg/jsplugin/routing.go
+@@ -705,6 +705,13 @@
+ 	return true
+ }
+ 
++// Only the two exact, authenticated ComfyUI task endpoints may use /api.
++// All management routes, other methods, wildcard paths and dynamic routes remain reserved.
++func isOfficialComfyUIRoute(route *Route) bool {
++	return route.Method == "POST" && route.Type == RouteTypeSubmit && route.Path == "/api/v1/comfyui/comfyui_workflow/:workflow_id" ||
++		route.Method == "GET" && route.Type == RouteTypeQuery && route.Path == "/api/v1/comfyui/comfyui_workflow/result/:task_id"
++}
++
+ func validateRoute(route *Route) error {
+ 	if route.Method != strings.ToUpper(strings.TrimSpace(route.Method)) {
+ 		return fmt.Errorf("plugin route method %q must use canonical uppercase spelling", route.Method)
+@@ -718,7 +725,7 @@
+ 	if err != nil {
+ 		return err
+ 	}
+-	if namespace, reserved := intersectingReservedNamespace(route.Path); reserved {
++	if namespace, reserved := intersectingReservedNamespace(route.Path); reserved && !isOfficialComfyUIRoute(route) {
+ 		return fmt.Errorf("plugin route path %q intersects reserved namespace %s", route.Path, namespace)
+ 	}
+ 	switch route.Type {
+--- /dev/null
++++ b/pkg/jsplugin/comfyui_routing_test.go
+@@ -0,0 +1,36 @@
++package jsplugin
++
++import (
++    "strings"
++    "testing"
++)
++
++func TestOfficialComfyUIReservedNamespaceException(t *testing.T) {
++    cases := []struct {
++        name, method, path string
++        kind RouteType
++        allowed bool
++    }{
++        {"submit", "POST", "/api/v1/comfyui/comfyui_workflow/:workflow_id", RouteTypeSubmit, true},
++        {"query", "GET", "/api/v1/comfyui/comfyui_workflow/result/:task_id", RouteTypeQuery, true},
++        {"management", "POST", "/api/channel/:workflow_id", RouteTypeSubmit, false},
++        {"other method", "PUT", "/api/v1/comfyui/comfyui_workflow/:workflow_id", RouteTypeSubmit, false},
++        {"wrong type", "POST", "/api/v1/comfyui/comfyui_workflow/:workflow_id", RouteTypeDynamic, false},
++        {"wrong query method", "POST", "/api/v1/comfyui/comfyui_workflow/result/:task_id", RouteTypeSubmit, false},
++        {"catchall", "POST", "/api/v1/comfyui/comfyui_workflow/*workflow_id", RouteTypeSubmit, false},
++        {"different parameter", "POST", "/api/v1/comfyui/comfyui_workflow/:model", RouteTypeSubmit, false},
++        {"extra segment", "POST", "/api/v1/comfyui/comfyui_workflow/:workflow_id/extra", RouteTypeSubmit, false},
++        {"other API", "GET", "/api/v1/comfyui/other/:task_id", RouteTypeQuery, false},
++    }
++    for _, row := range cases {
++        t.Run(row.name, func(t *testing.T) {
++            route := Route{Method: row.method, Path: row.path, Type: row.kind, Render: "present"}
++            if row.kind != RouteTypeQuery { route.Decode = "decode" }
++            err := validateRoute(&route)
++            if row.allowed && err != nil { t.Fatalf("official route rejected: %v", err) }
++            if !row.allowed && (err == nil || !strings.Contains(err.Error(), "reserved namespace /api")) {
++                t.Fatalf("reserved route accepted or wrong error: %v", err)
++            }
++        })
++    }
++}
