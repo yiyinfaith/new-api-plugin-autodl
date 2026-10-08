@@ -97,6 +97,8 @@ OpenAI 和原生格式继续使用官网完整工作流 ID，例如 `minimax_h3_
 
 **OpenAI 参数格式和原有校验保持不变。** 不通过 `duration`、`resolution` 或 `ref_image_*` 等容易冲突的字段猜测原生格式。三种格式均使用 New API 密钥鉴权、AutoDL 渠道和同一套价格配置。插件注册上述 MiniMax 与原生路径，OpenAI 路径由宿主提供；原生路径只接收原生 body。
 
+如果 New API 域名前置 Cloudflare，请让上面的 API 路径免于交互式人机验证：`/v2/video_generation`、`/v2/query/video_generation/` 前缀，以及 `/api/v1/comfyui/comfyui_workflow/` 前缀。普通 API 客户端无法完成这种浏览器验证，遇到 `403`、HTML 验证页和 `cf-mitigated: challenge` 时应检查 Cloudflare 规则，并与源站响应对比。排除人机验证不改变 New API 的密钥鉴权或任务归属检查；仅按本站域名与这些 API 路径设置规则，不要放开整个管理后台。
+
 ## MiniMax 官方兼容 API
 
 实现前核对了 [MiniMax H3 V2 官方创建接口](https://platform.minimax.io/docs/api-reference/video-generation-v2-create) 和 [MiniMax 官方多模态请求示例](https://github.com/MiniMax-AI/MiniMax-H3/blob/main/scripts/readme/full-2k-ref2va-h3-api-2k-in-open-platform-for-reference.sh)。`content` 的媒体 `type` 是 `image_url / audio_url / video_url`，`first_frame` 等是 **role**，不是 type：
