@@ -1,8 +1,49 @@
 # AutoDL — New API Task Plugin
 
-插件 key：`autodl`；显示名：**AutoDL**；版本：**1.1.1**。
+为 New API 提供 AutoDL.Art Task Plugin 适配，将 AutoDL ComfyUI 工作流接入 New API。
 
-通过官方 Task Plugin API v1 将 AutoDL.Art ComfyUI 工作流接入 New API。当前覆盖官网全部 **17 个工作流（16 个视频、1 个音频）**，模型名与官网工作流 ID 完全一致，对外使用统一参数。插件是单个自包含同步 JavaScript 模块，不修改 New API 核心源码，不使用 Node、网络 SDK、文件系统或虚构的 SDK 方法。
+插件 key：`autodl`；显示名：**AutoDL**；当前版本：**1.1.1**。
+
+**推荐安装地址：** [https://raw.githubusercontent.com/yiyinfaith/new-api-plugin-autodl/main/plugin.js](https://raw.githubusercontent.com/yiyinfaith/new-api-plugin-autodl/main/plugin.js)
+
+支持：
+
+- OpenAI Video 接口（16 个视频工作流）
+- New API Task API（全部 17 个工作流）
+- AutoDL ComfyUI 异步任务
+- H3 视频工作流和动作迁移工作流
+- indexTTS2 音频工作流
+- 后续新增工作流扩展
+
+通过官方 Task Plugin API v1 实现，模型名与官网工作流 ID 完全一致，对外使用统一参数。
+
+## URL 安装
+
+1. 登录 New API 管理后台。已验证的 New API **v1.0.0-rc.41** 需要使用 **Root 账户**安装任务插件。
+2. 打开「任务插件」，确认任务插件功能已启用。
+3. 点击「上传插件」，在弹窗中选择「从 URL 导入」。
+4. 粘贴下面的唯一推荐安装地址，并点击「读取 / Fetch」下载源码：
+
+   ```text
+   https://raw.githubusercontent.com/yiyinfaith/new-api-plugin-autodl/main/plugin.js
+   ```
+
+5. 读取插件信息后，确认插件 key 为 `autodl`、显示名为 **AutoDL**，安装并启用；安装完成后确认 AutoDL 为当前激活插件。
+6. 新建渠道，类型选择 **Task Plugin（61）**。
+7. 插件选择 **AutoDL / autodl**。
+8. Base URL 填写 `https://autodl.art`，不要追加 `/api/v1`。
+9. 密钥填写 AutoDL **ComfyUI 分组**的原始 Token，**不加 `Bearer `**。
+10. 选择需要使用的官网工作流模型，配置模型价格，将渠道分组设为调用端 New API 密钥可访问的分组，再启用渠道。
+
+**必须使用 Raw URL。** [GitHub 仓库首页](https://github.com/yiyinfaith/new-api-plugin-autodl) 是介绍页面，不能直接作为插件源码 URL 使用。上面的 `raw.githubusercontent.com/.../main/plugin.js` 才返回可导入的 JavaScript 源码。
+
+URL 导入在浏览器中下载源码，因此使用管理后台的浏览器需要能访问 `raw.githubusercontent.com`。已验证的宿主版本支持 Plugin API v1、`usageProfiles`、`openai_video` 和 `credentialless` 产物下载；其他实例也需要具备这些能力。
+
+**只需下载 `plugin.js` 即可安装并运行。** 工作流定义、参数映射、插件元信息和任务钩子均包含在这个文件中；不依赖本地 import、Node.js 文件系统或仓库其他文件。`export const meta` 就是官方插件元信息，无需额外 manifest 文件。
+
+仓库只维护根目录的一个 `plugin.js` 和一个当前版本，更新后仍使用同一个 `main` Raw URL。`workflows.json`、`official-workflows.json`、`examples.json` 和 `prices.json` 用于查阅、示例及开发验证，插件运行时不会读取它们；测试脚本、校验文件、许可证和 `.github/` 也不是安装依赖。
+
+URL 安装不会自动配置渠道或导入模型价格。请完成上述渠道配置，并为要使用的模型设置价格；未配置价格时可能返回 `model_price_error`。7 个已核实模型的官方价格及表达式见下方价格章节和 [prices.json](prices.json)。
 
 ## 支持模型
 
@@ -30,22 +71,13 @@
 
 官网 API 定义快照保存在 [official-workflows.json](official-workflows.json)，获取日期为 2026-10-07。指定 7 个模型的价格在 2026-10-08 再次从官网读取核实。未来新增工作流时，添加 `WORKFLOWS` 条目、统一字段映射及测试，不需要修改 New API。
 
-## 安装与渠道配置
-
-已使用 New API **v1.0.0-rc.41** 的实际运行二进制验证。安装到其他版本前，需确认支持 API v1、`usageProfiles`、`openai_video` 和 `credentialless` 产物下载。
-
-1. Root 账户进入「任务插件」，启用任务插件功能，上传 [plugin.js](plugin.js)，启用 **AutoDL**。`export const meta` 就是官方 Manifest，无需额外 manifest 文件。
-2. 新建渠道，类型选 **Task Plugin（61）**，插件选 **AutoDL / autodl**。
-3. Base URL 填 `https://autodl.art`，不追加 `/api/v1`。
-4. 密钥填写 AutoDL **ComfyUI 分组**的原始 Token，不加 `Bearer `。不要将 Token 写入插件、仓库或示例文件。
-5. 模型选择需要开放的官网工作流 ID；可选全部 17 个。分组与调用端 New API 密钥的分组保持一致。
-6. 为需要使用的模型设置价格，再启用渠道。未配置价格的模型可能返回 `model_price_error`。
+## 渠道与鉴权说明
 
 官方绑定字段是 `setting.task_plugin_key: "autodl"`。插件不声明 `meta.channelTypes: [61]`，该字段用于旧渠道类型，官方禁止用它声明 Task Plugin 类型。
 
-调用端的 `Authorization: Bearer <NEW_API_KEY>` 是 New API 密钥；插件访问 AutoDL 使用 `Authorization: <AUTODL_TOKEN>`，直接读取渠道 `ctx.apiKey`。访问媒体 CDN 时不发送 AutoDL 或 New API 密钥。
+调用端的 `Authorization: Bearer <NEW_API_KEY>` 是 New API 密钥；插件访问 AutoDL 使用 `Authorization: <AUTODL_TOKEN>`，直接读取渠道 `ctx.apiKey`。访问媒体 CDN 时不发送 AutoDL 或 New API 密钥。不要将 Token 写入插件、仓库或示例文件。
 
-模型名现在使用官网完整 ID，旧版 `autodl-minimax-h3` 已改为 `minimax_h3_lightx2v_no_pic`。与内置 Hailuo 的 `MiniMax-H3` 无同名冲突，可保留内置插件。
+模型名使用官网完整工作流 ID，例如 `minimax_h3_lightx2v_no_pic`。与内置 Hailuo 的 `MiniMax-H3` 无同名冲突，可保留内置插件。
 
 ## 统一参数
 
@@ -192,11 +224,13 @@ node tests.mjs
 /new-api plugin test plugin.js --fixture golden.json
 ```
 
-`node tests.mjs` 执行 **653 项检查**并生成 **583 个官方 host fixture**。1.1.1 已在 rc.41 实际二进制通过 lint 和 583/583 fixture，新增 GET 签名 URL 和 HEAD 的回归覆盖。
+`node tests.mjs` 执行 **653 项检查**并生成 **583 个官方 host fixture**。当前插件已在 rc.41 实际二进制通过 lint 和 583/583 fixture，包含 GET 签名 URL 和 HEAD 的回归覆盖。
 
-1.1.0 的隔离 HTTP 测试使用生产同镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流逐一断言，24 项检查覆盖视频/通用任务/原生路由、音频视频产物、HEAD/Range 下载及错误处理。1.1.1 的内容修复另在真实生产任务上验证。这些模拟测试不产生 AutoDL 费用，不能代替每个工作流真实付费生成的验证。
+URL 安装已验证：推荐 Raw URL 返回 HTTP 200 和纯文本源码，允许浏览器跨域读取；只下载 `plugin.js`，在生产同镜像的隔离 New API 实例中通过官方上传接口导入、启用并注册全部 17 个模型，随后通过不发送网络请求的 dryrun。单文件目录中没有仓库 JSON 或其他文件，断网 lint 也通过；此验证没有提交 AutoDL 生成任务。
 
-2026-10-08 生产验证仅提交了一次真实任务：`minimax_h3_lightx2v_no_pic`，1 秒、480p、横屏，成功生成 MP4，New API 记账 ¥0.03。升级至 1.1.1 后复用同一个任务，源站及公网域名均通过认证 HEAD（200）和 Range GET（206），完整 MP4 下载也通过。未重复付费生成，也未对其余 16 个工作流进行付费生成测试。¥0.03 为 New API 的记录，AutoDL 账户余额未另外核对。
+已有的隔离 HTTP 验证使用生产同镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流逐一断言，24 项检查覆盖视频/通用任务/原生路由、音频视频产物、HEAD/Range 下载及错误处理。GET 签名链接的 HEAD 兼容另在真实生产任务上验证。这些模拟测试不产生 AutoDL 费用，不能代替每个工作流真实付费生成的验证。
+
+2026-10-08 生产验证仅提交了一次真实任务：`minimax_h3_lightx2v_no_pic`，1 秒、480p、横屏，成功生成 MP4，New API 记账 ¥0.03。复用同一个任务，源站及公网域名均通过认证 HEAD（200）和 Range GET（206），完整 MP4 下载也通过。未重复付费生成，也未对其余 16 个工作流进行付费生成测试。¥0.03 为 New API 的记录，AutoDL 账户余额未另外核对。
 
 - [New API Task Plugin API v1](https://docs.newapi.pro/zh/docs/plugins/api-reference)
 - [New API 插件开发指南](https://docs.newapi.pro/zh/docs/plugins/development)
