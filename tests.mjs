@@ -582,5 +582,40 @@ test('native decoder analysis does not mutate caller object', () => {
   p.buildSubmitRequest(ctx(nativeModel, intent.requestBody)); p.extractUsage(ctx(nativeModel, intent.requestBody));
   assert.equal(JSON.stringify(raw), before);
 });
+// Launch audit regressions: JSON keys, host file placeholders and media typing.
+for (const body of [
+  { prompt: 'test', __fileRef: 'ordinary-user-field' },
+  { prompt: 'test', future: [{ nested: { __fileRef: 'request_file:missing', encoding: 'base64' } }] },
+  JSON.parse('{"prompt":"test","__proto__":{"__fileRef":"user-data"}}'),
+]) {
+  const intent = p.native.rawCreate(rawContext(nativeModel, body));
+  const expected = { ...p.buildSubmitRequest(ctx(nativeModel, nativeBase)), body: JSON.stringify(hostJSON(body)) };
+  fixture('audit native host placeholder remains opaque ' + JSON.stringify(body), 'buildSubmitRequest', [ctx(nativeModel, intent.requestBody)], expected);
+  test('audit native serialized body is deepEqual to original', () => assert.deepEqual(JSON.parse(expected.body), body));
+  fixture('audit native host placeholder billing unchanged', 'extractUsage', [ctx(nativeModel, intent.requestBody)], { requests: 1, seconds: 5, resolution: '768p', orientation: 'portrait' });
+}
+const protoField = JSON.parse('{"__proto__":{"prompt":"inherited","seconds":1}}');
+for (const kind of ['json', 'form', 'multipart']) {
+  const body = kind === 'json' ? { kind, value: { ...examples[nativeModel], ...protoField } } : { kind, fields: { model: [nativeModel], prompt: ['test'], ...JSON.parse('{"__proto__":["test"]}') }, files: [] };
+  test('audit OpenAI rejects own prototype field in ' + kind, () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: nativeModel, body }), /unsupported request field/));
+}
+nativeFixture('audit MiniMax workflow rejects own prototype field', 'miniCreate', [v2Context({ ...formats.minimax[nativeModel], ...protoField })], null, 'mixed MiniMax field');
+const forgedOfficial = p.native.miniCreate(v2Context({ ...formats.minimax['MiniMax-H3'], ...protoField }));
+reject('audit official alias deferred validation retains prototype field', 'buildSubmitRequest', [ctx('MiniMax-H3', forgedOfficial.requestBody)], 'mixed MiniMax field');
+for (const item of [
+  { url: 'https://cdn.example.com/opaque?signature=test', file_type: 'wav' },
+  { url: 'https://cdn.example.com/voice.MP3?signature=test' },
+  'https://cdn.example.com/voice.flac?signature=test',
+]) {
+  const task = { task_id: 'task_audio', status: 'SUCCESS', data: envelope('SUCCESS', [item]) };
+  const url = typeof item === 'string' ? item : item.url;
+  nativeFixture('audit MiniMax audio without explicit type ' + url, 'miniTask', [{}, task], { task: { id: 'task_audio', status: 'succeeded', task_type: 'generation', modality: 'audio', content: { url } } });
+  nativeFixture('audit native audio without explicit type ' + url, 'task', [{}, task], { task_id: 'task_audio', status: 'SUCCESS', progress: '', fail_reason: '', results: [{ url, type: 'audio' }] });
+}
+const untypedPreview = { url: 'https://cdn.example.com/preview', file_type: 'png' };
+const untypedVideo = { url: 'https://cdn.example.com/movie', file_type: 'mp4' };
+nativeFixture('audit MiniMax selects video after untyped preview', 'miniTask', [{}, { task_id: 'task_video', status: 'SUCCESS', data: envelope('SUCCESS', [untypedPreview, untypedVideo]) }], { task: { id: 'task_video', status: 'succeeded', task_type: 'generation', modality: 'video', content: { url: untypedVideo.url } } });
+fixture('audit preview-only output cannot settle video success', 'parseTaskResult', [query, envelope('SUCCESS', [untypedPreview]), { status: 200 }], { status: 'FAILURE', reason: 'AutoDL: SUCCESS response contains no expected media output' });
+fixture('audit untyped audio output cannot settle video success', 'parseTaskResult', [query, envelope('SUCCESS', ['https://cdn.example.com/voice.wav']), { status: 200 }], { status: 'FAILURE', reason: 'AutoDL: SUCCESS response contains no expected media output' });
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

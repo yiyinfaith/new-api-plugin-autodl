@@ -13,17 +13,20 @@ import urllib.request
 def main():
     parser = argparse.ArgumentParser(description='通过 New API AutoDL 插件调用任意工作流并下载产物')
     choice = parser.add_mutually_exclusive_group(required=True)
-    choice.add_argument('--request', help='统一参数请求 JSON 文件')
+    choice.add_argument('--request', help='所选格式的请求 JSON 文件；原生模式只放 AutoDL body')
     choice.add_argument('--example', help='examples.json 中的官网工作流 ID；必需媒体要先替换为真实 URL')
     parser.add_argument('--format', choices=['openai', 'minimax', 'autodl'], default='openai', help='请求格式；默认保持现有 OpenAI 格式')
     parser.add_argument('--model', help='AutoDL 原生 --request 请求的官网工作流 ID，放在 URL 中，不加入 body')
     parser.add_argument('--out', required=True, help='输出文件，禁止覆盖已有文件')
-    parser.add_argument('--artifact', help='产物 key，默认下载第一个')
+    parser.add_argument('--artifact', help='产物类型，如 video 或 audio；默认下载首个适用产物')
     parser.add_argument('--timeout', type=int, default=1800)
     parser.add_argument('--interval', type=int, default=5)
     args = parser.parse_args()
     if args.timeout <= 0 or args.interval <= 0:
         raise ValueError('timeout 和 interval 必须大于零')
+    supported_artifacts = {'openai': ['video'], 'minimax': ['video', 'audio'], 'autodl': ['video', 'audio', 'image', 'file']}
+    if args.artifact and args.artifact not in supported_artifacts[args.format]:
+        raise ValueError('所选格式不支持 --artifact ' + args.artifact)
     base = os.environ.get('NEW_API_BASE_URL', 'http://127.0.0.1:3000').rstrip('/')
     key = os.environ.get('NEW_API_KEY', '').strip()
     if not key:
@@ -100,8 +103,8 @@ def main():
             raise RuntimeError('任务失败，请查看任务错误信息：' + str(task.get('error') or task.get('fail_reason') or status))
         if status in ['SUCCESS', 'succeeded', 'completed']:
             if args.format == 'minimax':
-                if args.artifact and args.artifact != 'video':
-                    raise ValueError('MiniMax V2 只提供首个结果 URL；--artifact 只支持 video')
+                if args.artifact and task.get('modality', 'video') != args.artifact:
+                    raise ValueError('MiniMax V2 返回的产物类型与 --artifact 不一致')
                 url = (task.get('content') or {}).get('url')
                 parsed = urllib.parse.urlsplit(url) if isinstance(url, str) else None
                 if not parsed or parsed.scheme not in ['http', 'https'] or not parsed.hostname or parsed.username or parsed.password:

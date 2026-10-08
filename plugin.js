@@ -2518,6 +2518,13 @@ export const meta = {
 
 function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
 function object(value) { return value !== null && typeof value === "object" && !Array.isArray(value); }
+function copyRequest(value) {
+  const copy = {};
+  // Preserve own JSON keys for validation, including __proto__; assignment
+  // would invoke its legacy setter and silently discard the caller's field.
+  for (const key of Object.keys(value)) Object.defineProperty(copy, key, { value: value[key], enumerable: true, configurable: true, writable: true });
+  return copy;
+}
 function text(value) { return typeof value === "string" ? value.trim() : ""; }
 function workflow(model) {
   if (!has(WORKFLOWS, model)) throw new Error("AutoDL: unsupported model; select one of the 17 declared models");
@@ -2968,15 +2975,24 @@ function mediaURL(value) {
   return value;
 }
 
+function resultMediaType(url, fileType, fallbackType) {
+  const types = { mp4: "video", webm: "video", mov: "video", m4v: "video", mkv: "video", avi: "video", wav: "audio", mp3: "audio", flac: "audio", m4a: "audio", aac: "audio", ogg: "audio", opus: "audio", png: "image", jpg: "image", jpeg: "image", webp: "image", gif: "image" };
+  const extension = typeof fileType === "string" ? fileType.toLowerCase().replace(/^\./, "") : "";
+  if (has(types, extension)) return types[extension];
+  const match = url.split(/[?#]/)[0].toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match && has(types, match[1]) ? types[match[1]] : fallbackType;
+}
+
 function results(body, fallbackType) {
   const payload = envelope(body).data;
   if (!Array.isArray(payload.results) || payload.results.length === 0) throw new Error("AutoDL: SUCCESS response has empty or invalid results");
   return payload.results.map(function (item) {
-    if (typeof item === "string") return { url: mediaURL(item), type: fallbackType };
+    if (typeof item === "string") return { url: mediaURL(item), type: resultMediaType(item, null, fallbackType) };
     if (!object(item)) throw new Error("AutoDL: results entry must be a URL string or an object with url");
-    const type = item.type === undefined ? fallbackType : item.type;
+    const url = mediaURL(item.url);
+    const type = item.type === undefined ? resultMediaType(url, item.file_type, fallbackType) : item.type;
     if (!["video", "image", "audio", "file"].includes(type)) throw new Error("AutoDL: results contains an unsupported media type");
-    const entry = { url: mediaURL(item.url), type: type };
+    const entry = { url: url, type: type };
     if (item.file_type === "mp4") entry.mimeType = "video/mp4";
     else if (item.file_type === "webm") entry.mimeType = "video/webm";
     else if (item.file_type === "wav") entry.mimeType = "audio/wav";
@@ -2997,16 +3013,26 @@ function taskAction(config, input) {
   return config.type === "audio" ? "text_to_audio" : (input.videos || []).length ? "video_to_video" : referenceURLs(input.input_reference).length ? "image_to_video" : "text_to_video";
 }
 
+function containsFilePlaceholder(value) {
+  if (Array.isArray(value)) return value.some(containsFilePlaceholder);
+  if (!object(value)) return false;
+  return has(value, "__fileRef") || Object.keys(value).some(function (key) { return containsFilePlaceholder(value[key]); });
+}
+
 export function buildSubmitRequest(ctx) {
   if ((ctx.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; upload images to public storage and use input_reference URLs");
   const config = requestWorkflow(ctx);
+  const parsed = normalized(ctx);
   const request = {
     url: endpoint(ctx, "/api/v1/comfyui/comfyui_workflow/" + encodeURIComponent(config.workflowId)),
     method: "POST",
     action: taskAction(config, ctx.requestBody),
     headers: credentials(ctx),
-    body: normalized(ctx).body,
+    body: parsed.body,
   };
+  // rc.41 expands __fileRef objects recursively. Native JSON is opaque user
+  // data: send its saved JSON text when needed to bypass that host expansion.
+  if (object(ctx.requestBody) && has(ctx.requestBody, "__autodl_native") && containsFilePlaceholder(parsed.body)) request.body = ctx.requestBody.__autodl_native;
   if (isMiniMaxModel(ctx.upstreamModel || ctx.model) || (object(ctx.requestBody) && has(ctx.requestBody, "__autodl_minimax"))) request.rewriteModel = config.workflowId;
   return request;
 }
@@ -3109,7 +3135,7 @@ export function buildContentRequest(ctx) {
 function decode(ctx, pinnedModel) {
   const body = ctx.body;
   let request;
-  if (body && body.kind === "json" && object(body.value)) request = Object.assign({}, body.value);
+  if (body && body.kind === "json" && object(body.value)) request = copyRequest(body.value);
   else if (body && (body.kind === "multipart" || body.kind === "form")) {
     if ((body.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; upload images to public storage and use input_reference URLs");
     request = {};
@@ -3122,7 +3148,7 @@ function decode(ctx, pinnedModel) {
         continue;
       }
       if (!Array.isArray(values) || values.length !== 1) throw new Error("AutoDL: each form field must be provided exactly once");
-      request[key] = values[0];
+      Object.defineProperty(request, key, { value: values[0], enumerable: true, configurable: true, writable: true });
       if (["audios", "videos", "emotion"].includes(key)) {
         try { request[key] = JSON.parse(values[0]); } catch (_) { throw new Error("AutoDL: media arrays and emotion in forms must be JSON encoded"); }
       }
@@ -3149,12 +3175,13 @@ function decodeCompatible(ctx, pinnedModel) {
   const candidateModel = pinnedModel || (jsonBody ? text(ctx.body.value.model) : "");
   const official = isMiniMaxModel(ctx.upstreamModel || candidateModel);
   if (!(jsonBody && (has(ctx.body.value, "content") || official))) return decode(ctx, pinnedModel);
-  const request = Object.assign({}, ctx.body.value);
+  const request = copyRequest(ctx.body.value);
   const model = pinnedModel || text(request.model);
   if (!model) throw new Error("AutoDL: model is required");
   request.model = model;
   const machineModel = miniMaxModel(ctx.upstreamModel || model);
-  const source = Object.assign({}, request, { model: machineModel });
+  const source = copyRequest(request);
+  source.model = machineModel;
   if (official) {
     // Shared-model discovery must keep this provider eligible. Invalid requests
     // are revalidated by the driver before billing/HTTP, so rc.41 can return the
@@ -3198,7 +3225,8 @@ export const native = {
   task: renderTask,
   miniCreate: function (ctx) {
     if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value) && has(ctx.body.value, "content"))) throw new Error("AutoDL: MiniMax V2 requires a JSON object with model and content");
-    const value = Object.assign({}, ctx.body.value, { model: miniMaxModel(ctx.body.value.model) });
+    const value = copyRequest(ctx.body.value);
+    value.model = miniMaxModel(ctx.body.value.model);
     return decodeCompatible(Object.assign({}, ctx, { body: { kind: "json", value: value } }));
   },
   miniCreated: function (_ctx, task) { return { task_id: task.task_id }; },

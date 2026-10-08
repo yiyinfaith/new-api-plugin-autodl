@@ -1,5 +1,5 @@
 """Submit -> bounded polling -> authenticated video download. Python standard library only."""
-import argparse, json, os, pathlib, sys, time, urllib.error, urllib.request
+import argparse, json, os, pathlib, sys, time, urllib.error, urllib.parse, urllib.request
 
 def main():
     p = argparse.ArgumentParser(description='通过 New API 的 AutoDL 插件生成并下载视频')
@@ -17,7 +17,8 @@ def main():
     if not key:raise ValueError('请设置 NEW_API_KEY 为你的 New API API 密钥')
     if args.timeout<=0 or args.interval<=0:raise ValueError('timeout 和 interval 必须大于零')
     output=pathlib.Path(args.out).expanduser().resolve()
-    if output.exists():raise ValueError('输出文件已存在，请通过 --out 选择其他路径')
+    temporary=output.with_name(output.name+'.part')
+    if output.exists() or temporary.exists():raise ValueError('输出文件或 .part 文件已存在，请通过 --out 选择其他路径')
     headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'}
     def call(method,path,body=None):
         raw=None if body is None else json.dumps(body,ensure_ascii=False).encode()
@@ -46,18 +47,23 @@ def main():
         status=task.get('status');print('status: '+str(status),flush=True)
         if status=='failed':raise RuntimeError('视频任务失败，请检查 New API 任务记录中的 fail_reason')
         if status=='completed':
-            temporary=output.with_name(output.name+'.part')
-            if temporary.exists():raise RuntimeError('临时下载文件已存在，请选择其他 --out 路径')
+            created=False
             try:
-                with urllib.request.urlopen(urllib.request.Request(base+path+'/content',headers=headers),timeout=60) as r, temporary.open('xb') as f:
-                    while True:
-                        chunk=r.read(1024*1024)
-                        if not chunk:break
-                        f.write(chunk)
+                with temporary.open('xb') as f:
+                    created=True
+                    with urllib.request.urlopen(urllib.request.Request(base+path+'/content',headers=headers),timeout=60) as r:
+                        while True:
+                            chunk=r.read(1024*1024)
+                            if not chunk:break
+                            f.write(chunk)
                 if temporary.stat().st_size==0:raise RuntimeError('下载的视频为空')
-                temporary.rename(output)
-            except Exception:
-                temporary.unlink(missing_ok=True);raise
+                with output.open('xb') as destination, temporary.open('rb') as source:
+                    while True:
+                        chunk=source.read(1024*1024)
+                        if not chunk:break
+                        destination.write(chunk)
+            finally:
+                if created:temporary.unlink(missing_ok=True)
             print('已保存：'+str(output));return
         time.sleep(args.interval)
     raise TimeoutError('客户端轮询达到截止时间；New API / AutoDL 上游任务可能仍在运行')
