@@ -14,8 +14,8 @@ function fixture(name, hook, args, expected) { assert.deepEqual(p[hook](...args)
 function reject(name, hook, args, expectedError) { assert.throws(() => p[hook](...args), e => e.message.includes(expectedError), name); fixtures.push({ name, hook, args, expectedError }); checks++; }
 const base = { baseUrl: 'https://autodl.art/', apiKey: 'fake-autodl-token', authHeader: 'Bearer fake-autodl-token' };
 const referenceValues = value => value === undefined ? [] : (Array.isArray(value) ? value : [value]);
-const mediaValues = (input, kind) => kind === 'input_reference' ? referenceValues(input[kind]) : (input[kind] || []);
-const mediaInput = (kind, values) => values;
+const mediaValues = (input, kind) => kind === 'input_reference' ? referenceValues(input[kind]).map(ref => ref === null ? null : ref.image_url) : (input[kind] || []);
+const mediaInput = (kind, values) => kind === 'input_reference' ? values.map(url => url === null ? null : ({ image_url: url })) : values;
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
@@ -82,11 +82,11 @@ for (const [model, config] of Object.entries(catalog)) {
     }
     if (kind === 'input_reference' && config[kind].length) {
       const refs = referenceValues(input.input_reference);
-      if (refs.length === 1) test(model + ': string and one-element array have identical mapping', () => assert.deepEqual(p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs[0] })), p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs }))));
+      if (refs.length === 1) test(model + ': object and one-element array have identical mapping', () => assert.deepEqual(p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs[0] })), p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs }))));
       test(model + ': unique image URLs retain positional mapping', () => {
-        const refs = config[kind].map((_, i) => 'https://cdn.example.com/image-' + i + '.png');
+        const refs = config[kind].map((_, i) => ({ image_url: 'https://cdn.example.com/image-' + i + '.png' }));
         const result = p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs }));
-        config[kind].forEach((field, i) => assert.equal(result.body[field], refs[i]));
+        config[kind].forEach((field, i) => assert.equal(result.body[field], refs[i].image_url));
       });
     }
   }
@@ -160,28 +160,31 @@ test('multipart rejects repeated fields and binary', () => {
 });
 const referenceModel = 'minimax_h3_lightx2v_v5';
 const referenceContext = ctx(referenceModel);
-const singleReference = 'https://cdn.example.com/first.png';
-const secondReference = 'https://cdn.example.com/second.png';
-fixture('single reference string maps to first upstream slot', 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: singleReference })], {
+const singleReference = { image_url: 'https://cdn.example.com/first.png' };
+const secondReference = { image_url: 'https://cdn.example.com/second.png' };
+fixture('single image_url object maps to first upstream slot', 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: singleReference })], {
   url: 'https://autodl.art/api/v1/comfyui/comfyui_workflow/' + referenceModel, method: 'POST', action: 'image_to_video',
   headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' },
-  body: { prompt: referenceContext.requestBody.prompt, duration: referenceContext.requestBody.seconds, resolution: '768p竖', ref_image_0: singleReference },
+  body: { prompt: referenceContext.requestBody.prompt, duration: referenceContext.requestBody.seconds, resolution: '768p竖', ref_image_0: singleReference.image_url },
 });
-for (const value of [false, null, 1, [[singleReference]], [null], [singleReference, 123], { image_url: singleReference }, [{ image_url: singleReference }], { file_id: 'file-123' }]) reject('invalid reference shape ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'URL string');
-for (const value of ['data:image/png;base64,abc', 'file:///image.png', 'C:/image.png', '']) reject('unsupported reference URL ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'public HTTP(S)');
-for (const value of ['https://u:p@cdn.example.com/image.png', ' https://cdn.example.com/image.png']) reject('invalid public reference URL ' + value, 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'AutoDL:');
+for (const value of [false, null, 1, [[singleReference]], [null], [singleReference, 123], singleReference.image_url, [singleReference.image_url], [singleReference.image_url, secondReference.image_url], [singleReference, secondReference.image_url]]) reject('invalid reference shape ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'image_url object');
+for (const value of [{ file_id: 'file-123' }, [{ file_id: 'file-123' }], { ...singleReference, file_id: 'file-123' }, [singleReference, { file_id: 'file-123' }]]) reject('unsupported file_id ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'this adapter only supports image_url');
+for (const value of [{}, { url: singleReference.image_url }, { ...singleReference, extra: true }]) reject('unsupported reference keys ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'only image_url');
+for (const value of ['data:image/png;base64,abc', 'file:///image.png', 'C:/image.png', '', null, 1, [], {}]) reject('unsupported reference URL ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: { image_url: value } })], 'public HTTP(S)');
+for (const value of ['https://u:p@cdn.example.com/image.png', ' https://cdn.example.com/image.png']) reject('invalid public reference URL ' + value, 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: { image_url: value } })], 'AutoDL:');
 const referenceFields = { model: [referenceModel], prompt: [referenceContext.requestBody.prompt], seconds: ['5'], size: ['768x1344'] };
 for (const kind of ['form', 'multipart']) {
-  for (const values of [[singleReference], [JSON.stringify([singleReference, secondReference])], [singleReference, secondReference]]) {
-    test(kind + ': reference string and ordered references ' + JSON.stringify(values), () => {
+  for (const values of [[JSON.stringify(singleReference)], [JSON.stringify([singleReference, secondReference])], [JSON.stringify(singleReference), JSON.stringify(secondReference)]]) {
+    test(kind + ': reference object and ordered references ' + JSON.stringify(values), () => {
       const decoded = p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: values }, files: [] } });
       const body = p.buildSubmitRequest(ctx(referenceModel, decoded.requestBody)).body;
-      assert.equal(decoded.action, 'image_to_video'); assert.equal(body.ref_image_0, singleReference);
-      if (values.length > 1 || values[0].startsWith('[')) assert.equal(body.ref_image_1, secondReference);
+      assert.equal(decoded.action, 'image_to_video'); assert.equal(body.ref_image_0, singleReference.image_url);
+      if (values.length > 1 || values[0].startsWith('[')) assert.equal(body.ref_image_1, secondReference.image_url);
     });
   }
-  test(kind + ': removed reference field is rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, images: ['[]'], input_reference: [singleReference] }, files: [] } }), /images is no longer supported/));
-  test(kind + ': malformed reference array rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: ['[broken'] }, files: [] } }), /array in forms must be valid JSON/));
+  test(kind + ': removed reference field is rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, images: ['[]'], input_reference: [JSON.stringify(singleReference)] }, files: [] } }), /images is no longer supported/));
+  test(kind + ': malformed reference array rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: ['[broken'] }, files: [] } }), /forms must be a JSON image_url object or object array/));
+  for (const value of [singleReference.image_url, JSON.stringify(singleReference.image_url), JSON.stringify([singleReference.image_url, secondReference.image_url]), JSON.stringify({file_id: 'file-123'})]) test(kind + ': unsupported reference input ' + value, () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: [value] }, files: [] } }), /image_url/));
 }
 test('same-field multipart image files fail explicitly for URL-only adapter', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind: 'multipart', fields: referenceFields, files: [{ field: 'input_reference', ref: 'request_file:input_reference' }, { field: 'input_reference', ref: 'request_file:input_reference#1' }] } }), /binary uploads.*input_reference URLs/));
 test('generic native single reference matches protocol', () => {
@@ -198,7 +201,7 @@ for (const [id, config] of Object.entries(catalog)) {
     if (fields.length === 1) fixture(id + ': exactly one reference', 'buildSubmitRequest', [ctx(id, { ...examples[id], input_reference: singleReference })], p.buildSubmitRequest(ctx(id, { ...examples[id], input_reference: [singleReference] })));
     if (fields.length === 2 && minimum === 2) test(id + ': exactly two ordered first/last frames', () => {
       const body = p.buildSubmitRequest(ctx(id, { ...examples[id], input_reference: [singleReference, secondReference] })).body;
-      assert.equal(body.first_frame, singleReference); assert.equal(body.last_frame, secondReference);
+      assert.equal(body.first_frame, singleReference.image_url); assert.equal(body.last_frame, secondReference.image_url);
     });
   }
 }

@@ -2555,9 +2555,11 @@ function referenceURLs(value) {
   if (value === undefined) return [];
   const values = Array.isArray(value) ? value : [value];
   return values.map(function (item) {
-    if (typeof item !== "string") throw new Error("AutoDL: input_reference must be a URL string or an array of URL strings");
-    if (!/^https?:\/\//i.test(item)) throw new Error("AutoDL: input_reference must contain public HTTP(S) image URLs; data URLs and local files are not supported");
-    return mediaURL(item);
+    if (!object(item)) throw new Error("AutoDL: input_reference must be an image_url object or an array of image_url objects; URL strings are not supported");
+    if (has(item, "file_id")) throw new Error("AutoDL: this adapter only supports image_url with public HTTP(S) URLs; file_id is not supported");
+    if (!has(item, "image_url") || Object.keys(item).length !== 1) throw new Error("AutoDL: input_reference entries must contain only image_url");
+    if (typeof item.image_url !== "string" || !/^https?:\/\//i.test(item.image_url)) throw new Error("AutoDL: input_reference.image_url must be a public HTTP(S) URL; data URLs and local files are not supported");
+    return mediaURL(item.image_url);
   });
 }
 
@@ -2611,7 +2613,7 @@ function mapEmotion(config, input, body) {
 
 function normalizeInput(config, input) {
   if (!object(input)) throw new Error("AutoDL: request body must be an object");
-  if (has(input, "images")) throw new Error("AutoDL: images is no longer supported; use input_reference as a URL string or URL string array");
+  if (has(input, "images")) throw new Error("AutoDL: images is no longer supported; use input_reference as an image_url object or object array");
   const allowed = ["model", "prompt", "seconds", "resolution", "orientation", "size", "input_reference", "audios", "videos", "seed", "emotion"];
   if (config.workflowId === "minimax_h3_lightx2v_no_pic") allowed.push("duration");
   for (const key of Object.keys(input)) if (!allowed.includes(key)) throw new Error("AutoDL: unsupported request field; use unified parameters only");
@@ -2838,11 +2840,8 @@ function decode(ctx, pinnedModel) {
       const values = body.fields[key];
       if (key === "input_reference") {
         if (!Array.isArray(values) || values.length === 0) throw new Error("AutoDL: input_reference form field must have at least one value");
-        request[key] = values.length === 1 ? values[0] : values.slice();
-        if (values.length === 1 && typeof values[0] === "string" && values[0].trim().startsWith("[")) {
-          try { request[key] = JSON.parse(values[0]); }
-          catch (_) { throw new Error("AutoDL: input_reference array in forms must be valid JSON"); }
-        }
+        try { request[key] = values.length === 1 ? JSON.parse(values[0]) : values.map(function (value) { return JSON.parse(value); }); }
+        catch (_) { throw new Error("AutoDL: input_reference in forms must be a JSON image_url object or object array"); }
         continue;
       }
       if (!Array.isArray(values) || values.length !== 1) throw new Error("AutoDL: each form field must be provided exactly once");
