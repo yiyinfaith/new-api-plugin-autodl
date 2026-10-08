@@ -216,8 +216,16 @@ test('three format example catalog coverage', () => {
   assert.deepEqual(Object.keys(formats.autodl).sort(), Object.keys(catalog).sort());
   assert.ok(p.meta.routes.some(r => r.path === '/api/v1/comfyui/comfyui_workflow/:workflow_id' && r.decode === 'rawCreate'));
 });
-const rawContext = (model, body) => ({ method: 'POST', path: '/api/v1/comfyui/comfyui_workflow/' + model, params: { workflow_id: model }, body: { kind: 'json', value: body } });
-const nativeInput = body => ({ __autodl_fields: Object.entries(body) });
+const rawContext = (model, body) => ({ method: 'POST', path: '/api/v1/comfyui/comfyui_workflow/' + model, params: { workflow_id: model }, body: { kind: 'json', value: hostJSON(body) } });
+const nativeInput = (model, body) => {
+  const config = catalog[model], facts = { requests: 1 };
+  if (config.secondsField) facts.seconds = Number(Object.hasOwn(body, config.secondsField) ? body[config.secondsField] : config.rules[config.secondsField].default);
+  if (config.resolutions.length) {
+    const selected = config.resolutions.find(r => r.upstream === (Object.hasOwn(body, 'resolution') ? body.resolution : config.rules.resolution.default));
+    if (selected) { facts.resolution = selected.resolution; facts.orientation = selected.orientation; }
+  }
+  return { model, __autodl_native: JSON.stringify(hostJSON(body)), ...facts };
+};
 for (const [model, config] of Object.entries(catalog)) {
   const original = p.buildSubmitRequest(ctx(model));
   const facts = p.extractUsage(ctx(model));
@@ -227,7 +235,7 @@ for (const [model, config] of Object.entries(catalog)) {
   const intent = p.native.rawCreate(rawContext(model, raw));
   test(model + ': raw decoder model and action', () => {
     assert.equal(intent.model, model); assert.equal(intent.action, original.action);
-    assert.deepEqual(Object.fromEntries(intent.requestBody.__autodl_fields), raw);
+    assert.deepEqual(JSON.parse(intent.requestBody.__autodl_native), raw);
   });
   fixture(model + ': raw equivalent submit', 'buildSubmitRequest', [ctx(model, intent.requestBody)], original);
   fixture(model + ': raw equivalent billing', 'extractUsage', [ctx(model, intent.requestBody)], facts);
@@ -240,8 +248,8 @@ for (const [model, config] of Object.entries(catalog)) {
     const decoded = p.protocols.openai_video.decodeRequest({ model, body: { kind: 'json', value: mini } });
     assert.equal(decoded.action, original.action); assert.deepEqual(p.buildSubmitRequest(ctx(model, decoded.requestBody)), original);
   });
-  reject(model + ': raw unknown field', 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, unknown_control: 1 }))], 'internal AutoDL field');
-  reject(model + ': raw rejects unified packaging', 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, input_reference: singleReference }))], 'internal AutoDL field');
+  fixture(model + ': raw unknown field preserved', 'buildSubmitRequest', [ctx(model, nativeInput(model, { ...raw, unknown_control: 1 }))], { ...original, body: { ...raw, unknown_control: 1 } });
+  fixture(model + ': raw unknown packaging remains upstream business input', 'buildSubmitRequest', [ctx(model, nativeInput(model, { ...raw, input_reference: singleReference }))], { ...original, body: { ...raw, input_reference: singleReference } });
   reject(model + ': MiniMax cannot mix seconds', 'buildSubmitRequest', [ctx(model, { ...mini, seconds: 5 })], 'mixed MiniMax field');
   for (const field of ['duration', 'audio_duration']) {
     if (config.rules[field]) {
@@ -249,11 +257,11 @@ for (const [model, config] of Object.entries(catalog)) {
       for (const value of [rule.min, rule.max]) {
         const expected = { ...original, body: { ...original.body, [field]: value } };
         fixture(model + ': MiniMax ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: value })], expected);
-        fixture(model + ': raw ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, [field]: value }))], expected);
+        fixture(model + ': raw ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, nativeInput(model, { ...raw, [field]: value }))], expected);
       }
       for (const value of [rule.min - 1, rule.max + 1, 1.5, false, null]) {
         reject(model + ': MiniMax bad ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: value })], field + ' must');
-        reject(model + ': raw bad ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, [field]: value }))], field + ' must');
+        reject(model + ': raw bad ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, nativeInput(model, { ...raw, [field]: value }))], field + ' must');
       }
     } else reject(model + ': MiniMax unsupported ' + field, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: 5 })], 'does not support ' + field);
   }
@@ -269,7 +277,7 @@ for (const [model, config] of Object.entries(catalog)) {
     const miniChoice = config.input_reference.includes('first_frame') ? config.resolutions.find(entry => entry.resolution === r.resolution && entry.orientation === defaultDirection) : r;
     const miniExpected = { ...original, body: { ...original.body, resolution: miniChoice.upstream } };
     fixture(model + ': MiniMax tier/ratio ' + r.upstream, 'buildSubmitRequest', [ctx(model, { ...mini, resolution: qualityNames[r.resolution] || r.resolution, ratio: ratioNames[r.orientation] })], miniExpected);
-    fixture(model + ': raw exact resolution ' + r.upstream, 'buildSubmitRequest', [ctx(model, nativeInput({ ...raw, resolution: r.upstream }))], expected);
+    fixture(model + ': raw exact resolution ' + r.upstream, 'buildSubmitRequest', [ctx(model, nativeInput(model, { ...raw, resolution: r.upstream }))], expected);
     if (!qualityNames[r.resolution]) fixture(model + ': MiniMax exact extension tier ' + r.upstream, 'buildSubmitRequest', [ctx(model, { ...mini, resolution: r.upstream, ratio: ratioNames[r.orientation] })], miniExpected);
   }
   if (config.resolutions.length) {
@@ -281,7 +289,7 @@ for (const [model, config] of Object.entries(catalog)) {
   } else reject(model + ': no ratio control', 'buildSubmitRequest', [ctx(model, { ...mini, ratio: '16:9' })], 'no resolution or ratio');
   for (const field of Object.keys(config.rules).filter(k => config.rules[k].required && ['image', 'audio', 'video', 'prompt', 'string'].includes(config.rules[k].type))) {
     const missing = { ...raw }; delete missing[field];
-    reject(model + ': raw required ' + field, 'buildSubmitRequest', [ctx(model, nativeInput(missing))], field + ' is required');
+    fixture(model + ': raw missing business field delegated ' + field, 'buildSubmitRequest', [ctx(model, nativeInput(model, missing))], { ...original, action: config.type === 'audio' ? 'text_to_audio' : config.videos.some(k => Object.hasOwn(missing, k)) ? 'video_to_video' : config.input_reference.some(k => Object.hasOwn(missing, k)) ? 'image_to_video' : 'text_to_video', body: missing });
   }
   for (const kind of ['input_reference', 'audios', 'videos']) {
     const type = { input_reference: 'image_url', audios: 'audio_url', videos: 'video_url' }[kind];
@@ -294,7 +302,7 @@ for (const [model, config] of Object.entries(catalog)) {
 }
 const miniBase = formats.minimax[referenceModel];
 const rawBase = formats.autodl[referenceModel].body;
-const canonicalBase = p.native.rawCreate(rawContext(referenceModel, rawBase)).requestBody;
+const canonicalBase = p.native.miniCreate({ body: { kind: 'json', value: miniBase } }).requestBody;
 for (const [key, value] of Object.entries({ requests: 0, seconds: 1, resolution: '480p', orientation: 'landscape' })) {
   reject('normalized billing facts cannot override ' + key, 'buildSubmitRequest', [ctx(referenceModel, { ...canonicalBase, [key]: value })], 'usage facts conflict');
 }
@@ -326,10 +334,11 @@ const frameItems = frameMini.content.filter(i => i.type === 'image_url');
 reject('MiniMax duplicate first frame', 'buildSubmitRequest', [ctx(frameModel, { ...frameMini, content: [...frameMini.content, frameItems[0]] })], 'duplicate first_frame');
 reject('MiniMax missing last frame', 'buildSubmitRequest', [ctx(frameModel, { ...frameMini, content: frameMini.content.filter(i => i.role !== 'last_frame') })], 'last_frame is required');
 reject('MiniMax frame/reference mix', 'buildSubmitRequest', [ctx(frameModel, { ...frameMini, content: [...frameMini.content, { type: 'audio_url', audio_url: { url: 'https://cdn.example.com/a.wav' }, role: 'reference_audio' }] })], 'cannot be mixed');
-fixture('raw optional image slots retain original indices', 'buildSubmitRequest', [ctx(referenceModel, nativeInput({ ...rawBase, ref_image_8: secondReference.image_url }))], { ...p.buildSubmitRequest(ctx(referenceModel)), body: { ...rawBase, ref_image_8: secondReference.image_url } });
+fixture('raw optional image slots retain original indices', 'buildSubmitRequest', [ctx(referenceModel, nativeInput(referenceModel, { ...rawBase, ref_image_8: secondReference.image_url }))], { ...p.buildSubmitRequest(ctx(referenceModel)), body: { ...rawBase, ref_image_8: secondReference.image_url } });
 const ttsRaw = JSON.parse(official.find(r => r.uuid === 'indextts2-v1').input_example);
-fixture('official native indexTTS2 body is preserved', 'buildSubmitRequest', [ctx('indextts2-v1', nativeInput(ttsRaw))], { ...p.buildSubmitRequest(ctx('indextts2-v1')), body: ttsRaw });
-reject('native emotion reference requires audio', 'buildSubmitRequest', [ctx('indextts2-v1', nativeInput({ prompt_text: 'Hello', prompt_simple: 'https://cdn.example.com/a.wav', emo_control_method: '使用情感参考音频' }))], 'emo_ref_audio is required');
+fixture('official native indexTTS2 body is preserved', 'buildSubmitRequest', [ctx('indextts2-v1', nativeInput('indextts2-v1', ttsRaw))], { ...p.buildSubmitRequest(ctx('indextts2-v1')), body: ttsRaw });
+const ttsMissingEmotion = { prompt_text: 'Hello', prompt_simple: 'https://cdn.example.com/a.wav', emo_control_method: '使用情感参考音频' };
+fixture('native emotion validation delegated to upstream', 'buildSubmitRequest', [ctx('indextts2-v1', nativeInput('indextts2-v1', ttsMissingEmotion))], { ...p.buildSubmitRequest(ctx('indextts2-v1')), body: ttsMissingEmotion });
 const officialRatios = { '21:9': 'landscape', '16:9': 'landscape', '4:3': 'landscape', '1:1': 'square', '3:4': 'portrait', '9:16': 'portrait' };
 const officialCases = formats.minimax_scenarios;
 test('official alias examples cover all routing branches and square precedence', () => {
@@ -513,5 +522,65 @@ nativeFixture('V2 failure includes official task error structure', 'miniTask', [
 for (const type of ['video', 'audio']) nativeFixture('V2 ignores auxiliary image before ' + type, 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'SUCCESS', data: envelope('SUCCESS', [{ type: 'image', url: 'https://cdn.example.com/preview.png' }, { type, url: 'https://cdn.example.com/output.' + (type === 'video' ? 'mp4' : 'wav') }]) }], { task: { id: 'task_public', status: 'succeeded', task_type: 'generation', modality: type, content: { url: 'https://cdn.example.com/output.' + (type === 'video' ? 'mp4' : 'wav') } } });
 nativeFixture('V2 video takes precedence over auxiliary audio', 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'SUCCESS', data: envelope('SUCCESS', [{ type: 'audio', url: 'https://cdn.example.com/aux.wav' }, { type: 'video', url: 'https://cdn.example.com/result.mp4' }]) }], { task: { id: 'task_public', status: 'succeeded', task_type: 'generation', modality: 'video', content: { url: 'https://cdn.example.com/result.mp4' } } });
 nativeFixture('ComfyUI query retains original task response', 'task', [{ path: '/api/v1/comfyui/comfyui_workflow/result/task_public' }, { task_id: 'task_public', status: 'SUCCESS', data: envelope('SUCCESS', [{ type: 'video', url: 'https://cdn.example.com/result.mp4' }]) }], { task_id: 'task_public', status: 'SUCCESS', progress: '', fail_reason: '', results: [{ url: 'https://cdn.example.com/result.mp4', type: 'video' }] });
-writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ cases: fixtures }, null, 2) + '\n');
+// Native passthrough: only sidecar billing validation may reject business input.
+for (const row of formats.native_passthrough) {
+  const model = row.path.split('/').pop(), raw = hostJSON(row.body);
+  const saved = { model, __autodl_native: JSON.stringify(raw), ...row.expected_internal_facts };
+  const action = catalog[model].input_reference.some(key => Object.hasOwn(raw, key)) ? 'image_to_video' : 'text_to_video';
+  nativeFixture('native passthrough decoder ' + row.name, 'rawCreate', [rawContext(model, row.body)], { kind: 'submit', model, action, requestBody: saved });
+  fixture('native passthrough deepEqual ' + row.name, 'buildSubmitRequest', [ctx(model, saved)], { url: base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + model, method: 'POST', action, headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' }, body: row.body });
+  fixture('native passthrough billing ' + row.name, 'extractUsage', [ctx(model, saved)], row.expected_internal_facts);
+  const state = { facts: row.expected_internal_facts, type: 'video', submittedAt: 2000, timeoutSeconds: catalog[model].timeoutSeconds, workflowId: model };
+  fixture('native passthrough task state ' + row.name, 'parseSubmitResponse', [ctx(model, saved), { statusCode: 200, body: envelope('QUEUED') }], { taskId: 'upstream-123', taskData: envelope('QUEUED'), state });
+  fixture('native passthrough success bills saved facts ' + row.name, 'extractUsageOnComplete', [{ state }, { status: 'SUCCESS', data: { duration: 196 } }], row.expected_internal_facts);
+  fixture('native passthrough failure zeroes saved facts ' + row.name, 'extractUsageOnComplete', [{ state }, { status: 'FAILURE' }], { ...row.expected_internal_facts, requests: 0, seconds: 0 });
+}
+for (const [model, config] of Object.entries(catalog)) {
+  const saved = p.native.rawCreate(rawContext(model, {}));
+  const facts = p.extractUsage(ctx(model, saved.requestBody));
+  fixture(model + ': native empty body does not fill defaults', 'buildSubmitRequest', [ctx(model, saved.requestBody)], { ...p.buildSubmitRequest(ctx(model)), action: config.type === 'audio' ? 'text_to_audio' : 'text_to_video', body: {} });
+  test(model + ': native defaults used only in sidecar', () => {
+    assert.equal(facts.requests, 1);
+    if (config.secondsField) assert.equal(facts.seconds, config.rules[config.secondsField].default);
+    if (config.resolutions.length) {
+      const r = config.resolutions.find(r => r.upstream === config.rules.resolution.default);
+      assert.equal(facts.resolution, r.resolution); assert.equal(facts.orientation, r.orientation);
+    }
+  });
+  const business = { seed: { future: true }, prompt: null, ref_image_0: false, emo_random: 'upstream decides', extension: [true, null, { a: '中文' }] };
+  const intent = p.native.rawCreate(rawContext(model, business));
+  fixture(model + ': native nonbilling types delegated unchanged', 'buildSubmitRequest', [ctx(model, intent.requestBody)], { ...p.buildSubmitRequest(ctx(model, saved.requestBody)), action: config.type === 'audio' ? 'text_to_audio' : config.input_reference.includes('ref_image_0') ? 'image_to_video' : 'text_to_video', body: business });
+  for (const key of ['duration', 'audio_duration', 'resolution']) if (!config.rules[key]) nativeFixture(model + ': unsupported billing field ' + key, 'rawCreate', [rawContext(model, { [key]: 5 })], null, 'cannot safely bill native ' + key);
+}
+const nativeModel = 'minimax_h3_z0901';
+const nativeBase = p.native.rawCreate(rawContext(nativeModel, { prompt: 'test' })).requestBody;
+const hostileRaw = { prompt: 'test', requests: 0, seconds: 999, orientation: 'landscape', model: 'cheaper-model', content: [], __autodl_native: '{}', __autodl_minimax: '{}', __autodl_fields: [], facts: { requests: 0, seconds: 1, resolution: '480p' }, future: { resolution: 'fake', requests: 0 } };
+const hostileIntent = p.native.rawCreate(rawContext(nativeModel, hostileRaw));
+fixture('native client facts cannot override trusted usage', 'extractUsage', [ctx(nativeModel, hostileIntent.requestBody)], { requests: 1, seconds: 5, resolution: '768p', orientation: 'portrait' });
+fixture('native client lookalike fields remain original upstream business data', 'buildSubmitRequest', [ctx(nativeModel, hostileIntent.requestBody)], { ...p.buildSubmitRequest(ctx(nativeModel, nativeBase)), body: hostileRaw });
+for (const hook of ['buildSubmitRequest', 'extractUsage', 'parseSubmitResponse']) {
+  const args = input => hook === 'parseSubmitResponse' ? [ctx(nativeModel, input), { statusCode: 200, body: envelope('QUEUED') }] : [ctx(nativeModel, input)];
+  for (const [key, value] of Object.entries({ requests: 0, seconds: 1, resolution: '480p', orientation: 'landscape' })) {
+    reject('native ' + hook + ' rejects forged ' + key, hook, args({ ...nativeBase, [key]: value }), 'native usage facts conflict');
+    const missing = { ...nativeBase }; delete missing[key];
+    reject('native ' + hook + ' requires saved fact ' + key, hook, args(missing), 'native usage facts conflict');
+  }
+  reject('native ' + hook + ' rejects workflow swap', hook, args({ ...nativeBase, model: 'minimax_h3_lightx2v_no_pic' }), 'native workflow identity conflicts');
+  for (const value of [null, {}, 'broken JSON', '[]', 'null', '42']) reject('native ' + hook + ' invalid source ' + JSON.stringify(value), hook, args({ ...nativeBase, __autodl_native: value }), 'AutoDL:');
+  for (const key of ['content', '__autodl_fields', '__autodl_minimax', 'unknown_wrapper']) reject('native ' + hook + ' cannot mix wrapper ' + key, hook, args({ ...nativeBase, [key]: [] }), 'invalid internal native request');
+  reject('native ' + hook + ' revalidates changed raw billing', hook, args({ ...nativeBase, __autodl_native: '{"prompt":"test","duration":10}' }), 'native usage facts conflict');
+}
+for (const value of [0, 16, 1.5, false, null, '', 'NaN', '1e1', [], {}]) nativeFixture('native decoder invalid duration ' + JSON.stringify(value), 'rawCreate', [rawContext(nativeModel, { prompt: 'test', duration: value })], null, 'duration must');
+for (const value of ['768P', '480p', null, 768, {}, []]) nativeFixture('native decoder invalid billing resolution ' + JSON.stringify(value), 'rawCreate', [rawContext(nativeModel, { resolution: value })], null, 'unsupported native resolution');
+for (const value of [null, [], 'test', 42]) nativeFixture('native decoder requires object ' + JSON.stringify(value), 'rawCreate', [rawContext(nativeModel, value)], null, 'requires a JSON object');
+nativeFixture('native decoder rejects undeclared workflow', 'rawCreate', [rawContext('future-undeclared', { prompt: 'test' })], null, 'unsupported model');
+reject('native upstream identity cannot change independently', 'buildSubmitRequest', [{ ...ctx(nativeModel, nativeBase), upstreamModel: 'minimax_h3_lightx2v_no_pic' }], 'native workflow identity conflicts');
+fixture('native query path unchanged', 'buildQueryRequest', [{ ...ctx(nativeModel, nativeBase), taskId: 'upstream-123' }], { url: base.baseUrl + 'api/v1/comfyui/comfyui_workflow/result/upstream-123', method: 'GET', headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' } });
+test('native decoder analysis does not mutate caller object', () => {
+  const raw = { prompt: 'test', duration: '8', seed: '00123', future: { foo: [null, true] } }, before = JSON.stringify(raw);
+  const intent = p.native.rawCreate(rawContext(nativeModel, raw));
+  p.buildSubmitRequest(ctx(nativeModel, intent.requestBody)); p.extractUsage(ctx(nativeModel, intent.requestBody));
+  assert.equal(JSON.stringify(raw), before);
+});
+writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

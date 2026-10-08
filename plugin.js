@@ -2653,8 +2653,8 @@ function normalizeInput(config, input) {
   return { body: body, facts: facts, type: config.type };
 }
 
-// All request dialects converge on the same {body, facts, type} structure.
-// Driver hooks consume this structure without choosing routes or protocols.
+// OpenAI and MiniMax generate a validated upstream body. Native requests keep
+// their JSON body separate from the read-only task/billing analysis below.
 function normalizeRaw(config, input) {
   if (!object(input)) throw new Error("AutoDL: raw body must be a JSON object");
   const body = {}, facts = { requests: 1 };
@@ -2690,6 +2690,39 @@ function normalizeRaw(config, input) {
     facts.resolution = selected.resolution; facts.orientation = selected.orientation;
   }
   return { body: body, facts: facts, type: config.type };
+}
+
+function analyzeNativeRequest(config, rawBody) {
+  if (!object(rawBody)) throw new Error("AutoDL: native body must be a JSON object");
+  const facts = { requests: 1 };
+  for (const key of ["duration", "audio_duration"]) {
+    if (has(rawBody, key) && !has(config.rules, key)) throw new Error("AutoDL: cannot safely bill native " + key + " for this workflow");
+  }
+  if (config.secondsField) {
+    const key = config.secondsField, rule = config.rules[key];
+    facts.seconds = numberValue(has(rawBody, key) ? rawBody[key] : rule.default, rule, key);
+  }
+  if (config.resolutions.length) {
+    const value = has(rawBody, "resolution") ? rawBody.resolution : config.rules.resolution.default;
+    const selected = config.resolutions.find(function (entry) { return entry.upstream === value; });
+    if (!selected) throw new Error("AutoDL: unsupported native resolution for this workflow; cannot safely calculate billing facts");
+    facts.resolution = selected.resolution; facts.orientation = selected.orientation;
+  } else if (has(rawBody, "resolution")) throw new Error("AutoDL: cannot safely bill native resolution for this workflow");
+  const action = config.type === "audio" ? "text_to_audio" : config.videos.some(function (key) { return has(rawBody, key); }) ? "video_to_video" : config.input_reference.some(function (key) { return has(rawBody, key); }) ? "image_to_video" : "text_to_video";
+  return { facts: facts, type: config.type, action: action };
+}
+
+function savedNative(config, input) {
+  if (Object.keys(input).some(function (key) { return !["model", "__autodl_native", "requests", "seconds", "resolution", "orientation"].includes(key); }) || typeof input.__autodl_native !== "string") throw new Error("AutoDL: invalid internal native request");
+  if (input.model !== config.workflowId) throw new Error("AutoDL: internal native workflow identity conflicts");
+  let rawBody;
+  try { rawBody = JSON.parse(input.__autodl_native); } catch (_) { throw new Error("AutoDL: invalid internal native JSON source"); }
+  const analysis = analyzeNativeRequest(config, rawBody);
+  for (const key of ["requests", "seconds", "resolution", "orientation"]) {
+    if (has(input, key) !== has(analysis.facts, key) || input[key] !== analysis.facts[key]) throw new Error("AutoDL: internal native usage facts conflict");
+  }
+  // Return the parsed original, never a body generated from the billing facts.
+  return { body: rawBody, facts: analysis.facts, type: analysis.type, action: analysis.action };
 }
 
 const MINIMAX_RESOLUTIONS = { "480P": "480p", "768P": "768p", "2K": "1440p" };
@@ -2764,6 +2797,11 @@ function savedMiniMax(input) {
 
 function requestWorkflow(ctx) {
   const model = miniMaxModel(ctx.upstreamModel || ctx.model), input = ctx.requestBody;
+  if (object(input) && has(input, "__autodl_native")) {
+    const config = workflow(model);
+    if (input.model !== config.workflowId) throw new Error("AutoDL: internal native workflow identity conflicts");
+    return config;
+  }
   if (object(input) && has(input, "__autodl_minimax")) {
     const source = savedMiniMax(input), config = officialWorkflow(source.model, source);
     if (isMiniMaxModel(model) ? model !== source.model : model !== config.workflowId) throw new Error("AutoDL: internal MiniMax workflow identity conflicts");
@@ -2847,6 +2885,7 @@ function normalizeMiniMax(config, input) {
 }
 
 function normalizeRequest(config, input) {
+  if (object(input) && has(input, "__autodl_native")) return savedNative(config, input);
   if (object(input) && has(input, "__autodl_fields")) {
     if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "__autodl_minimax", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
     let expected;
@@ -2950,6 +2989,7 @@ function results(body, fallbackType) {
 const STATUSES = { QUEUED: "QUEUED", RUNNING: "IN_PROGRESS", SUCCESS: "SUCCESS", FAILED: "FAILURE", completed: "SUCCESS" };
 
 function taskAction(config, input) {
+  if (object(input) && has(input, "__autodl_native")) return savedNative(config, input).action;
   if (object(input) && (has(input, "content") || has(input, "__autodl_fields"))) {
     const body = normalizeRequest(config, input).body;
     return config.type === "audio" ? "text_to_audio" : config.videos.some(function (key) { return has(body, key); }) ? "video_to_video" : config.input_reference.some(function (key) { return has(body, key); }) ? "image_to_video" : "text_to_video";
@@ -3136,7 +3176,7 @@ function decodeCompatible(ctx, pinnedModel) {
 
 function canonicalRequest(model, normalized) {
   // Key/value pairs prevent the host's recursive usage preflight from treating
-  // native resolution enum labels as billing enum values. Facts stay explicit.
+  // generated resolution enum labels as billing enum values. Facts stay explicit.
   return Object.assign({ model: model, __autodl_fields: Object.entries(normalized.body) }, normalized.facts);
 }
 
@@ -3145,8 +3185,11 @@ function decodeRaw(ctx) {
   const model = text((ctx.params || {}).workflow_id);
   if (!model) throw new Error("AutoDL: raw endpoint requires a workflow ID in the URL");
   const config = workflow(model);
-  const request = canonicalRequest(model, normalizeRaw(config, ctx.body.value));
-  return { kind: "submit", model: model, action: taskAction(config, request), requestBody: request };
+  const analysis = analyzeNativeRequest(config, ctx.body.value);
+  // The host recursively scans usage field names. An opaque JSON string keeps
+  // client fields (including nested lookalikes) isolated from trusted facts.
+  const request = Object.assign({ model: model, __autodl_native: JSON.stringify(ctx.body.value) }, analysis.facts);
+  return { kind: "submit", model: model, action: analysis.action, requestBody: request };
 }
 
 export const native = {

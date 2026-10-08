@@ -1179,6 +1179,112 @@
           "modality": "video"
         }
       }
-    }
+    },
+    "native_passthrough": [
+      {
+        "name": "explicit-billing",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_z0901",
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}",
+        "body": {
+          "prompt": "一只猫在雪地奔跑",
+          "duration": 8,
+          "resolution": "768p横(1344*768)",
+          "seed": 12345
+        },
+        "expected_internal_facts": {
+          "requests": 1,
+          "seconds": 8,
+          "resolution": "768p",
+          "orientation": "landscape"
+        }
+      },
+      {
+        "name": "omitted-defaults",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_z0901",
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}",
+        "body": {
+          "prompt": "test"
+        },
+        "expected_internal_facts": {
+          "requests": 1,
+          "seconds": 5,
+          "resolution": "768p",
+          "orientation": "portrait"
+        }
+      },
+      {
+        "name": "duration-ten",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_z0901",
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}",
+        "body": {
+          "prompt": "test",
+          "duration": 10
+        },
+        "expected_internal_facts": {
+          "requests": 1,
+          "seconds": 10,
+          "resolution": "768p",
+          "orientation": "portrait"
+        }
+      },
+      {
+        "name": "numeric-strings",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_z0901",
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}",
+        "body": {
+          "prompt": "test",
+          "duration": "8",
+          "seed": "00123"
+        },
+        "expected_internal_facts": {
+          "requests": 1,
+          "seconds": 8,
+          "resolution": "768p",
+          "orientation": "portrait"
+        }
+      },
+      {
+        "name": "future-parameters",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_z0901",
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}",
+        "body": {
+          "prompt": "test",
+          "future_autodl_option": 123,
+          "future_nested": {
+            "resolution": "future value",
+            "seconds": -99,
+            "requests": 0,
+            "items": [
+              null,
+              true,
+              "中文"
+            ]
+          }
+        },
+        "expected_internal_facts": {
+          "requests": 1,
+          "seconds": 5,
+          "resolution": "768p",
+          "orientation": "portrait"
+        }
+      },
+      {
+        "name": "audio-duration",
+        "path": "/api/v1/comfyui/comfyui_workflow/minimax_h3_image_audio_to_video",
+        "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}",
+        "body": {
+          "prompt": "test",
+          "audio_duration": "10",
+          "ref_image_0": "https://your-public-file-host.example/image.png",
+          "ref_audio_0": "https://your-public-file-host.example/audio.wav"
+        },
+        "expected_internal_facts": {
+          "requests": 1,
+          "seconds": 10,
+          "resolution": "768p",
+          "orientation": "portrait"
+        }
+      }
+    ]
   }
 }

@@ -17,7 +17,7 @@
 - indexTTS2 音频工作流
 - 后续新增工作流扩展
 
-通过官方 Task Plugin API v1 实现，原有模型名与官网工作流 ID 一致；MiniMax 格式还提供 `MiniMax-H3` 和 `MiniMax-H3-Max` 自动路由。三种请求格式在解码层转换，共用同一套工作流定义、提交、轮询、计费和结果处理。
+通过官方 Task Plugin API v1 实现，原有模型名与官网工作流 ID 一致；MiniMax 格式还提供 `MiniMax-H3` 和 `MiniMax-H3-Max` 自动路由。OpenAI 和 MiniMax 在解码层转换；原生请求只做旁路分析并透传原始 JSON。三种格式共用同一套工作流定义、提交、轮询、计费和结果处理。
 
 ## URL 安装
 
@@ -55,7 +55,7 @@ URL 安装不会自动配置渠道或导入模型价格。请完成上述渠道�
 
 ## 支持模型
 
-下面的图片、音频、视频范围表示必需的最少数量和允许的最多数量。完整默认值、枚举、参数上下限和精确尺寸映射见 [workflows.json](workflows.json)。[examples.json](examples.json) 保留根目录工作流 ID 对应的 OpenAI 示例，并在 `_formats.minimax` 和 `_formats.autodl` 中提供全部 17 个工作流的等价示例；原生示例包含 `path` 和 `body`。`_formats.minimax` 另包含两个官方别名示例，`_formats.minimax_scenarios` 提供 15 个路由场景及对应预期工作流；调用时只发送各条目的 `request`。
+下面的图片、音频、视频范围表示官网定义的最少数量和最多数量。OpenAI/MiniMax 转换层严格校验媒体数量；原生模式将业务字段及媒体数量交给 AutoDL 验证。完整默认值、枚举、参数上下限和精确尺寸映射见 [workflows.json](workflows.json)。[examples.json](examples.json) 保留根目录工作流 ID 对应的 OpenAI 示例，并在 `_formats.minimax` 和 `_formats.autodl` 中提供全部 17 个工作流的等价示例；原生示例包含 `path` 和 `body`，`_formats.native_passthrough` 另提供省略默认值、数字字符串、未知字段和内部计费 facts 的透传示例；只发送 `body`，不要发送示例中的 `expected_internal_facts`。`_formats.minimax` 另包含两个官方别名示例，`_formats.minimax_scenarios` 提供 15 个路由场景及对应预期工作流；调用时只发送各条目的 `request`。
 
 | 模型名 / 官网工作流 ID | 官网名称 | seconds 范围 | 输入媒体数量 | resolution |
 |---|---|---|---|---|
@@ -254,7 +254,50 @@ curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" \
   -H "Authorization: Bearer $NEW_API_KEY"
 ```
 
-AutoDL 原生 body 使用该工作流的原字段、原 resolution 枚举以及原媒体槽位，如 `audio_duration / ref_audio_0 / ref_video / prompt_text / emo_*`。未知字段、缺少必需项、错误类型和范围都报错。可选媒体槽位可按原始字段名单独指定，保持索引，不压缩、不补齐。省略时长、分辨率或情感模式时采用官网默认值；不自动提供必需图片或音频。官网 `input_example` 中的说明文字是占位说明，需要换成实际参数或 URL；indexTTS2 的具体示例可直接使用，包括其数值 `emo_surprised: 0`。
+## AutoDL 原生 body 透传与内部计费
+
+原生入口执行 **Native Body Passthrough + New API Sidecar Validation/Billing**。真正发送给 AutoDL 的 JSON body 与客户端原始 JSON **deep-equal**：字段、值、数值与字符串类型、数组顺序、嵌套对象均保留；不删除未知字段、不补默认字段、不改 resolution 文本，不重新生成一份等价 body。这里保证 JSON 语义一致，不保证 HTTP 字节、空白或对象键顺序一致；New API 会解析、序列化 JSON。
+
+插件仅旁路读取原始 body，结合已声明的 workflow 配置计算 `action / type / facts`，并建立和维护 New API task。省略时长、分辨率时，官网 rule 的默认值仅用于内部计费，**不写回上游 body**；情感模式等非计费字段也不会自动补入。`prompt / seed / first_frame / last_frame / ref_image_* / ref_audio_* / ref_video / prompt_text / emo_*` 等业务字段保持原样。未知扩展字段和业务参数有效性由 AutoDL 决定，本地 snapshot 不阻止新增非计费字段透传。
+
+本地严格校验 New API 必须理解的计费内容：
+
+- body 必须是 JSON object，URL 中的 workflow ID 必须是插件已声明的 17 个工作流之一。
+- 显式 `duration` 或 `audio_duration` 必须符合该 workflow 的整数类型及上下限；数字字符串可用于分析，但上游仍收到原始字符串。
+- 显式 `resolution` 必须是该 workflow 已知的 AutoDL 原始枚举，能映射到内部档位和方向；不接受统一档位或 MiniMax 拼写替代它。
+- workflow 没有对应 `duration / audio_duration / resolution` 规则时，显式传入这些计费字段会报无法安全计费；未知非计费字段仍透传。
+
+例如提交 `minimax_h3_z0901`：
+
+```json
+{"prompt":"一只猫在雪地奔跑","duration":8,"resolution":"768p横(1344*768)","seed":12345}
+```
+
+AutoDL 收到完全相同的 body；New API 内部计算的 facts 是：
+
+```json
+{"requests":1,"seconds":8,"resolution":"768p","orientation":"landscape"}
+```
+
+如果只提交：
+
+```json
+{"prompt":"test"}
+```
+
+AutoDL 仍只收到 `prompt`；内部采用该 workflow 默认时长与分辨率计算：
+
+```json
+{"requests":1,"seconds":5,"resolution":"768p","orientation":"portrait"}
+```
+
+客户端 body 中的 `requests / seconds / orientation / facts / model` 或类似内部字段，不参与覆盖 usage facts 或工作流身份；它们作为原始业务数据隔离保存、透传。插件生成的内部包装、marker、facts 不会额外进入 AutoDL body 或用户响应。提交和提取用量时，插件从保存的原始 JSON 与 workflow 配置重新计算 facts，并校验内部包装的一致性，拒绝伪造计费或交换工作流身份。
+
+修改前原生数据流为 `decodeRaw → normalizeRaw → canonicalRequest → __autodl_fields → normalizeRequest → 重建 AutoDL body`。修改后为 `decodeRaw → 保存原始 JSON + 只读 sidecar → 原始 body 发给 AutoDL → 共用 New API task`，旁路分析提供内部 action 和计费信息。OpenAI、MiniMax 继续原来的转换及自动路由。
+
+提交成功后的 task state 继续保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，沿用现有轮询、结果解析、artifact 和下载逻辑。成功使用提交时保存的 `state.facts` 结算；失败将 `requests` 与存在的 `seconds` 归零。上游 `data.duration` 是处理耗时，不用于视频生成秒数。
+
+官网 `input_example` 中的说明文字是占位说明，需要换成实际参数或 URL；indexTTS2 的数值 `emo_surprised: 0` 也保持原值交给上游。
 
 ## OpenAI 统一参数
 
@@ -371,7 +414,7 @@ TASK_ID='提交返回的task_id'
 curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" -H "Authorization: Bearer $NEW_API_KEY"
 ```
 
-原生查询保留现有 `task_id / status / progress / fail_reason / results` 响应；成功后 `results` 按顺序包含公开 `url` 和媒体 `type`。用该 URL 下载，不向产物站点发送 New API 密钥。请求 body 不包含 `model`，工作流 ID 仅放在 URL 中。
+原生查询保留现有 `task_id / status / progress / fail_reason / results` 响应；成功后 `results` 按顺序包含公开 `url` 和媒体 `type`。用该 URL 下载，不向产物站点发送 New API 密钥。请求 body 无需加入 `model`，工作流身份由 URL 决定；body 中即使出现同名字段，也不会改变内部路由。
 
 ## 指定 7 个模型的官方价格
 
@@ -442,11 +485,11 @@ node tests.mjs
 /new-api plugin test plugin.js --fixture golden.json
 ```
 
-`node tests.mjs` 执行 **2,037 项检查**并生成 **1,794 个官方 host fixture**。原有 672 个 OpenAI 与上游 fixture 保持不变，新增官方别名自动路由、全部 ratio、adaptive 默认方向、官方模型硬约束、错误组合以及三种格式的等价映射、计费事实、分辨率/比例/时长/种子边界、媒体 role 和原生字段校验。当前插件已在 rc.41 实际二进制通过 lint 和 1,794/1,794 fixture。
+`node tests.mjs` 执行 **2,230 项检查**并生成 **1,969 个官方 host fixture**。覆盖 OpenAI 与 MiniMax 原有行为、官方别名自动路由、全部 ratio、adaptive 默认方向、错误组合，以及原生 body deep-equal、无默认值写回、未知字段与嵌套参数、数字字符串、计费边界、内部 facts/工作流防伪、task state 和成功/失败结算。本次还将修改前全部 1,794 个 fixture 对当前源码重新执行，结果保持一致；OpenAI/MiniMax 参数转换、自动路由及任务生命周期函数未修改。当前源码在 rc.41 实际二进制通过 lint 和 1,969/1,969 fixture。
 
 URL 安装已验证：推荐 Raw URL 返回 HTTP 200 和纯文本源码，允许浏览器跨域读取；只下载 `plugin.js`，在应用本仓库 ComfyUI 路由补丁的 rc.41 隔离 New API 实例中通过官方上传接口导入、启用并注册全部 17 个工作流和 2 个 MiniMax 模型别名，随后通过不发送网络请求的 dryrun。单文件目录中没有仓库 JSON 或其他文件，断网 lint 也通过；此验证没有提交 AutoDL 生成任务。
 
-当前插件通过 125 项隔离 HTTP 检查，验证使用应用 ComfyUI 路由补丁的 rc.41 镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流、三种格式以及两个官方别名的 15 个路由场景逐一断言，覆盖 OpenAI、MiniMax V2 和完整 ComfyUI 原生路由、音频视频产物、辅助图片与视频混合结果、HEAD/Range 下载及错误处理，并验证 MiniMax 与原生参数拒绝、单图对象、多图对象数组、multipart 重复引用字段、严格图片数量、旧参考图字段及字符串写法拒绝、`file_id` 的明确报错和不支持的文件输入。GET 签名链接的 HEAD 兼容另在已有真实生产任务上验证。Python 客户端另通过 12 项零网络请求形状与完整提交、查询、下载检查。这些模拟测试不产生 AutoDL 费用，不能代替每个工作流真实付费生成的验证。
+当前插件通过 **143 项隔离 HTTP 检查**，验证使用应用 ComfyUI 路由补丁的 rc.41 镜像、独立 SQLite、模拟 AutoDL，上游参数与原始 Authorization 按全部 17 个工作流、三种格式以及两个官方别名的 15 个路由场景逐一断言，覆盖 OpenAI、MiniMax V2 和完整 ComfyUI 原生路由、音频视频产物、辅助图片与视频混合结果、HEAD/Range 下载及错误处理，并验证 MiniMax 参数拒绝、原生计费字段拒绝与业务字段原样透传、单图对象、多图对象数组、multipart 重复引用字段、严格图片数量、旧参考图字段及字符串写法拒绝、`file_id` 的明确报错和不支持的文件输入。GET 签名链接的 HEAD 兼容另在已有真实生产任务上验证。Python 客户端另通过 12 项零网络请求形状与完整提交、查询、下载检查。这些模拟测试不产生 AutoDL 费用，不能代替每个工作流真实付费生成的验证。
 
 此前 2026-10-08 生产验证仅提交了一次真实任务：`minimax_h3_lightx2v_no_pic`，1 秒、480p、横屏，成功生成 MP4，New API 记账 ¥0.03。复用同一个任务，源站及公网域名均通过认证 HEAD（200）和 Range GET（206），完整 MP4 下载也通过。本次 MiniMax 官方兼容增强使用模拟测试，没有新增真实生成任务，也未对其余 16 个工作流进行付费生成测试。¥0.03 为此前 New API 的记录，AutoDL 账户余额未另外核对。
 
