@@ -1,0 +1,162 @@
+{
+  "minimax_h3_z0903": {
+    "model": "minimax_h3_z0903",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ],
+    "audios": [
+      "https://your-public-file-host.example/reference-1.wav"
+    ]
+  },
+  "minimax_h3_z0902": {
+    "model": "minimax_h3_z0902",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ]
+  },
+  "minimax_h3_z0901": {
+    "model": "minimax_h3_z0901",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_zm_u24": {
+    "model": "minimax_h3_zm_u24",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ]
+  },
+  "minimax_h3_zm_u08": {
+    "model": "minimax_h3_zm_u08",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ]
+  },
+  "minimax_h3_b99_002": {
+    "model": "minimax_h3_b99_002",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "736p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png",
+      "https://your-public-file-host.example/reference-2.png"
+    ]
+  },
+  "minimax_h3_b99_001": {
+    "model": "minimax_h3_b99_001",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "736p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_b99_003_12s": {
+    "model": "minimax_h3_b99_003_12s",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "736p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ]
+  },
+  "wan2.2animate-v4-motion_retargeting": {
+    "model": "wan2.2animate-v4-motion_retargeting",
+    "resolution": "832p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ],
+    "videos": [
+      "https://your-public-file-host.example/reference-1.mp4"
+    ]
+  },
+  "minimax_h3_image_audio_to_video_v2_15s": {
+    "model": "minimax_h3_image_audio_to_video_v2_15s",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_lightx2v_v5_15s": {
+    "model": "minimax_h3_lightx2v_v5_15s",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ]
+  },
+  "minimax_h3_image_audio_to_video_v2": {
+    "model": "minimax_h3_image_audio_to_video_v2",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_image_audio_to_video": {
+    "model": "minimax_h3_image_audio_to_video",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ],
+    "audios": [
+      "https://your-public-file-host.example/reference-1.wav"
+    ]
+  },
+  "minimax_h3_lightx2v_v5": {
+    "model": "minimax_h3_lightx2v_v5",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png"
+    ]
+  },
+  "minimax_h3_lightx2v_no_pic": {
+    "model": "minimax_h3_lightx2v_no_pic",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_lightx2v": {
+    "model": "minimax_h3_lightx2v",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "images": [
+      "https://your-public-file-host.example/reference-1.png",
+      "https://your-public-file-host.example/reference-2.png"
+    ]
+  },
+  "indextts2-v1": {
+    "model": "indextts2-v1",
+    "prompt": "你好，这是语音合成测试",
+    "audios": [
+      "https://your-public-file-host.example/reference-1.wav"
+    ]
+  }
+}

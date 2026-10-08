@@ -1,0 +1,20 @@
+name: Plugin regression checks
+on:
+  push:
+  pull_request:
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tests.mjs
+      - run: python3 -m py_compile test-task.py test-video.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-host-fixtures
+          path: golden.json

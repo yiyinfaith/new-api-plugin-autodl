@@ -1,0 +1,154 @@
+{
+  "verified_on": "2026-10-08",
+  "timezone": "Asia/Shanghai",
+  "peak_hours": "08:00-24:00",
+  "off_peak_hours": "00:00-08:00",
+  "upstream_price_divisor": 1000,
+  "unit_source": "https://www.autodl.art/assets/utils.dfb09e17.js",
+  "period_source": "https://www.autodl.art/assets/detail.ea9ea954.js",
+  "new_api_price_scale": 1,
+  "new_api_display_note": "Verified site uses CNY display with USDExchangeRate=1. No FX conversion or extra markup. Existing group multipliers still apply.",
+  "models": {
+    "minimax_h3_lightx2v_no_pic": {
+      "name": "H3文生视频",
+      "source": "https://www.autodl.art/api/v1/comfyui/workflows/minimax_h3_lightx2v_no_pic",
+      "unit": "CNY per generated video second",
+      "prices": [
+        {
+          "resolution": "480p",
+          "peak": 0.03,
+          "off_peak": 0.02
+        },
+        {
+          "resolution": "768p",
+          "peak": 0.04,
+          "off_peak": 0.03
+        }
+      ],
+      "expression": "hour(\"Asia/Shanghai\") < 8 ? (u(\"resolution\") == \"480p\" ? tier(\"off_peak_480p\", u(\"seconds\") * 0.02) : (tier(\"off_peak_768p\", u(\"seconds\") * 0.03))) : (u(\"resolution\") == \"480p\" ? tier(\"peak_480p\", u(\"seconds\") * 0.03) : (tier(\"peak_768p\", u(\"seconds\") * 0.04)))"
+    },
+    "minimax_h3_lightx2v_v5": {
+      "name": "H3多图参考生视频",
+      "source": "https://www.autodl.art/api/v1/comfyui/workflows/minimax_h3_lightx2v_v5",
+      "unit": "CNY per generated video second",
+      "prices": [
+        {
+          "resolution": "480p",
+          "peak": 0.03,
+          "off_peak": 0.02
+        },
+        {
+          "resolution": "768p",
+          "peak": 0.04,
+          "off_peak": 0.03
+        },
+        {
+          "resolution": "1080p",
+          "peak": 0.09,
+          "off_peak": 0.05
+        }
+      ],
+      "expression": "hour(\"Asia/Shanghai\") < 8 ? (u(\"resolution\") == \"480p\" ? tier(\"off_peak_480p\", u(\"seconds\") * 0.02) : (u(\"resolution\") == \"768p\" ? tier(\"off_peak_768p\", u(\"seconds\") * 0.03) : (tier(\"off_peak_1080p\", u(\"seconds\") * 0.05)))) : (u(\"resolution\") == \"480p\" ? tier(\"peak_480p\", u(\"seconds\") * 0.03) : (u(\"resolution\") == \"768p\" ? tier(\"peak_768p\", u(\"seconds\") * 0.04) : (tier(\"peak_1080p\", u(\"seconds\") * 0.09))))"
+    },
+    "minimax_h3_lightx2v": {
+      "name": "H3首尾帧生成视频",
+      "source": "https://www.autodl.art/api/v1/comfyui/workflows/minimax_h3_lightx2v",
+      "unit": "CNY per generated video second",
+      "prices": [
+        {
+          "resolution": "480p",
+          "peak": 0.03,
+          "off_peak": 0.02
+        },
+        {
+          "resolution": "768p",
+          "peak": 0.04,
+          "off_peak": 0.03
+        }
+      ],
+      "expression": "hour(\"Asia/Shanghai\") < 8 ? (u(\"resolution\") == \"480p\" ? tier(\"off_peak_480p\", u(\"seconds\") * 0.02) : (tier(\"off_peak_768p\", u(\"seconds\") * 0.03))) : (u(\"resolution\") == \"480p\" ? tier(\"peak_480p\", u(\"seconds\") * 0.03) : (tier(\"peak_768p\", u(\"seconds\") * 0.04)))"
+    },
+    "minimax_h3_image_audio_to_video_v2": {
+      "name": "H3多图多音频生视频",
+      "source": "https://www.autodl.art/api/v1/comfyui/workflows/minimax_h3_image_audio_to_video_v2",
+      "unit": "CNY per generated video second",
+      "prices": [
+        {
+          "resolution": "480p",
+          "peak": 0.03,
+          "off_peak": 0.02
+        },
+        {
+          "resolution": "768p",
+          "peak": 0.04,
+          "off_peak": 0.03
+        },
+        {
+          "resolution": "1080p",
+          "peak": 0.1,
+          "off_peak": 0.06
+        }
+      ],
+      "expression": "hour(\"Asia/Shanghai\") < 8 ? (u(\"resolution\") == \"480p\" ? tier(\"off_peak_480p\", u(\"seconds\") * 0.02) : (u(\"resolution\") == \"768p\" ? tier(\"off_peak_768p\", u(\"seconds\") * 0.03) : (tier(\"off_peak_1080p\", u(\"seconds\") * 0.06)))) : (u(\"resolution\") == \"480p\" ? tier(\"peak_480p\", u(\"seconds\") * 0.03) : (u(\"resolution\") == \"768p\" ? tier(\"peak_768p\", u(\"seconds\") * 0.04) : (tier(\"peak_1080p\", u(\"seconds\") * 0.1))))"
+    },
+    "minimax_h3_image_audio_to_video": {
+      "name": "H3图生视频-音频同步(自动对口型)",
+      "source": "https://www.autodl.art/api/v1/comfyui/workflows/minimax_h3_image_audio_to_video",
+      "unit": "CNY per generated video second",
+      "prices": [
+        {
+          "resolution": "480p",
+          "peak": 0.03,
+          "off_peak": 0.02
+        },
+        {
+          "resolution": "768p",
+          "peak": 0.04,
+          "off_peak": 0.03
+        },
+        {
+          "resolution": "1080p",
+          "peak": 0.09,
+          "off_peak": 0.05
+        }
+      ],
+      "expression": "hour(\"Asia/Shanghai\") < 8 ? (u(\"resolution\") == \"480p\" ? tier(\"off_peak_480p\", u(\"seconds\") * 0.02) : (u(\"resolution\") == \"768p\" ? tier(\"off_peak_768p\", u(\"seconds\") * 0.03) : (tier(\"off_peak_1080p\", u(\"seconds\") * 0.05)))) : (u(\"resolution\") == \"480p\" ? tier(\"peak_480p\", u(\"seconds\") * 0.03) : (u(\"resolution\") == \"768p\" ? tier(\"peak_768p\", u(\"seconds\") * 0.04) : (tier(\"peak_1080p\", u(\"seconds\") * 0.09))))"
+    },
+    "minimax_h3_image_audio_to_video_v2_15s": {
+      "name": "H3多图多音频生视频15秒",
+      "source": "https://www.autodl.art/api/v1/comfyui/workflows/minimax_h3_image_audio_to_video_v2_15s",
+      "unit": "CNY per generated video second",
+      "prices": [
+        {
+          "resolution": "480p",
+          "peak": 0.03,
+          "off_peak": 0.02
+        },
+        {
+          "resolution": "768p",
+          "peak": 0.04,
+          "off_peak": 0.03
+        }
+      ],
+      "expression": "hour(\"Asia/Shanghai\") < 8 ? (u(\"resolution\") == \"480p\" ? tier(\"off_peak_480p\", u(\"seconds\") * 0.02) : (tier(\"off_peak_768p\", u(\"seconds\") * 0.03))) : (u(\"resolution\") == \"480p\" ? tier(\"peak_480p\", u(\"seconds\") * 0.03) : (tier(\"peak_768p\", u(\"seconds\") * 0.04)))"
+    },
+    "minimax_h3_lightx2v_v5_15s": {
+      "name": "H3多图生视频15秒",
+      "source": "https://www.autodl.art/api/v1/comfyui/workflows/minimax_h3_lightx2v_v5_15s",
+      "unit": "CNY per generated video second",
+      "prices": [
+        {
+          "resolution": "480p",
+          "peak": 0.03,
+          "off_peak": 0.02
+        },
+        {
+          "resolution": "768p",
+          "peak": 0.04,
+          "off_peak": 0.03
+        }
+      ],
+      "expression": "hour(\"Asia/Shanghai\") < 8 ? (u(\"resolution\") == \"480p\" ? tier(\"off_peak_480p\", u(\"seconds\") * 0.02) : (tier(\"off_peak_768p\", u(\"seconds\") * 0.03))) : (u(\"resolution\") == \"480p\" ? tier(\"peak_480p\", u(\"seconds\") * 0.03) : (tier(\"peak_768p\", u(\"seconds\") * 0.04)))"
+    }
+  }
+}

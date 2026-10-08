@@ -1,0 +1,14 @@
+.research/
+__pycache__/
+*.pyc
+*.part
+golden.json
+deployment-evidence.json
+http-qa-evidence.json
+real-generation-evidence.json
+host-validation.json
+*.mp4
+*.wav
+*.dump
+*.log
+.env
