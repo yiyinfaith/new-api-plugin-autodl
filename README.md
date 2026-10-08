@@ -37,10 +37,10 @@ flowchart TD
     Entry --> Dash["DashScope Wan：官方 video-synthesis 路径"]
     Dash --> Motion["wan2.2-animate-move → 动作迁移"]
     Motion --> Map
-    OpenAI --> Map["统一参数校验与工作流字段映射"]
+    OpenAI --> Map["URL/Data URL 输入校验与工作流字段映射"]
     MiniMax --> Route["官方模型名自动路由或直接工作流 ID"]
     Route --> Map
-    Native --> Sidecar["保存原始 JSON；只读分析计费字段"]
+    Native --> Sidecar["保留原始 JSON；媒体格式校验与计费分析"]
     Map --> Host["New API：渠道选择、usage 校验、预扣额度"]
     Sidecar --> Host
     Host --> Submit["共用提交钩子；使用渠道 AutoDL Token"]
@@ -53,7 +53,7 @@ flowchart TD
 
 OpenAI 解码器将 `seconds / size / input_reference` 等统一字段转换成该工作流实际参数；MiniMax 解码器解析 `content`，根据官方模型名、媒体、时长和比例选择工作流，再使用同一份 `WORKFLOWS` 定义映射。直接传工作流 ID 时保留该工作流能力，官方模型名则先执行 H3/H3-Max 的额外约束。两者会校验业务字段、媒体数量并应用已定义的默认值。
 
-原生入口保存原始 JSON，保持发送给 AutoDL 的 body 在 JSON 语义上完全一致；它只旁路分析时长、分辨率、任务类型和 action。未知非计费字段、数字字符串、嵌套扩展字段不会被重写，缺省值仅用于内部计费。即使原生 body 含有宿主的附件标记同名字段，也按普通业务 JSON 发送。业务参数和媒体有效性由 AutoDL 校验。
+原生入口保存原始 JSON，保持发送给 AutoDL 的 body 在 JSON 语义上完全一致；它只旁路分析时长、分辨率、任务类型和 action。未知非计费字段、数字字符串、嵌套扩展字段不会被重写，缺省值仅用于内部计费。即使原生 body 含有宿主的附件标记同名字段，也按普通业务 JSON 发送。插件仅校验已知媒体字符串的 URL/Data URL 格式并原样透传；媒体实际内容和业务参数由 AutoDL 校验。
 
 四种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量，动作迁移完成时测量成片并结算；AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
 
@@ -138,6 +138,21 @@ OpenAI 和原生格式继续使用官网完整工作流 ID，例如 `minimax_h3_
 
 **OpenAI 参数格式和原有校验保持不变。** 不通过 `duration`、`resolution` 或 `ref_image_*` 等容易冲突的字段猜测原生格式。四种格式均使用 New API 密钥鉴权、AutoDL 渠道和同一套价格配置。插件注册上述 MiniMax 与原生路径，OpenAI 路径由宿主提供；原生路径只接收原生 body。
 
+## 输入媒体：URL 与 Data URL
+
+已完成四套接口的付费生成验证，任务 ID、视频结果和测试边界见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md)。
+
+| 请求格式 | 图片 | 音频 | 视频 |
+|---|---|---|---|
+| OpenAI Video | `input_reference.image_url` 或对象数组 | `audios[]` | `videos[]` |
+| MiniMax V2 | `content[].image_url.url` | `content[].audio_url.url` | `content[].video_url.url` |
+| AutoDL 原生 | 该 workflow 的 `first_frame / last_frame / ref_image_* / ref_image` 等原生字段 | `ref_audio_* / voice / emo_ref_audio` 等原生字段 | `ref_video` 等原生字段 |
+| DashScope Wan | `input.image_url` | 无音频字段 | `input.video_url` |
+
+以上已有媒体字段同时接受公网 HTTP(S) URL 和标准 `data:image/...;base64,...`、`data:audio/...;base64,...`、`data:video/...;base64,...`。MIME 前缀必须匹配字段类型；Base64 必须使用标准字母表和正确补位，不能传裸 Base64、百分号编码、换行、额外 charset 参数或 `file_id`。仍按 workflow 校验媒体数量，不增加官方协议字段。Data URL 是适配器的输入扩展，实际媒体格式、尺寸与内容仍受上游限制。
+
+**输出继续返回公网 URL，不返回 Base64。** 动作迁移的视频 Data URL 需要应用本仓库更新后的[时长计量补丁](new-api-video-duration.patch)：宿主只对输入的 `video/mp4` 或 `video/webm` 解码为临时文件，再沿用 `ffprobe` 测量；256 MiB、3600 秒限制、预扣/成片结算与输出 URL 抓取策略不变。完整编码示例见 [API 输入媒体说明](API.md#输入媒体url-与-data-url)。
+
 ## 阿里云百炼 / DashScope Wan
 
 新增官方路径：`POST /api/v1/services/aigc/image2video/video-synthesis`、`GET /api/v1/tasks/{task_id}`。仅支持 `wan2.2-animate-move`，插件自动映射到 `wan2.2animate-v4-motion_retargeting`，无需该入口的人工模型映射；原有同名映射可保留。渠道需声明外部模型并配置价格、分组权限。完整 curl、字段表、响应与状态映射见 [DashScope Wan API 文档](API.md#阿里云百炼--dashscope-wan-api)。
@@ -159,7 +174,7 @@ OpenAI 和原生格式继续使用官网完整工作流 ID，例如 `minimax_h3_
 | 参考音频 | `{"type":"audio_url","audio_url":{"url":"https://…"},"role":"reference_audio"}` | 按出现顺序映射工作流音频槽位 |
 | 参考视频 | `{"type":"video_url","video_url":{"url":"https://…"},"role":"reference_video"}` | 按出现顺序映射工作流视频槽位，如 `ref_video` |
 
-省略图片 role 时遵循官方的 `first_frame` 含义；多图参考工作流应明确写 `reference_image`。首尾帧按 role 定位，重复 role、缺少必需帧、超出媒体数量或混合首尾帧与参考媒体都报错。所有媒体仍须公开 HTTP(S) URL，不支持 Base64、文件 ID 或二进制上传。
+省略图片 role 时遵循官方的 `first_frame` 含义；多图参考工作流应明确写 `reference_image`。首尾帧按 role 定位，重复 role、缺少必需帧、超出媒体数量或混合首尾帧与参考媒体都报错。图片、音频、视频输入均接受公开 HTTP(S) URL 或标准 Base64 Data URL；不支持裸 Base64、文件 ID 或二进制上传。
 
 带分辨率控制的工作流必须提供 `resolution`；`ratio` 按下方官方场景规则处理。直接指定 AutoDL 工作流时，分辨率映射如下：
 
@@ -357,8 +372,8 @@ AutoDL 仍只收到 `prompt`；内部采用该 workflow 默认时长与分辨率
 | `orientation` | string | `portrait` 竖屏、`landscape` 横屏、`square` 方形；按工作流枚举校验 |
 | `size` | string | 可选精确尺寸，如 `864x480`；只对已确认尺寸的工作流支持；与上述参数冲突时报错 |
 | `input_reference` | object / object[] | 单张参考图用 `{ "image_url": "https://…" }`，多张用同结构对象数组；按顺序映射首尾帧或 `ref_image_*`，严格校验工作流允许的数量 |
-| `audios` | string[] | 公开 HTTP(S) 音频 URL；按顺序映射参考音频；TTS 第一段是音色，第二段是情感参考 |
-| `videos` | string[] | 公开 HTTP(S) 视频 URL；动作迁移 `videos[0]` 映射 `ref_video` |
+| `audios` | string[] | 公开 HTTP(S) 音频 URL 或 `data:audio/...;base64,...`；按顺序映射参考音频；TTS 第一段是音色，第二段是情感参考 |
+| `videos` | string[] | 公开 HTTP(S) 视频 URL 或 `data:video/...;base64,...`；动作迁移 `videos[0]` 映射 `ref_video` |
 | `seed` | integer | 按官网该工作流的种子范围校验；没种子控制的工作流拒绝 |
 | `emotion` | object | indexTTS2 情感参数，见下文；其他工作流拒绝 |
 
@@ -382,10 +397,10 @@ JSON 和文本表单均可使用统一参数。表单里的 `input_reference` �
 - **单图工作流：** 必须恰好 1 张。
 - **首尾帧工作流：** 必须恰好 2 张，第 1 张映射 `first_frame`，第 2 张映射 `last_frame`。
 - **多图参考工作流：** 按数组顺序映射对应的 `ref_image_*`，数量以模型表为准（1–6、1–9，或官网允许图片全部可选的 0–9）。支持 0 张的工作流可省略字段或传 `[]`。
-- **数量或类型不合法直接报错：** 不自动补齐、截断或跳过，不接受 URL 字符串、字符串数组、`null` 占位、嵌套数组或混合类型数组。每个引用对象只能包含 `image_url`，其值必须为公开 HTTP(S) URL 字符串；额外字段也会报错。
+- **数量或类型不合法直接报错：** 不自动补齐、截断或跳过，不接受 URL 字符串、字符串数组、`null` 占位、嵌套数组或混合类型数组。每个引用对象只能包含 `image_url`，其值必须为公开 HTTP(S) URL 或标准图片 Data URL 字符串；额外字段也会报错。
 - 旧 `images` 字段彻底移除：字段一旦出现就报错，空数组也不兼容。所有参考图只通过 `input_reference` 输入。
 
-AutoDL 官网工作流 API 目前明确图片输入是公开 HTTP(S) URL。本插件没有可确认的上游文件上传/转存流程，因此 **不支持二进制文件上传、`file_id` 或 Base64/data URL**。包含 `file_id` 的引用对象会明确报错：`this adapter only supports image_url with public HTTP(S) URLs; file_id is not supported`，即使同时提供 `image_url` 也不接受。需要使用本地图片时，请先上传到可公开下载的存储，再将 URL 放入 `input_reference.image_url` 或对象数组中各项的 `image_url`。
+参考图接受公开 HTTP(S) URL 或标准图片 Data URL；不支持二进制文件上传和 `file_id`。包含 `file_id` 的引用对象会明确报错，即使同时提供 `image_url` 也不接受。本地文件可先编码成标准 Data URL，或上传到公开存储后填 URL；对象结构与数量规则不变。
 
 推荐客户端使用 `model`、`prompt`、`seconds`、`size` 和 `input_reference`。`seconds` 接受整数或数字字符串；秒数及精确尺寸仍以 AutoDL 工作流枚举为准，不能直接套用 Sora 的枚举。`resolution`、`orientation`、音频/视频输入和种子等工作流扩展仍保留。
 

@@ -188,7 +188,7 @@ for (const kind of ['form', 'multipart']) {
   test(kind + ': malformed reference array rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: ['[broken'] }, files: [] } }), /forms must be a JSON image_url object or object array/));
   for (const value of [singleReference.image_url, JSON.stringify(singleReference.image_url), JSON.stringify([singleReference.image_url, secondReference.image_url]), JSON.stringify({file_id: 'file-123'})]) test(kind + ': unsupported reference input ' + value, () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: [value] }, files: [] } }), /image_url/));
 }
-test('same-field multipart image files fail explicitly for URL-only adapter', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind: 'multipart', fields: referenceFields, files: [{ field: 'input_reference', ref: 'request_file:input_reference' }, { field: 'input_reference', ref: 'request_file:input_reference#1' }] } }), /binary uploads.*input_reference URLs/));
+test('same-field multipart image files fail explicitly for URL-only adapter', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind: 'multipart', fields: referenceFields, files: [{ field: 'input_reference', ref: 'request_file:input_reference' }, { field: 'input_reference', ref: 'request_file:input_reference#1' }] } }), /binary uploads.*input_reference/));
 test('generic native single reference matches protocol', () => {
   const body = { ...referenceContext.requestBody, input_reference: singleReference };
   assert.deepEqual(p.native.create({ body: { kind: 'json', value: body } }), p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind: 'json', value: body } }));
@@ -664,7 +664,7 @@ for (const key of ['model', 'input', 'parameters']) {
 for (const key of ['image_url', 'video_url']) {
   const missing = structuredClone(dashBody); delete missing.input[key];
   nativeFixture('DashScope requires input.' + key, 'dashCreate', [dashContext(missing)], null, 'invalid media URL');
-  for (const value of ['', 'data:image/png;base64,AAAA', 'file:///tmp/a', 'C:/a.png', 'AAAA', 'https://user:pass@cdn.example/a', ' https://cdn.example/a', null, 42, [], { file_id: 'file-1' }, 'http://127.0.0.1/a', 'http://localhost/a', 'http://192.168.1.1/a']) nativeFixture('DashScope rejects ' + key + ' ' + JSON.stringify(value), 'dashCreate', [dashContext({ ...dashBody, input: { ...dashBody.input, [key]: value } })], null, 'AutoDL:');
+  for (const value of ['', 'data:image/png;base64,abc', 'file:///tmp/a', 'C:/a.png', 'AAAA', 'https://user:pass@cdn.example/a', ' https://cdn.example/a', null, 42, [], { file_id: 'file-1' }, 'http://127.0.0.1/a', 'http://localhost/a', 'http://192.168.1.1/a']) nativeFixture('DashScope rejects ' + key + ' ' + JSON.stringify(value), 'dashCreate', [dashContext({ ...dashBody, input: { ...dashBody.input, [key]: value } })], null, 'AutoDL:');
 }
 for (const key of ['input', 'parameters']) for (const value of [null, [], false, 'x']) nativeFixture('DashScope requires object ' + key + ' ' + JSON.stringify(value), 'dashCreate', [dashContext({ ...dashBody, [key]: value })], null, 'must be objects');
 for (const model of [motionModel, 'MiniMax-H3', 'wan2.2-animate-mix', '', null, 1]) nativeFixture('DashScope rejects wrong model ' + String(model), 'dashCreate', [dashContext({ ...dashBody, model })], null, 'model must be');
@@ -705,5 +705,44 @@ test('DashScope examples match the decoder and official routes', () => {
   assert.equal(formats.dashscope_api.create_path, dashPath);
   assert.equal(formats.dashscope_api.query_path, '/api/v1/tasks/{task_id}');
 });
+const dataMedia = { image: 'data:image/png;base64,AA==', audio: 'data:audio/wav;base64,AA==', video: 'data:video/mp4;base64,AA==' };
+for (const [model, config] of Object.entries(catalog)) {
+  const expected = p.buildSubmitRequest(ctx(model));
+  const body = { ...expected.body };
+  for (const [field, rule] of Object.entries(config.rules)) if (dataMedia[rule.type] && Object.hasOwn(body, field)) body[field] = dataMedia[rule.type];
+  const openai = structuredClone(examples[model]);
+  if (openai.input_reference) openai.input_reference = referenceValues(openai.input_reference).map(() => ({ image_url: dataMedia.image }));
+  if (openai.audios) openai.audios = openai.audios.map(() => dataMedia.audio);
+  if (openai.videos) openai.videos = openai.videos.map(() => dataMedia.video);
+  fixture(model + ': Data URL OpenAI input mapping preserves billing and upstream fields', 'buildSubmitRequest', [ctx(model, openai)], { ...expected, body });
+  test(model + ': Data URL preserves usage facts', () => assert.deepEqual(p.extractUsage(ctx(model, openai)), p.extractUsage(ctx(model))));
+  const raw = p.native.rawCreate(rawContext(model, body));
+  fixture(model + ': Data URL native body is passed through unchanged', 'buildSubmitRequest', [ctx(model, raw.requestBody)], { ...expected, body });
+  const mini = structuredClone(formats.minimax[model]);
+  for (const item of mini.content) if (item.type !== 'text') item[item.type].url = dataMedia[item.type.split('_')[0]];
+  const intent = p.native.miniCreate({ body: { kind: 'json', value: mini } });
+  const request = p.buildSubmitRequest(ctx(model, intent.requestBody));
+  fixture(model + ': Data URL MiniMax input mapping', 'buildSubmitRequest', [ctx(model, intent.requestBody)], request);
+  test(model + ': MiniMax Data URL fields stay intact', () => {
+    assert.deepEqual(request.body, body, 'MiniMax and OpenAI must map equivalent input to the same upstream body');
+    for (const [field, rule] of Object.entries(config.rules)) if (dataMedia[rule.type] && Object.hasOwn(request.body, field)) assert.equal(request.body[field], dataMedia[rule.type]);
+  });
+}
+const dashDataBody = { ...dashBody, input: { image_url: dataMedia.image, video_url: dataMedia.video } };
+const dashDataIntent = p.native.dashCreate(dashContext(dashDataBody));
+nativeFixture('DashScope standard image and video Data URL decode', 'dashCreate', [dashContext(dashDataBody)], dashDataIntent);
+fixture('DashScope Data URL shares automatic rewrite and submission', 'buildSubmitRequest', [{ ...dashDriver, requestBody: dashDataIntent.requestBody }], { ...p.buildSubmitRequest(dashDriver), body: { ...dashUpstream, ref_image: dataMedia.image, ref_video: dataMedia.video } });
+fixture('motion Data URL is measured by the existing host hook', 'measureUsage', [ctx(motionModel, { ...examples[motionModel], videos: [dataMedia.video] }), null], { seconds: { videoUrl: dataMedia.video } });
+for (const kind of ['image', 'audio', 'video']) {
+  const model = kind === 'video' ? motionModel : 'minimax_h3_image_audio_to_video_v2';
+  const field = { image: 'input_reference', audio: 'audios', video: 'videos' }[kind];
+  for (const value of ['AA==', 'data:;base64,AA==', 'data:text/plain;base64,AA==', 'data:' + kind + '/png,AA==', 'data:' + kind + '/png;base64,', 'data:' + kind + '/png;base64,abc', 'data:' + kind + '/png;base64,A===', 'data:' + kind + '/png;base64,AB==', 'data:' + kind + '/png;base64,AA%3D%3D', 'data:' + kind + '/png;charset=utf-8;base64,AA==', 'data:' + kind + '/png;base64,AA==\n', dataMedia[kind === 'image' ? 'audio' : 'image']]) {
+    const body = { ...examples[model], [field]: kind === 'image' ? { image_url: value } : [value] };
+    reject(kind + ': malformed or mismatched Data URL rejected ' + value, 'buildSubmitRequest', [ctx(model, body)], 'invalid media URL');
+  }
+}
+for (const kind of ['image', 'audio', 'video']) reject('output ' + kind + ' Data URL remains forbidden', 'listArtifacts', [{ status: 'SUCCESS', data: envelope('SUCCESS', [{ url: dataMedia[kind], type: kind }]) }], 'invalid media URL');
+nativeFixture('native Data URL MIME mismatch rejected', 'rawCreate', [rawContext(motionModel, { ref_image: dataMedia.video })], null, 'invalid media URL');
+nativeFixture('native naked Base64 rejected', 'rawCreate', [rawContext(motionModel, { ref_image: 'AA==' })], null, 'invalid media URL');
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

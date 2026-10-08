@@ -2581,16 +2581,15 @@ function referenceURLs(value) {
   const values = Array.isArray(value) ? value : [value];
   return values.map(function (item) {
     if (!object(item)) throw new Error("AutoDL: input_reference must be an image_url object or an array of image_url objects; URL strings are not supported");
-    if (has(item, "file_id")) throw new Error("AutoDL: this adapter only supports image_url with public HTTP(S) URLs; file_id is not supported");
+    if (has(item, "file_id")) throw new Error("AutoDL: this adapter only supports image_url with public HTTP(S) URLs or standard image Data URLs; file_id is not supported");
     if (!has(item, "image_url") || Object.keys(item).length !== 1) throw new Error("AutoDL: input_reference entries must contain only image_url");
-    if (typeof item.image_url !== "string" || !/^https?:\/\//i.test(item.image_url)) throw new Error("AutoDL: input_reference.image_url must be a public HTTP(S) URL; data URLs and local files are not supported");
-    return mediaURL(item.image_url);
+    return inputMedia(item.image_url, "image");
   });
 }
 
 function mapMedia(config, input, body, kind) {
   const values = kind === "input_reference" ? referenceURLs(input[kind]) : (input[kind] === undefined ? [] : input[kind]);
-  if (!Array.isArray(values)) throw new Error("AutoDL: " + kind + " must be an array of public HTTP(S) URLs");
+  if (!Array.isArray(values)) throw new Error("AutoDL: " + kind + " must be an array of public HTTP(S) URLs or standard Data URLs");
   const fields = config[kind];
   if (kind === "input_reference") {
     if (fields.length === 0 && has(input, kind)) throw new Error("AutoDL: this workflow does not accept input_reference");
@@ -2604,7 +2603,7 @@ function mapMedia(config, input, body, kind) {
       if (rule.required) throw new Error("AutoDL: " + kind + "[" + i + "] is required for this workflow");
       continue;
     }
-    body[key] = mediaURL(value);
+    body[key] = inputMedia(value, { input_reference: "image", audios: "audio", videos: "video" }[kind]);
   }
 }
 
@@ -2674,7 +2673,7 @@ function normalizeRaw(config, input) {
   for (const key of Object.keys(input)) {
     if (!has(config.rules, key)) throw new Error("AutoDL: unsupported raw field " + key + " for this workflow");
     const rule = config.rules[key], value = input[key];
-    if (["image", "audio", "video"].includes(rule.type)) body[key] = mediaURL(value);
+    if (["image", "audio", "video"].includes(rule.type)) body[key] = inputMedia(value, rule.type);
     else if (["integer", "number"].includes(rule.type)) body[key] = numberValue(value, rule, key);
     else if (rule.type === "boolean") {
       if (typeof value !== "boolean") throw new Error("AutoDL: " + key + " must be boolean");
@@ -2707,6 +2706,8 @@ function normalizeRaw(config, input) {
 
 function analyzeNativeRequest(config, rawBody) {
   if (!object(rawBody)) throw new Error("AutoDL: native body must be a JSON object");
+  // Validate known media without rewriting the native body or its other fields.
+  for (const key of Object.keys(rawBody)) if (typeof rawBody[key] === "string" && has(config.rules, key) && ["image", "audio", "video"].includes(config.rules[key].type)) inputMedia(rawBody[key], config.rules[key].type);
   const facts = { requests: 1 };
   for (const key of ["duration", "audio_duration"]) {
     if (has(rawBody, key) && !has(config.rules, key)) throw new Error("AutoDL: cannot safely bill native " + key + " for this workflow");
@@ -2877,8 +2878,8 @@ function normalizeMiniMax(config, input) {
     if (!has(references, item.type)) throw new Error("AutoDL: MiniMax content type must be text, image_url, audio_url or video_url");
     if (Object.keys(item).some(function (key) { return !["type", item.type, "role"].includes(key); })) throw new Error("AutoDL: unsupported media content field");
     const resource = item[item.type];
-    if (!object(resource) || Object.keys(resource).length !== 1 || !has(resource, "url")) throw new Error("AutoDL: MiniMax media must contain only a public HTTP(S) url");
-    const url = mediaURL(resource.url);
+    if (!object(resource) || Object.keys(resource).length !== 1 || !has(resource, "url")) throw new Error("AutoDL: MiniMax media must contain only a public HTTP(S) url or standard Data URL in url");
+    const url = inputMedia(resource.url, item.type.split("_")[0]);
     const role = item.role === undefined && item.type === "image_url" ? "first_frame" : item.role;
     if (item.type === "image_url" && ["first_frame", "last_frame"].includes(role)) {
       if (has(frames, role)) throw new Error("AutoDL: duplicate " + role + " in MiniMax content");
@@ -2984,7 +2985,17 @@ function safeReason(ctx, value) {
   return message.replace(/[\x00-\x1f]/g, " ").slice(0, 300);
 }
 
-function mediaURL(value) {
+function inputMedia(value, kind) {
+  if (typeof value === "string" && /^https?:\/\//i.test(value)) return outputMediaURL(value);
+  const match = typeof value === "string" && value.match(/^data:(image|audio|video)\/[a-z0-9][a-z0-9.+-]*;base64,([A-Za-z0-9+/]+={0,2})$/i);
+  if (!match || match[1].toLowerCase() !== kind || match[2].length % 4 !== 0) throw new Error("AutoDL: input media must be a public HTTP(S) URL or standard Base64 Data URL with the matching image/audio/video MIME type (invalid media URL)");
+  const payload = match[2], alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  if (padding && (alphabet.indexOf(payload[payload.length - padding - 1]) & (padding === 2 ? 15 : 3)) !== 0) throw new Error("AutoDL: invalid media URL; Data URL contains noncanonical Base64 padding bits");
+  return value;
+}
+
+function outputMediaURL(value) {
   if (typeof value !== "string" || value !== value.trim() || /[\s\\\x00-\x1f]/.test(value) || !/^https?:\/\/[^/?#@]+(?:[/?#]|$)/i.test(value)) {
     throw new Error("AutoDL: results contains an invalid media URL");
   }
@@ -3003,9 +3014,9 @@ function results(body, fallbackType) {
   const payload = envelope(body).data;
   if (!Array.isArray(payload.results) || payload.results.length === 0) throw new Error("AutoDL: SUCCESS response has empty or invalid results");
   return payload.results.map(function (item) {
-    if (typeof item === "string") return { url: mediaURL(item), type: resultMediaType(item, null, fallbackType) };
+    if (typeof item === "string") return { url: outputMediaURL(item), type: resultMediaType(item, null, fallbackType) };
     if (!object(item)) throw new Error("AutoDL: results entry must be a URL string or an object with url");
-    const url = mediaURL(item.url);
+    const url = outputMediaURL(item.url);
     const type = item.type === undefined ? resultMediaType(url, item.file_type, fallbackType) : item.type;
     if (!["video", "image", "audio", "file"].includes(type)) throw new Error("AutoDL: results contains an unsupported media type");
     const entry = { url: url, type: type };
@@ -3036,7 +3047,7 @@ function containsFilePlaceholder(value) {
 }
 
 export function buildSubmitRequest(ctx) {
-  if ((ctx.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; upload images to public storage and use input_reference URLs");
+  if ((ctx.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; encode a standard image Data URL or use public URLs in input_reference");
   const config = requestWorkflow(ctx);
   const parsed = normalized(ctx);
   const request = {
@@ -3175,7 +3186,7 @@ function decode(ctx, pinnedModel) {
   let request;
   if (body && body.kind === "json" && object(body.value)) request = copyRequest(body.value);
   else if (body && (body.kind === "multipart" || body.kind === "form")) {
-    if ((body.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; upload images to public storage and use input_reference URLs");
+    if ((body.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; encode a standard image Data URL or use public URLs in input_reference");
     request = {};
     for (const key of Object.keys(body.fields || {})) {
       const values = body.fields[key];
@@ -3259,8 +3270,9 @@ function decodeRaw(ctx) {
   return { kind: "submit", model: model, action: analysis.action, requestBody: request };
 }
 
-function dashScopeMediaURL(value) {
-  const url = mediaURL(value);
+function dashScopeMediaURL(value, kind) {
+  const url = inputMedia(value, kind);
+  if (/^data:/i.test(url)) return url;
   const authority = url.match(/^https?:\/\/([^/?#]+)/i)[1];
   const host = authority.replace(/:\d+$/, "").replace(/\.$/, "").toLowerCase();
   // Reject literal local destinations; the host's existing protected media
@@ -3286,7 +3298,7 @@ function normalizeDashScope(input) {
   if (has(input.input, "watermark") && input.input.watermark !== false) throw new Error("AutoDL: DashScope input.watermark must be false or omitted; this workflow has no watermark control");
   if (has(input.parameters, "check_image") && input.parameters.check_image !== true) throw new Error("AutoDL: DashScope parameters.check_image must be true or omitted; this workflow cannot disable image checking");
   const config = workflow(MOTION_WORKFLOW);
-  return normalizeRaw(config, { resolution: config.rules.resolution.default, ref_image: dashScopeMediaURL(input.input.image_url), ref_video: dashScopeMediaURL(input.input.video_url) });
+  return normalizeRaw(config, { resolution: config.rules.resolution.default, ref_image: dashScopeMediaURL(input.input.image_url, "image"), ref_video: dashScopeMediaURL(input.input.video_url, "video") });
 }
 
 function decodeDashScope(ctx) {

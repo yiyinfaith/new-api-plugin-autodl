@@ -174,4 +174,47 @@ with tempfile.TemporaryDirectory(prefix='autodl-dashscope-client-') as directory
             except RuntimeError as error:assert 'actual failure' in str(error)
             else:raise AssertionError('DashScope failed task accepted')
         checks+=1
+# Inline input must survive client serialization unchanged for all four formats.
+with tempfile.TemporaryDirectory(prefix='autodl-inline-client-') as directory:
+    folder = pathlib.Path(directory)
+    image = 'data:image/png;base64,AAAA'
+    audio = 'data:audio/wav;base64,AAAA'
+    video = 'data:video/mp4;base64,AAAA'
+    motion = 'wan2.2animate-v4-motion_retargeting'
+    cases = {
+        'openai': {'model':motion, 'input_reference':{'image_url':image}, 'videos':[video]},
+        'minimax': {'model':motion, 'content':[
+            {'type':'image_url','role':'reference_image','image_url':{'url':image}},
+            {'type':'video_url','role':'reference_video','video_url':{'url':video}}]},
+        'autodl': {'ref_image':image, 'ref_video':video},
+        'dashscope': {'model':'wan2.2-animate-move', 'input':{'image_url':image,'video_url':video}},
+    }
+    paths = {'openai':'/v1/videos', 'minimax':'/v2/video_generation',
+             'autodl':'/api/v1/comfyui/comfyui_workflow/'+motion,
+             'dashscope':'/api/v1/services/aigc/image2video/video-synthesis'}
+    # Also exercise existing audio fields; DashScope has no audio field.
+    cases['openai-audio'] = {'model':'minimax_h3_image_audio_to_video_v2',
+                             'input_reference':{'image_url':image}, 'audios':[audio], 'prompt':'Hello','seconds':1}
+    cases['minimax-audio'] = {'model':'minimax_h3_image_audio_to_video_v2','duration':1,'content':[
+        {'type':'text','text':'Hello'},
+        {'type':'audio_url','role':'reference_audio','audio_url':{'url':audio}}]}
+    cases['autodl-audio'] = {'prompt':'Hello','duration':1,'ref_audio_0':audio}
+    for case, expected in cases.items():
+        dialect = case.split('-')[0]
+        path = paths[dialect]
+        native_model = 'minimax_h3_image_audio_to_video_v2' if case.endswith('-audio') else motion
+        if dialect == 'autodl':path = '/api/v1/comfyui/comfyui_workflow/'+native_model
+        request_file = folder/(case+'.json')
+        request_file.write_text(json.dumps(expected), encoding='utf-8')
+        argv = ['test-task.py','--format',dialect,'--request',str(request_file),'--out',str(folder/(case+'.mp4'))]
+        if dialect == 'autodl':argv += ['--model',native_model]
+        def capture_inline(request, **kwargs):
+            assert request.full_url == 'https://newapi.example'+path
+            assert request.get_method() == 'POST'
+            assert json.loads(request.data) == expected
+            raise Captured()
+        with patch.dict(os.environ,{'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',capture_inline):
+            try:client.main()
+            except Captured:checks += 1
+            else:raise AssertionError('Expected inline input capture')
 print(f'PASS: {checks} zero-network client request, full-flow and audit checks')

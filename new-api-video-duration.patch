@@ -23,11 +23,11 @@
  export declare function listArtifacts(task: {taskId: string; status: string; action: string; data: unknown; producerVersion: string}): readonly TaskArtifact[];
  export declare function buildContentRequest(ctx: DriverContext & {artifactKey: string; data: unknown; state?: unknown; upstreamTaskId: string; clientRequest: {method: "GET" | "HEAD"; headers: Readonly<Record<string, string>>}}): RequestDescriptor;
 +
-+/** Optional video-duration@1 hook. null skips measurement; max 4 second-unit schema fields. Host fetches public media without provider credentials outside the JS timeout. */
++/** Optional video-duration@1 hook. null skips measurement; max 4 second-unit schema fields. Submission accepts public MP4/WebM URLs or standard video Data URLs; completion requires public URLs. Measurement runs outside the JS timeout without provider credentials. */
 +export declare function measureUsage(ctx: DriverContext | TaskQueryContext, result: NormalizedTaskResult | null): Readonly<Record<string, {videoUrl: string}>> | null;
 --- a/docs/plugin-api/v1.md
 +++ b/docs/plugin-api/v1.md
-@@ -549,3 +549,24 @@
+@@ -549,3 +549,28 @@
  distinguishes cumulative usage from increments, and decides completion. Alibaba
  uses this mode for interleaved image generation, keeping only content indices,
  text adjacency and finish reasons in its control state.
@@ -41,6 +41,10 @@
 +up to four declared numeric second-unit fields and injects the scalar results as
 +`ctx.usageMeasurements` before invoking the corresponding extraction hook.
 +Submission measurements also reach `parseSubmitResponse` for saved plugin state.
++Only submission accepts standard `data:video/mp4;base64,...` or
++`data:video/webm;base64,...` input, with strict Base64 validation and the same
++size/duration bounds. The host decodes a temporary file without a network fetch.
++Completion still requires a public HTTP(S) result URL; output Data URLs are rejected.
 +Downloads and local demuxing occur outside the five-second JS timeout. They do
 +not forward channel credentials. This optional API uses the configured fetch
 +SSRF policy, including protected redirects and DNS checks. The host needs
@@ -194,7 +198,7 @@
  	"github.com/gin-gonic/gin"
  	"github.com/stretchr/testify/assert"
  	"github.com/stretchr/testify/require"
-@@ -2246,3 +2252,107 @@
+@@ -2246,3 +2252,126 @@
  	assert.Equal(t, "SUCCESS", results["task_up_public"].TaskInfo.Status)
  	assert.Equal(t, []string{"POST /suno/submit/MUSIC", "POST /suno/fetch"}, seen)
  }
@@ -226,6 +230,12 @@
 +		seconds, err := probeVideoDuration(t.Context(), file)
 +		require.NoError(t, err, format)
 +		assert.InDelta(t, 3.25, seconds, 0.002, "longer audio must not inflate video seconds")
++		inline := "data:video/" + format + ";base64," + base64.StdEncoding.EncodeToString(media["/"+format])
++		seconds, err = measureDataVideo(t.Context(), inline)
++		require.NoError(t, err)
++		assert.InDelta(t, 3.25, seconds, 0.002, "inline input keeps video-track measurement")
++		_, err = measurePublicVideo(t.Context(), inline)
++		require.Error(t, err, "the output URL fetcher never accepts inline data")
 +	}
 +	fetch := system_setting.GetFetchSetting()
 +	previous := *fetch
@@ -289,6 +299,19 @@
 +	result, err := adaptor.ParseTaskResult(task, &http.Response{StatusCode: 200, Header: http.Header{}}, []byte(`{"status":"FAILURE"}`))
 +	require.NoError(t, err)
 +	assert.Equal(t, float64(0), result.UsageFacts["seconds"])
++	for _, format := range []string{"mp4", "webm"} {
++		inline := "data:video/" + format + ";base64," + base64.StdEncoding.EncodeToString(media["/"+format])
++		c.Set("task_request", map[string]any{"ref_video": inline, "usageMeasurements": map[string]any{"seconds": 1}})
++		facts, err := adaptor.ExtractUsageFactsValidated(c, info)
++		require.NoError(t, err)
++		assert.InDelta(t, 3.25, facts["seconds"], 0.002, "client facts cannot replace measured inline seconds")
++		_, err = adaptor.ParseTaskResult(task, &http.Response{StatusCode: 200, Header: http.Header{}}, []byte(fmt.Sprintf(`{"status":"SUCCESS","url":%q}`, inline)))
++		require.Error(t, err, "completion still requires a public URL")
++	}
++	for _, inline := range []string{"AA==", "data:video/mp4,AA==", "data:audio/wav;base64,AA==", "data:video/mp4;base64,AB==", "data:video/mp4;base64,AA==\n", "data:video/mp4;base64,", "data:video/mp4;base64,bm90IGEgdmlkZW8="} {
++		_, err := measureDataVideo(t.Context(), inline)
++		require.Error(t, err, "invalid inline input must not create guessed usage")
++	}
 +	for _, path := range []string{"/malformed", "/oversized"} {
 +		_, err := adaptor.ParseTaskResult(task, &http.Response{StatusCode: 200, Header: http.Header{}}, []byte(fmt.Sprintf(`{"status":"SUCCESS","url":%q}`, server.URL+path)))
 +		require.Error(t, err, "completion cannot settle guessed usage")
@@ -304,14 +327,14 @@
 +}
 --- /dev/null
 +++ b/relay/channel/task/jsplugin/video_usage.go
-@@ -0,0 +1,233 @@
+@@ -0,0 +1,275 @@
 +package jsplugin
 +
 +import (
 +	"bufio"
 +	"bytes"
 +	"context"
-+	"encoding/json"
++	"encoding/base64"
 +	"errors"
 +	"fmt"
 +	"io"
@@ -324,6 +347,7 @@
 +	"strings"
 +	"time"
 +
++	"github.com/QuantumNous/new-api/common"
 +	relaycommon "github.com/QuantumNous/new-api/relay/common"
 +	"github.com/QuantumNous/new-api/service"
 +)
@@ -335,7 +359,7 @@
 +type videoUsageMeasurementError struct{}
 +
 +func (*videoUsageMeasurementError) Error() string {
-+	return "video usage measurement failed; a public, readable MP4/WebM video with duration in (0, 3600] seconds is required"
++	return "video usage measurement failed; a public MP4/WebM URL or standard video Data URL with duration in (0, 3600] seconds is required"
 +}
 +
 +// prepareUsageMeasurements executes network and media work outside the JS VM.
@@ -366,7 +390,13 @@
 +		if !exists || rule.Type != "number" || rule.Unit != "second" || !ok || len(source) != 1 || videoURL == "" {
 +			return &videoUsageMeasurementError{}
 +		}
-+		seconds, err := measurePublicVideo(ctx, videoURL)
++		var seconds float64
++		var err error
++		if result == nil && strings.HasPrefix(strings.ToLower(videoURL), "data:") {
++			seconds, err = measureDataVideo(ctx, videoURL)
++		} else {
++			seconds, err = measurePublicVideo(ctx, videoURL)
++		}
 +		if err != nil {
 +			return &videoUsageMeasurementError{}
 +		}
@@ -429,6 +459,41 @@
 +	return probeVideoDuration(ctx, file.Name())
 +}
 +
++// Only submission measurements accept inline input. Completion continues to
++// use the public URL fetcher and never decodes provider-returned Data URLs.
++func measureDataVideo(parent context.Context, dataURL string) (float64, error) {
++	ctx, cancel := context.WithTimeout(parent, 45*time.Second)
++	defer cancel()
++	select {
++	case videoMeasurementSlots <- struct{}{}:
++		defer func() { <-videoMeasurementSlots }()
++	case <-ctx.Done():
++		return 0, ctx.Err()
++	}
++	header, payload, ok := strings.Cut(dataURL, ",")
++	header = strings.ToLower(header)
++	if !ok || (header != "data:video/mp4;base64" && header != "data:video/webm;base64") || payload == "" || strings.ContainsAny(payload, "\r\n") || len(payload) > base64.StdEncoding.EncodedLen(int(maxMeasuredVideoBytes)) {
++		return 0, errors.New("invalid video Data URL")
++	}
++	raw, err := base64.StdEncoding.Strict().DecodeString(payload)
++	if err != nil || len(raw) == 0 || int64(len(raw)) > maxMeasuredVideoBytes {
++		return 0, errors.New("invalid or oversized inline video")
++	}
++	file, err := os.CreateTemp("", "task-video-*")
++	if err != nil {
++		return 0, err
++	}
++	defer os.Remove(file.Name())
++	defer file.Close()
++	if _, err := file.Write(raw); err != nil {
++		return 0, err
++	}
++	if err := file.Close(); err != nil {
++		return 0, err
++	}
++	return probeVideoDuration(ctx, file.Name())
++}
++
 +func boundedVideoDuration(seconds float64) (float64, error) {
 +	if math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds <= 0 || seconds > relaycommon.MaxTaskDurationSeconds {
 +		return 0, errors.New("video duration is outside the billing bound")
@@ -454,7 +519,7 @@
 +			Duration  string `json:"duration"`
 +		} `json:"streams"`
 +	}
-+	if err := json.Unmarshal(buffer.Bytes(), &metadata); err != nil || len(metadata.Streams) != 1 || metadata.Streams[0].CodecType != "video" {
++	if err := common.Unmarshal(buffer.Bytes(), &metadata); err != nil || len(metadata.Streams) != 1 || metadata.Streams[0].CodecType != "video" {
 +		return 0, errors.New("media contains no video stream")
 +	}
 +	if value := metadata.Streams[0].Duration; value != "" && value != "N/A" {

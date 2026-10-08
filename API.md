@@ -6,6 +6,7 @@
 
 - [基本配置](#基本配置)
 - [接口速查](#接口速查)
+- [输入媒体：URL 与 Data URL](#输入媒体url-与-data-url)
 - [OpenAI Videos API](#openai-videos-api)
 - [MiniMax 官方 V2 API](#minimax-官方-v2-api)
 - [AutoDL ComfyUI 原生 API](#autodl-comfyui-原生-api)
@@ -25,7 +26,7 @@ Authorization: Bearer <NEW_API_KEY>
 Content-Type: application/json
 ```
 
-插件从渠道读取 AutoDL Token，并以 `Authorization: <AUTODL_TOKEN>` 访问 AutoDL。不要把 AutoDL Token 放在调用方请求、插件源码或仓库中。参考图、音频、视频必须是任务处理期间可公开下载的 HTTP(S) URL。当前适配器不上传二进制文件、不支持 Base64/data URL 或 `file_id`。
+插件从渠道读取 AutoDL Token，并以 `Authorization: <AUTODL_TOKEN>` 访问 AutoDL。不要把 AutoDL Token 放在调用方请求、插件源码或仓库中。参考图、音频、视频输入可使用任务处理期间可公开下载的 HTTP(S) URL，或标准 Base64 Data URL。裸 Base64、二进制文件上传和 `file_id` 不支持；输出产物仍为公开 HTTP(S) URL。
 
 ## 接口速查
 
@@ -37,6 +38,43 @@ Content-Type: application/json
 | AutoDL 原生 ComfyUI | `POST /api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /api/v1/comfyui/comfyui_workflow/result/{task_id}` | `results[]` 中的公开 URL |
 
 四种格式都由 New API 鉴权、选择渠道、检查价格、管理公开 task ID 和轮询。路径选定请求解码方式；MiniMax workflow ID 是 `model` 的扩展值，仍用 MiniMax V2 路径。原生 body 不加入模型包装，模型由路径中的 workflow ID 确定。
+
+## 输入媒体：URL 与 Data URL
+
+已完成四套接口的付费生成验证，任务 ID、视频结果和测试边界见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md)。
+
+只扩展输入值，字段结构、媒体数量、workflow 能力和输出结构不变。
+
+| 请求格式 | 图片字段 | 音频字段 | 视频字段 |
+|---|---|---|---|
+| OpenAI Video | `input_reference.image_url`；多图为对象数组 | `audios[]` | `videos[]` |
+| MiniMax V2 | `content[].image_url.url` | `content[].audio_url.url` | `content[].video_url.url` |
+| AutoDL 原生 | 对应 input_rules 的 `first_frame / last_frame / ref_image / ref_image_*` 等 | `ref_audio_* / voice / emo_ref_audio` 等 | `ref_video` 等 |
+| DashScope Wan | `input.image_url` | 不提供音频字段 | `input.video_url` |
+
+每个已有媒体值均可为公网 HTTP(S) URL，或标准 Data URL：`data:image/png;base64,...`、`data:audio/wav;base64,...`、`data:video/mp4;base64,...`。只接受与字段匹配的 image/audio/video MIME 前缀、非空标准 Base64 字母表和正确补位；不接受裸 Base64、URL 编码的 Base64、换行、额外 `charset` 参数、文件路径或 `file_id`。Data URL 是适配器扩展，不表示相应官方服务本身一定支持它。上游继续决定实际编码、尺寸、内容等业务要求；不增加字段或改变数量规则。原生模式验证已知媒体字符串后原样透传，其余非计费类型仍交给上游。
+
+可用 Python 编码真实文件后，放入上表对应字段；示例中的文件名需替换为自己的文件：
+
+```python
+import base64
+from pathlib import Path
+
+def data_url(path, mime):
+    return f"data:{mime};base64," + base64.b64encode(Path(path).read_bytes()).decode("ascii")
+
+image = data_url("person.png", "image/png")
+audio = data_url("reference.wav", "audio/wav")
+video = data_url("motion.mp4", "video/mp4")
+# OpenAI: input_reference={"image_url": image}, audios=[audio], videos=[video]
+# MiniMax: content=[{"type":"image_url","role":"reference_image","image_url":{"url":image}}, ...]
+# Native: ref_image_0=image, ref_audio_0=audio；动作迁移为 ref_image=image, ref_video=video
+# DashScope: input={"image_url":image,"video_url":video}, parameters={"mode":"wan-std"}
+```
+
+只填写所选工作流实际支持的媒体字段，未使用的变量不加入请求。URL 和 Data URL 可混用；单图对象、多图对象数组和首尾帧顺序保持原样。`examples.json` 的 `_formats.media_inputs` 给出四种格式的字段模板，模板里的 `<BASE64_FROM_FILE>` 必须替换为真实文件的标准 Base64。
+
+**输出结果继续是公网 HTTP(S) URL，artifact、查询和下载逻辑不接受输出 Data URL。** 动作迁移的输入视频 Data URL 仅支持可测量的 MP4/WebM，需安装更新后的[宿主时长计量补丁](new-api-video-duration.patch)与 `ffprobe`。宿主在输入阶段解码临时文件并测量视频轨道，完成阶段仍抓取输出 URL；256 MiB 解码后大小、`0 < 时长 <= 3600` 秒、预扣/补扣/退款规则不变。内联输入还受宿主请求体及 JS 沙箱资源限制，大文件优先用 URL。
 
 ## OpenAI Videos API
 
@@ -159,7 +197,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 ]
 ```
 
-`text` 最多一项。媒体资源对象只接受 `url`，值须为公开 HTTP(S) URL。未指定 image role 时按官方规则视为 `first_frame`；参考图请显式使用 `reference_image`。不允许首尾帧与参考媒体混用、重复 frame role 或超过工作流输入槽位。当前自动路由模型没有可用的 reference-video workflow，传 `reference_video` 会明确报错。
+`text` 最多一项。媒体资源对象只接受 `url`，值可为公开 HTTP(S) URL 或 MIME 类型匹配的标准 Base64 Data URL。未指定 image role 时按官方规则视为 `first_frame`；参考图请显式使用 `reference_image`。不允许首尾帧与参考媒体混用、重复 frame role 或超过工作流输入槽位。当前自动路由模型没有可用的 reference-video workflow，传 `reference_video` 会明确报错。
 
 | `type` | 对应资源字段 | `role` | 内部映射 |
 |---|---|---|---|
@@ -471,14 +509,14 @@ curl "$NEW_API_BASE_URL/api/v1/services/aigc/image2video/video-synthesis" \
 |---|---|---|
 | `model` | string，必需 | 仅接受 `wan2.2-animate-move`；执行工作流自动设置为 `wan2.2animate-v4-motion_retargeting`，保留外部模型身份。 |
 | `input` | object，必需 | 仅允许以下三个字段。 |
-| `input.image_url` | string，必需 | 公开 HTTP(S) 图片 URL → `ref_image`。 |
-| `input.video_url` | string，必需 | 公开 HTTP(S) 视频 URL → `ref_video`；可测量的 MP4/WebM，计量限制见[动作迁移计费](#动作迁移与-wan22-animate-move-渠道别名)。 |
+| `input.image_url` | string，必需 | 公开 HTTP(S) 图片 URL 或标准图片 Data URL → `ref_image`。 |
+| `input.video_url` | string，必需 | 公开 HTTP(S) 视频 URL 或标准视频 Data URL → `ref_video`；可测量的 MP4/WebM，计量限制见[动作迁移计费](#动作迁移与-wan22-animate-move-渠道别名)。 |
 | `input.watermark` | boolean，可选 | 缺省或 `false`；`true` 报错，上游没有水印开关。 |
 | `parameters` | object，必需 | 仅允许以下两个字段。 |
 | `parameters.mode` | string，必需 | 仅 `wan-std`；`wan-pro` 明确报错，AutoDL 没有等价控制或独立 pro 工作流，不能静默降级。 |
 | `parameters.check_image` | boolean，可选 | 缺省或 `true`，作为兼容默认值，不发送上游；`false` 报错，上游没有关闭图片检查的控制。 |
 
-所有层级拒绝未知字段；缺字段、类型错误、空 URL、data/file/本地路径/Base64/`file_id` 都会报错。不能通过 `resolution / seconds / duration / ref_image / ref_video / input_reference / videos`、计费 facts、`rewriteModel` 或私有 marker 绕过解码。字面本地地址会被拒绝；视频抓取的 DNS、重定向和目标地址继续遵守宿主 SSRF 策略。
+所有层级拒绝未知字段；缺字段、类型错误、空输入、非法 Data URL、file/本地路径、裸 Base64 和 `file_id` 都会报错。不能通过 `resolution / seconds / duration / ref_image / ref_video / input_reference / videos`、计费 facts、`rewriteModel` 或私有 marker 绕过解码。字面本地地址会被拒绝；视频抓取的 DNS、重定向和目标地址继续遵守宿主 SSRF 策略。
 
 最终 AutoDL body 为：
 
@@ -613,7 +651,7 @@ AutoDL 原生调用使用实际 workflow ID：`POST /api/v1/comfyui/comfyui_work
 
 - 认证错误：确认调用方 `Authorization: Bearer <NEW_API_KEY>` 有效，并且已选择 AutoDL Task Plugin 渠道。
 - 上游 401/403：核对渠道中的 AutoDL ComfyUI 分组 Token 原文，Token 不含 `Bearer `。
-- 请求字段或媒体校验错误：检查模型 ID、JSON 类型、duration 范围、resolution、媒体公开可读性和媒体数量。OpenAI/MiniMax 的数量错误由插件明确拒绝；原生格式的实际媒体业务校验交给 AutoDL。
+- 请求字段或媒体校验错误：检查模型 ID、JSON 类型、duration 范围、resolution、URL 公开可读性、Data URL 格式和媒体数量。OpenAI/MiniMax 的数量错误由插件明确拒绝；原生格式的实际媒体业务校验交给 AutoDL。
 - `model_price_error` 或预扣失败：为对应 workflow ID 配置模型价格；官方别名 `MiniMax-H3` 和 `MiniMax-H3-Max` 也需要可用于该渠道的价格规则。
 - 404/410：核对 task ID 是否为 New API 返回的公开 ID；不要使用上游私有 ID。
 - 429 和 5xx：处理限流或服务暂时错误，遵守客户端截止时间和退避策略。插件轮询最长约 30 分钟；超时只表示插件停止等待，上游任务可能仍在运行。

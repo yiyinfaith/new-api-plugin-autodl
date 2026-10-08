@@ -1325,6 +1325,71 @@
           }
         }
       }
+    },
+    "media_inputs": {
+      "note": "Input templates only: replace <BASE64_FROM_FILE> with actual standard Base64; use only the fields supported by the chosen workflow. URL and Data URL may be mixed. Output remains public HTTP(S) URL.",
+      "openai": {
+        "image": {
+          "input_reference": {
+            "image_url": "data:image/png;base64,<BASE64_FROM_FILE>"
+          }
+        },
+        "audio": {
+          "audios": [
+            "data:audio/wav;base64,<BASE64_FROM_FILE>"
+          ]
+        },
+        "video": {
+          "videos": [
+            "data:video/mp4;base64,<BASE64_FROM_FILE>"
+          ]
+        }
+      },
+      "minimax": {
+        "image": {
+          "type": "image_url",
+          "role": "reference_image",
+          "image_url": {
+            "url": "data:image/png;base64,<BASE64_FROM_FILE>"
+          }
+        },
+        "audio": {
+          "type": "audio_url",
+          "role": "reference_audio",
+          "audio_url": {
+            "url": "data:audio/wav;base64,<BASE64_FROM_FILE>"
+          }
+        },
+        "video": {
+          "type": "video_url",
+          "role": "reference_video",
+          "video_url": {
+            "url": "data:video/mp4;base64,<BASE64_FROM_FILE>"
+          }
+        }
+      },
+      "autodl": {
+        "image": {
+          "ref_image_0": "data:image/png;base64,<BASE64_FROM_FILE>"
+        },
+        "audio": {
+          "ref_audio_0": "data:audio/wav;base64,<BASE64_FROM_FILE>"
+        },
+        "motion": {
+          "ref_image": "data:image/png;base64,<BASE64_FROM_FILE>",
+          "ref_video": "data:video/mp4;base64,<BASE64_FROM_FILE>"
+        }
+      },
+      "dashscope": {
+        "model": "wan2.2-animate-move",
+        "input": {
+          "image_url": "data:image/png;base64,<BASE64_FROM_FILE>",
+          "video_url": "data:video/mp4;base64,<BASE64_FROM_FILE>"
+        },
+        "parameters": {
+          "mode": "wan-std"
+        }
+      }
     }
   }
 }

@@ -57,7 +57,7 @@ def main():
     elif not body.get('model'):
         raise ValueError('JSON 请求必须包含 model')
     if 'your-public-file-host.example' in json.dumps(body):
-        raise ValueError('请将媒体占位 URL 替换为公开可下载的真实图片、音频或视频 URL，再通过 --request 提交')
+        raise ValueError('请将媒体占位 URL 替换为公开可下载的真实图片、音频或视频 URL / 标准 Data URL，再通过 --request 提交')
     output = pathlib.Path(args.out).expanduser().resolve()
     temporary = output.with_name(output.name + '.part')
     if output.exists() or temporary.exists():
