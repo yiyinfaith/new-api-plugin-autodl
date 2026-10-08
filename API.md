@@ -154,7 +154,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 
 角色不是 `type`：不要写 `{"type":"reference_image",...}`。MiniMax 的资源对象使用 `url`，OpenAI 的 `input_reference` 对象使用 `image_url` 字符串，两者不能混写。
 
-首尾帧请求将上面的媒体对象替换为两项 image：分别用 `role: "first_frame"` 和 `role: "last_frame"`。单帧、reference image、reference audio 和 reference video 的对象结构不变，只使用对应的 role；当前模型路由对 reference video 会明确拒绝。
+首尾帧请求将上面的媒体对象替换为两项 image：分别用 `role: "first_frame"` 和 `role: "last_frame"`。单帧、reference image、reference audio 和 reference video 的对象结构不变，只使用对应的 role。两个官方模型别名的自动路由不接受 reference video；直接指定具有视频输入能力的官网 workflow ID（如动作迁移）时，按该工作流规则接受 reference video。
 
 ### AutoDL 官网工作流模型名：直接使用 MiniMax 格式
 
