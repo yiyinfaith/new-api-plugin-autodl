@@ -6,6 +6,8 @@
 
 **调用方请先阅读：[完整 API 请求与响应文档](API.md)。** 文档包含三套接口的字段、单图/多图、MiniMax 自动路由、原生透传、查询下载、计费前提和错误处理。
 
+**AutoDL 官网工作流模型名也能使用 MiniMax 官方格式。** 在 `model` 填 `minimax_h3_z0901`、`minimax_h3_lightx2v` 等 workflow ID，继续使用 `content / resolution / duration / ratio`，统一调用 `POST /v2/video_generation`。这项能力与 `MiniMax-H3`、`MiniMax-H3-Max` 自动路由并列支持；完整说明和多图、音频、首尾帧示例见 [直接使用官网工作流的 MiniMax 请求文档](API.md#autodl-官网工作流模型名直接使用-minimax-格式)。
+
 **推荐安装地址：** [https://raw.githubusercontent.com/yiyinfaith/new-api-plugin-autodl/main/plugin.js](https://raw.githubusercontent.com/yiyinfaith/new-api-plugin-autodl/main/plugin.js)
 
 支持：

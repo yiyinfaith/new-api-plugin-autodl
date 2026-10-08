@@ -103,7 +103,18 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 
 ## MiniMax 官方 V2 API
 
-使用 MiniMax 官方路径与 `content` 请求体。外部模型可以是 `MiniMax-H3`、`MiniMax-H3-Max`，或 17 个 AutoDL workflow ID 中任意一个。别名 `MiniMax-H3-MAX` 也作为兼容输入接受，归一化为 `MiniMax-H3-Max`。这些模型都通过相同的 V2 路径，不需要额外 workflow 字段。
+> **AutoDL 官网的工作流模型名也能使用 MiniMax 官方请求格式，并非只有 `MiniMax-H3`、`MiniMax-H3-Max` 才能使用。** 在 `model` 中直接填写官网 workflow ID，例如 `minimax_h3_z0901`、`minimax_h3_lightx2v` 或 `minimax_h3_zm_u08`，请求仍使用 `content / resolution / duration / ratio`，仍提交到 **`POST /v2/video_generation`**，查询仍使用 **`GET /v2/query/video_generation/{task_id}`**。
+
+本节同时介绍两种模型选择方式；两者共用 MiniMax V2 路径、鉴权和响应格式：
+
+| `model` 的写法 | 工作流选择 | 参数校验 | 创建 / 查询 |
+|---|---|---|---|
+| **AutoDL 官网 workflow ID**，例如 `minimax_h3_z0901` | 直接使用指定工作流 | 按该 workflow 的实际能力校验，可保留 AutoDL 扩展能力 | `POST /v2/video_generation`；`GET /v2/query/video_generation/{task_id}` |
+| **MiniMax 官方模型名**：`MiniMax-H3`、`MiniMax-H3-Max` | 按 content、时长、分辨率和比例自动选 workflow | 先校验官方模型范围，再校验所选 workflow 能力 | 与上行完全相同 |
+
+插件支持的 17 个 AutoDL workflow ID 都可以使用本节的 MiniMax `content` 格式；每个工作流可接受的媒体和参数仍各不相同。这里的“官网模型名”指 **workflow ID**，不是“动作迁移”等中文展示名称。无需额外的 `workflow_id` 字段，也无需切换接口。别名 `MiniMax-H3-MAX` 作为兼容输入接受，归一化为 `MiniMax-H3-Max`。
+
+直接指定工作流的完整说明见 [AutoDL 官网工作流模型名：直接使用 MiniMax 格式](#autodl-官网工作流模型名直接使用-minimax-格式)；官方模型的自动选择规则见 [官方模型约束和路由](#官方模型约束和路由)。
 
 ### 请求结构
 
@@ -144,6 +155,87 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 角色不是 `type`：不要写 `{"type":"reference_image",...}`。MiniMax 的资源对象使用 `url`，OpenAI 的 `input_reference` 对象使用 `image_url` 字符串，两者不能混写。
 
 首尾帧请求将上面的媒体对象替换为两项 image：分别用 `role: "first_frame"` 和 `role: "last_frame"`。单帧、reference image、reference audio 和 reference video 的对象结构不变，只使用对应的 role；当前模型路由对 reference video 会明确拒绝。
+
+### AutoDL 官网工作流模型名：直接使用 MiniMax 格式
+
+**只需把 `model` 填成 AutoDL 官网 workflow ID，其他字段继续采用 MiniMax 格式。** 这是和官方模型名并列的完整调用方式，支持本插件全部 17 个工作流。插件解析同一套 `content[]`，把文本、图片、音频和视频按顺序转换成所选工作流的上游字段；它不会再替你选择另一个 workflow。
+
+例如官网的 `minimax_h3_z0901` 可直接进行文生视频：
+
+```json
+{
+  "model": "minimax_h3_z0901",
+  "content": [{"type": "text", "text": "一只猫在雪地中奔跑"}],
+  "resolution": "768P",
+  "duration": 5,
+  "ratio": "16:9"
+}
+```
+
+上面的 body 发送到 **`POST /v2/video_generation`**。与 `model: "MiniMax-H3"` 的区别只是固定使用 `minimax_h3_z0901`，而不是自动选择工作流。两种请求都返回同样的 `task_id`，都通过 `GET /v2/query/video_generation/{task_id}` 查询。
+
+**多图 + 参考音频示例：**官网 `minimax_h3_zm_u08` 同样使用 MiniMax `content`，无需写上游的 `ref_image_0`、`ref_audio_0` 等字段：
+
+```json
+{
+  "model": "minimax_h3_zm_u08",
+  "content": [
+    {"type": "text", "text": "人物面向镜头说话，保留参考人物外观"},
+    {"type": "image_url", "image_url": {"url": "https://media.example.com/person.png"}, "role": "reference_image"},
+    {"type": "image_url", "image_url": {"url": "https://media.example.com/scene.png"}, "role": "reference_image"},
+    {"type": "audio_url", "audio_url": {"url": "https://media.example.com/speech.wav"}, "role": "reference_audio"}
+  ],
+  "resolution": "768P",
+  "duration": 5,
+  "ratio": "1:1",
+  "seed": 123
+}
+```
+
+两项 `reference_image` 按顺序映射为工作流的前两个图片槽位，音频映射为第一个音频槽位。图片、音频的最少和最多数量依指定工作流校验；不会自动补齐、截断或忽略。
+
+**首尾帧示例：**官网 `minimax_h3_lightx2v` 继续采用 MiniMax 的两个 frame role：
+
+```json
+{
+  "model": "minimax_h3_lightx2v",
+  "content": [
+    {"type": "text", "text": "镜头从第一帧平稳推进到最后一帧"},
+    {"type": "image_url", "image_url": {"url": "https://media.example.com/first.png"}, "role": "first_frame"},
+    {"type": "image_url", "image_url": {"url": "https://media.example.com/last.png"}, "role": "last_frame"}
+  ],
+  "resolution": "480P",
+  "duration": 5,
+  "ratio": "adaptive"
+}
+```
+
+该工作流要求两张图分别作为首尾帧。`adaptive` 的方向降级遵循本节后文的说明；指定 workflow ID 并不绕过媒体数量或分辨率校验。
+
+常用官网 workflow ID 在 MiniMax 请求中的选择方式如下，全部使用同一个 V2 创建路径：
+
+| `model`：官网 workflow ID | `content` 的主要媒体角色 | 时长 / 分辨率说明 |
+|---|---|---|
+| `minimax_h3_z0901` | text | `duration`；480p / 768p / 1088p / 1440p |
+| `minimax_h3_z0902` | text + reference_image | `duration`；1–6 张图 |
+| `minimax_h3_z0903` | text + reference_image + reference_audio | `duration`；1–6 张图、1–3 段音频 |
+| `minimax_h3_zm_u24` | text + reference_image，可带 reference_audio | `duration`；1–9 张图、0–3 段音频 |
+| `minimax_h3_zm_u08` | text + reference_image，可带 reference_audio | `duration`；1–9 张图、0–3 段音频 |
+| `minimax_h3_lightx2v_no_pic` | text | `duration`；480p / 768p |
+| `minimax_h3_lightx2v` | text + first_frame + last_frame | `duration`；恰好两帧 |
+| `minimax_h3_lightx2v_v5` | text + reference_image | `duration`；1–10 秒 |
+| `minimax_h3_lightx2v_v5_15s` | text + reference_image | `duration`；1–15 秒 |
+| `minimax_h3_image_audio_to_video_v2` | text，可带 reference_image / reference_audio | `duration`；1–10 秒 |
+| `minimax_h3_image_audio_to_video_v2_15s` | text，可带 reference_image / reference_audio | `duration`；1–15 秒 |
+| `minimax_h3_image_audio_to_video` | text + reference_image + reference_audio | 使用 `audio_duration`；不要传 `duration` |
+| `wan2.2animate-v4-motion_retargeting` | reference_image + reference_video | 不传 text / duration；分辨率使用其允许的原始标签 |
+| `indextts2-v1` | text + reference_audio | 音频扩展；不传 duration / resolution / ratio |
+
+其余三个 `minimax_h3_b99_*` 工作流也能直接用 MiniMax 格式。完整 17 项及准确的媒体范围、时长、分辨率见 [工作流目录与能力边界](#工作流目录与能力边界) 和 [examples.json](examples.json) 的 `_formats.minimax`。把其中对应 workflow 的 JSON body 直接发送到 `/v2/video_generation`；无需更改为原生字段格式。
+
+直接指定 workflow ID 时，`duration`、`resolution`、`ratio`、`seed`、`audio_duration` 均按 **该工作流** 的能力校验，不强加两个 MiniMax 官方模型别名的参数范围。例如工作流自身支持 1 秒或额外分辨率时可保留该能力；`480P / 768P / 2K` 使用通用映射，AutoDL 独有档位可用其允许的原始 resolution 名称。没有可控时长的工作流不接受 `duration`；`audio_duration` 只适用于官网定义了这个字段的工作流。对不支持的档位或媒体数量明确报错，不会静默改变请求。
+
+调用前，管理员需要把这个 **workflow ID** 加入 AutoDL 渠道可用模型并配置价格，调用端密钥须有该渠道分组权限。官方模型名则需要单独配置其模型可用性和价格。成功响应、轮询状态、失败结构和下载方式完全共用下文的 [创建、查询和下载](#创建查询和下载)。
 
 ### 官方模型约束和路由
 
@@ -220,7 +312,7 @@ curl -sS "$NEW_API_BASE_URL/v2/query/video_generation/$TASK_ID" \
 
 New API rc.41 的公开 TaskView 不包含所有私有插件 state；AutoDL 的 `data.duration` 表示处理耗时而不是成片秒数。因此查询只返回可确认的 ID、状态、时间和产物，省略不能确认的 model、resolution、duration、ratio、usage 和 token 用量。MiniMax 客户端若要求这些字段，不能用本适配器查询结果替代官方服务的完整元数据。插件也不实现 `file_id`、二进制上传和 `callback_url` 等其他服务能力。
 
-直接使用 AutoDL workflow ID 时仍走相同路径和 MiniMax `content` 格式，例如将上例的 `model` 改成 `minimax_h3_z0901`。该模式按对应工作流能力处理，可使用 AutoDL 扩展 duration 范围、resolution、seed、audio_duration 等参数，不受官方别名 H3/H3-Max 的额外参数约束。
+AutoDL workflow ID 的创建和查询也使用上述相同的 V2 接口及响应；完整参数说明和多图、音频、首尾帧示例见 [AutoDL 官网工作流模型名：直接使用 MiniMax 格式](#autodl-官网工作流模型名直接使用-minimax-格式)。
 
 ### TTS 音频扩展示例
 
