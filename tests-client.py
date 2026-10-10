@@ -133,9 +133,9 @@ with tempfile.TemporaryDirectory(prefix='autodl-dashscope-client-') as directory
     request_file = folder/'dashscope.json'
     request_file.write_text(json.dumps(body), encoding='utf-8')
     for source in ['example', 'request']:
-        argv = ['test-task.py', '--format', 'dashscope', '--'+source, wan if source=='example' else str(request_file), '--out', str(folder/'capture.mp4')]
+        argv = ['test-task.py', '--format', 'dashscope', '--billing-seconds', '5', '--'+source, wan if source=='example' else str(request_file), '--out', str(folder/'capture.mp4')]
         def capture_dash(request, **kwargs):
-            assert request.full_url == 'https://newapi.example/api/v1/services/aigc/image2video/video-synthesis'
+            assert request.full_url == 'https://newapi.example/api/v1/services/aigc/image2video/video-synthesis?billing_seconds=5'
             assert request.get_header('X-dashscope-async') == 'enable'
             assert request.get_header('Authorization') == 'Bearer fake-newapi-key'
             assert json.loads(request.data) == body
@@ -159,7 +159,7 @@ with tempfile.TemporaryDirectory(prefix='autodl-dashscope-client-') as directory
         assert request.full_url=='https://cdn.example.com/result.mp4'
         assert not request.has_header('Authorization') and not request.has_header('X-dashscope-async')
         return io.BytesIO(b'fake-dashscope-video')
-    argv=['test-task.py','--format','dashscope','--request',str(request_file),'--out',str(output),'--interval','1']
+    argv=['test-task.py','--format','dashscope','--billing-seconds','5','--request',str(request_file),'--out',str(output),'--interval','1']
     with patch.dict(os.environ, {'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',dash_network),patch.object(client.time,'sleep'):
         client.main()
     assert output.read_bytes()==b'fake-dashscope-video' and len(calls)==5
@@ -168,7 +168,7 @@ with tempfile.TemporaryDirectory(prefix='autodl-dashscope-client-') as directory
         def failed_dash(request, **kwargs):
             if request.get_method()=='POST':return io.BytesIO(b'{"output":{"task_id":"task_dash"}}')
             return io.BytesIO(json.dumps({'output':{'task_status':status,'message':'actual failure'}}).encode())
-        argv=['test-task.py','--format','dashscope','--request',str(request_file),'--out',str(folder/(status+'.mp4'))]
+        argv=['test-task.py','--format','dashscope','--billing-seconds','5','--request',str(request_file),'--out',str(folder/(status+'.mp4'))]
         with patch.dict(os.environ,{'NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',failed_dash):
             try:client.main()
             except RuntimeError as error:assert 'actual failure' in str(error)
@@ -208,6 +208,8 @@ with tempfile.TemporaryDirectory(prefix='autodl-inline-client-') as directory:
         request_file.write_text(json.dumps(expected), encoding='utf-8')
         argv = ['test-task.py','--format',dialect,'--request',str(request_file),'--out',str(folder/(case+'.mp4'))]
         if dialect == 'autodl':argv += ['--model',native_model]
+        if dialect == 'dashscope' or (dialect == 'autodl' and native_model == motion):
+            argv += ['--billing-seconds', '5']; path += '?billing_seconds=5'
         def capture_inline(request, **kwargs):
             assert request.full_url == 'https://newapi.example'+path
             assert request.get_method() == 'POST'
@@ -217,4 +219,26 @@ with tempfile.TemporaryDirectory(prefix='autodl-inline-client-') as directory:
             try:client.main()
             except Captured:checks += 1
             else:raise AssertionError('Expected inline input capture')
+# Required declaration is a URL query, never a Native/DashScope body mutation.
+with tempfile.TemporaryDirectory(prefix='autodl-billing-client-') as directory:
+    folder=pathlib.Path(directory)
+    request_file=folder/'native.json'; request_file.write_text(json.dumps({'ref_image':'https://cdn.example/a.png','ref_video':'https://cdn.example/a.mp4'}),encoding='utf-8')
+    original=json.loads(request_file.read_text())
+    for value in [None,'0','-1','3601','nan','inf']:
+        argv=['test-task.py','--format','autodl','--model','wan2.2animate-v4-motion_retargeting','--request',str(request_file),'--out',str(folder/'bad.mp4')]
+        if value is not None:argv+=['--billing-seconds',value]
+        with patch.dict(os.environ,{'NEW_API_KEY':'fake-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen') as network:
+            try:client.main()
+            except ValueError as error:assert 'billing-seconds' in str(error)
+            else:raise AssertionError('invalid billing declaration accepted')
+            network.assert_not_called();checks+=1
+    argv=['test-task.py','--format','autodl','--model','wan2.2animate-v4-motion_retargeting','--request',str(request_file),'--out',str(folder/'good.mp4'),'--billing-seconds','3.25']
+    def capture_billing(request,**kwargs):
+        assert request.full_url.endswith('/api/v1/comfyui/comfyui_workflow/wan2.2animate-v4-motion_retargeting?billing_seconds=3.25')
+        assert json.loads(request.data)==original
+        raise Captured()
+    with patch.dict(os.environ,{'NEW_API_KEY':'fake-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',capture_billing):
+        try:client.main()
+        except Captured:checks+=1
+        else:raise AssertionError('expected native billing capture')
 print(f'PASS: {checks} zero-network client request, full-flow and audit checks')

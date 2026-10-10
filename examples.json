@@ -90,7 +90,8 @@
     ],
     "input_reference": {
       "image_url": "https://your-public-file-host.example/reference-1.png"
-    }
+    },
+    "seconds": 5
   },
   "minimax_h3_image_audio_to_video_v2_15s": {
     "model": "minimax_h3_image_audio_to_video_v2_15s",
@@ -340,7 +341,8 @@
           }
         ],
         "resolution": "832p",
-        "ratio": "9:16"
+        "ratio": "9:16",
+        "duration": 5
       },
       "minimax_h3_image_audio_to_video_v2_15s": {
         "model": "minimax_h3_image_audio_to_video_v2_15s",
@@ -588,7 +590,7 @@
         "query_path": "/api/v1/comfyui/comfyui_workflow/result/{task_id}"
       },
       "wan2.2animate-v4-motion_retargeting": {
-        "path": "/api/v1/comfyui/comfyui_workflow/wan2.2animate-v4-motion_retargeting",
+        "path": "/api/v1/comfyui/comfyui_workflow/wan2.2animate-v4-motion_retargeting?billing_seconds=5",
         "body": {
           "resolution": "464*832px(竖版)",
           "ref_image": "https://your-public-file-host.example/reference-1.png",
@@ -1324,7 +1326,8 @@
             "video_url": "https://cdn.example.com/result.mp4"
           }
         }
-      }
+      },
+      "create_example_url": "/api/v1/services/aigc/image2video/video-synthesis?billing_seconds=5"
     },
     "media_inputs": {
       "note": "Input templates only: replace <BASE64_FROM_FILE> with actual standard Base64; use only the fields supported by the chosen workflow. URL and Data URL may be mixed. Output remains public HTTP(S) URL.",
@@ -1390,6 +1393,13 @@
           "mode": "wan-std"
         }
       }
+    },
+    "billing_seconds": {
+      "motion_openai": "seconds",
+      "motion_minimax": "duration",
+      "motion_native_query": "billing_seconds=5",
+      "dashscope_query": "billing_seconds=5",
+      "note": "Declare actual reference-video seconds; no fixed AutoDL default. Does not trim upstream output."
     }
   }
 }

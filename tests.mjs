@@ -17,10 +17,11 @@ const referenceValues = value => value === undefined ? [] : (Array.isArray(value
 const mediaValues = (input, kind) => kind === 'input_reference' ? referenceValues(input[kind]).map(ref => ref === null ? null : ref.image_url) : (input[kind] || []);
 const mediaInput = (kind, values) => kind === 'input_reference' ? values.map(url => url === null ? null : ({ image_url: url })) : values;
 const motionModel = 'wan2.2animate-v4-motion_retargeting';
-const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody, ...(model === motionModel ? { usageMeasurements: { seconds: 5 } } : {}) });
+const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.0');
+  assert.equal(p.meta.version, '1.0.1');
+  assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
   assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'MiniMax-H3', 'MiniMax-H3-Max', 'wan2.2-animate-move'].sort());
@@ -37,7 +38,7 @@ for (const [model, config] of Object.entries(catalog)) {
   const secondsField = ['duration', 'audio_duration'].find(k => source.input_rules[k]);
   if (promptField) expectedBody[promptField] = input.prompt;
   if (secondsField) { expectedBody[secondsField] = input.seconds; expectedFacts.seconds = input.seconds; }
-  if (model === motionModel) expectedFacts.seconds = 5; // deterministic host media measurement
+  if (model === motionModel) expectedFacts.seconds = 5; // explicit request declaration
   if (source.input_rules.resolution) {
     expectedBody.resolution = source.input_rules.resolution.default;
     expectedFacts.resolution = input.resolution; expectedFacts.orientation = input.orientation;
@@ -57,7 +58,7 @@ for (const [model, config] of Object.entries(catalog)) {
     const rule = source.input_rules[secondsField];
     for (const seconds of [rule.min, rule.max]) fixture(model + ': seconds ' + seconds, 'extractUsage', [ctx(model, { ...input, seconds })], { ...expectedFacts, seconds });
     for (const seconds of [rule.min - 1, rule.max + 1, 1.5, false, null, '', 'abc']) reject(model + ': reject seconds ' + JSON.stringify(seconds), 'extractUsage', [ctx(model, { ...input, seconds })], 'seconds must');
-  } else reject(model + ': no seconds control', 'buildSubmitRequest', [ctx(model, { ...input, seconds: 5 })], 'no seconds control');
+  } else if (model !== motionModel) reject(model + ': no seconds control', 'buildSubmitRequest', [ctx(model, { ...input, seconds: 5 })], 'no seconds control');
   for (const choice of config.resolutions) {
     assert.ok(source.input_rules.resolution.options.some(o => o.label === choice.upstream));
     const mapped = { ...expectedBody, resolution: choice.upstream };
@@ -216,9 +217,9 @@ const formats = examples._formats;
 test('three format example catalog coverage', () => {
   assert.deepEqual(Object.keys(formats.minimax).sort(), [...Object.keys(catalog), 'MiniMax-H3', 'MiniMax-H3-Max'].sort());
   assert.deepEqual(Object.keys(formats.autodl).sort(), Object.keys(catalog).sort());
-  assert.ok(p.meta.routes.some(r => r.path === '/api/v1/comfyui/comfyui_workflow/:workflow_id' && r.decode === 'rawCreate'));
+  assert.ok(p.meta.routes.some(r => r.path === '/plugin-bridge/comfyui/:workflow_id' && r.decode === 'rawCreate'));
 });
-const rawContext = (model, body) => ({ method: 'POST', path: '/api/v1/comfyui/comfyui_workflow/' + model, params: { workflow_id: model }, body: { kind: 'json', value: hostJSON(body) } });
+const rawContext = (model, body) => ({ method: 'POST', path: '/api/v1/comfyui/comfyui_workflow/' + model, params: { workflow_id: model }, query: model === motionModel ? { billing_seconds: ['5'] } : {}, body: { kind: 'json', value: hostJSON(body) } });
 const nativeInput = (model, body) => {
   const config = catalog[model], facts = { requests: 1 };
   if (config.secondsField) facts.seconds = Number(Object.hasOwn(body, config.secondsField) ? body[config.secondsField] : config.rules[config.secondsField].default);
@@ -226,7 +227,7 @@ const nativeInput = (model, body) => {
     const selected = config.resolutions.find(r => r.upstream === (Object.hasOwn(body, 'resolution') ? body.resolution : config.rules.resolution.default));
     if (selected) { facts.resolution = selected.resolution; facts.orientation = selected.orientation; }
   }
-  return { model, __autodl_native: JSON.stringify(hostJSON(body)), ...facts };
+  return { model, __autodl_native: JSON.stringify(hostJSON(body)), ...facts, ...(model === motionModel ? { seconds: 5, __autodl_billing_seconds: 5 } : {}) };
 };
 for (const [model, config] of Object.entries(catalog)) {
   const original = p.buildSubmitRequest(ctx(model));
@@ -265,7 +266,7 @@ for (const [model, config] of Object.entries(catalog)) {
         reject(model + ': MiniMax bad ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: value })], field + ' must');
         reject(model + ': raw bad ' + field + '=' + value, 'buildSubmitRequest', [ctx(model, nativeInput(model, { ...raw, [field]: value }))], field + ' must');
       }
-    } else reject(model + ': MiniMax unsupported ' + field, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: 5 })], 'does not support ' + field);
+    } else if (!(model === motionModel && field === 'duration')) reject(model + ': MiniMax unsupported ' + field, 'buildSubmitRequest', [ctx(model, { ...mini, [field]: 5 })], 'does not support ' + field);
   }
   if (config.rules.seed) {
     fixture(model + ': MiniMax seed extension', 'buildSubmitRequest', [ctx(model, { ...mini, seed: config.rules.seed.min })], { ...original, body: { ...original.body, seed: config.rules.seed.min } });
@@ -410,7 +411,7 @@ for (const { name, request, expected_workflow: target } of officialCases) {
 for (const alias of ['MiniMax-H3', 'MiniMax-H3-Max']) {
   const input = formats.minimax[alias];
   for (const duration of alias === 'MiniMax-H3' ? [4, 15] : [5, 15]) fixture(alias + ': official duration ' + duration, 'buildSubmitRequest', [ctx(alias, { ...input, duration })], { ...equivalentOfficial({ ...input, duration }, alias === 'MiniMax-H3' ? 'minimax_h3_z0901' : 'minimax_h3_lightx2v_no_pic'), rewriteModel: alias === 'MiniMax-H3' ? 'minimax_h3_z0901' : 'minimax_h3_lightx2v_no_pic' });
-  for (const duration of [0, 3, 16, 5.5, '5', null, false, undefined]) reject(alias + ': invalid official duration ' + duration, 'buildSubmitRequest', [ctx(alias, { ...input, duration })], 'duration must be an integer');
+  for (const duration of [0, 3, 16, 5.5, '5', null, false]) reject(alias + ': invalid official duration ' + duration, 'buildSubmitRequest', [ctx(alias, { ...input, duration })], 'duration must be an integer');
   if (alias === 'MiniMax-H3-Max') reject(alias + ': four seconds rejected', 'buildSubmitRequest', [ctx(alias, { ...input, duration: 4 })], 'duration must be an integer');
   for (const resolution of alias === 'MiniMax-H3' ? ['480P', '768p', '1080p', null, undefined] : ['2K', '768p', '1080p', null, undefined]) reject(alias + ': invalid official resolution ' + resolution, 'buildSubmitRequest', [ctx(alias, { ...input, resolution })], 'resolution must be');
   for (const text of ['', ' ', 'a'.repeat(7001), null]) reject(alias + ': invalid official prompt', 'buildSubmitRequest', [ctx(alias, { ...input, content: [{ type: 'text', text }] })], 'one non-empty text');
@@ -491,13 +492,13 @@ const v2Context = request => ({ method: 'POST', path: '/v2/video_generation', bo
 test('declared public routes use the four requested interface styles', () => {
   assert.deepEqual(p.meta.routes.map(r => [r.method, r.path]), [
     ['POST', '/v2/video_generation'], ['GET', '/v2/query/video_generation/:task_id'],
-    ['POST', '/api/v1/comfyui/comfyui_workflow/:workflow_id'], ['GET', '/api/v1/comfyui/comfyui_workflow/result/:task_id'],
-    ['POST', '/api/v1/services/aigc/image2video/video-synthesis'], ['GET', '/api/v1/tasks/:task_id'],
+    ['POST', '/plugin-bridge/comfyui/:workflow_id'], ['GET', '/plugin-bridge/comfyui/result/:task_id'],
+    ['POST', '/plugin-bridge/dashscope/video-synthesis'], ['GET', '/plugin-bridge/dashscope/tasks/:task_id'],
   ]);
   assert.equal(formats.minimax_api.create_path, '/v2/video_generation');
   assert.equal(formats.minimax_api.query_path, '/v2/query/video_generation/{task_id}');
   for (const [model, entry] of Object.entries(formats.autodl)) {
-    assert.equal(entry.path, '/api/v1/comfyui/comfyui_workflow/' + model);
+    assert.equal(entry.path, '/api/v1/comfyui/comfyui_workflow/' + model + (model === motionModel ? '?billing_seconds=5' : ''));
     assert.equal(entry.query_path, '/api/v1/comfyui/comfyui_workflow/result/{task_id}');
   }
 });
@@ -622,40 +623,30 @@ fixture('audit preview-only output cannot settle video success', 'parseTaskResul
 fixture('audit untyped audio output cannot settle video success', 'parseTaskResult', [query, envelope('SUCCESS', ['https://cdn.example.com/voice.wav']), { status: 200 }], { status: 'FAILURE', reason: 'AutoDL: SUCCESS response contains no expected media output' });
 const motionContext = ctx(motionModel);
 const motionState = p.parseSubmitResponse(motionContext, { statusCode: 200, body: envelope('QUEUED') }).state;
-fixture('motion estimate measures reference video', 'measureUsage', [motionContext, null], { seconds: { videoUrl: examples[motionModel].videos[0] } });
-fixture('motion alias uses mapped workflow for estimation', 'measureUsage', [{ ...motionContext, model: 'wan2.2-animate-move' }, null], { seconds: { videoUrl: examples[motionModel].videos[0] } });
-fixture('motion completion measures actual output', 'measureUsage', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS', url: 'https://cdn.example.com/generated.webm' }], { seconds: { videoUrl: 'https://cdn.example.com/generated.webm' } });
-fixture('motion failed task needs no media probe', 'measureUsage', [{ upstreamModel: motionModel, state: motionState }, { status: 'FAILURE' }], null);
-fixture('existing H3 billing needs no media probe', 'measureUsage', [ctx('minimax_h3_z0901'), null], null);
-fixture('motion completion replaces estimate with measured fractional seconds', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState, usageMeasurements: { seconds: 3.25 } }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], { ...motionState.facts, seconds: 3.25 });
-fixture('motion failure refunds seconds without output measurement', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'FAILURE' }], { ...motionState.facts, requests: 0, seconds: 0 });
-for (const seconds of [undefined, 0, -1, 3601, '5', null]) {
-  reject('motion rejects missing/invalid host seconds ' + String(seconds), 'extractUsage', [{ ...motionContext, usageMeasurements: { seconds } }], 'requires host video-duration@1');
-}
-reject('motion completion cannot silently retain estimated seconds', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS' }], 'requires host video-duration@1');
-reject('motion request cannot inject host measurement', 'extractUsage', [{ ...motionContext, requestBody: { ...examples[motionModel], usageMeasurements: { seconds: 1 } } }], 'unsupported request field');
-test('motion usage profile declares actual-video seconds', () => assert.equal(p.meta.usageProfiles.find(profile => profile.models.includes(motionModel)).schema.seconds.unit, 'second'));
+fixture('motion success keeps declared seconds and ignores processing time', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], motionState.facts);
+for (const status of ['FAILURE', 'CANCELLED']) fixture('motion unsuccessful task refunds ' + status, 'extractUsageOnComplete', [{ state: motionState }, { status }], { ...motionState.facts, requests: 0, seconds: 0 });
+for (const seconds of [undefined, 0, -1, 3601, null, '', false, '1e1', 'NaN', [], {}]) reject('motion rejects invalid declaration ' + String(seconds), 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], 'seconds must be a number');
+for (const seconds of [0.25, 1, 3.25, 3600, '3.25']) fixture('motion accepts declared seconds ' + seconds, 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], { ...motionState.facts, seconds: Number(seconds) });
+test('motion declares seconds schema without any custom host capability', () => assert.equal(p.meta.usageProfiles.find(profile => profile.models.includes(motionModel)).schema.seconds.unit, 'second'));
 // DashScope is a fourth surface over the unchanged motion lifecycle.
 const dashModel = 'wan2.2-animate-move';
 const dashPath = '/api/v1/services/aigc/image2video/video-synthesis';
 const dashBody = { model: dashModel, input: { image_url: 'https://cdn.example.com/person.png', video_url: 'https://cdn.example.com/input.mp4' }, parameters: { mode: 'wan-std' } };
-const dashContext = request => ({ method: 'POST', path: dashPath, body: { kind: 'json', value: hostJSON(request) } });
+const dashContext = request => ({ method: 'POST', path: dashPath, query: { billing_seconds: ['5'] }, body: { kind: 'json', value: hostJSON(request) } });
 const dashUpstream = { resolution: '464*832px(竖版)', ref_image: dashBody.input.image_url, ref_video: dashBody.input.video_url };
-const dashFacts = { requests: 1, resolution: '832p', orientation: 'portrait' };
-const dashIntent = { kind: 'submit', model: dashModel, action: 'video_to_video', requestBody: { model: dashModel, __autodl_fields: Object.entries(dashUpstream), ...dashFacts, __autodl_dashscope: JSON.stringify(hostJSON(dashBody)) } };
+const dashFacts = { requests: 1, seconds: 5, resolution: '832p', orientation: 'portrait' };
+const dashIntent = { kind: 'submit', model: dashModel, action: 'video_to_video', requestBody: { model: dashModel, __autodl_fields: Object.entries(dashUpstream), ...dashFacts, __autodl_billing_seconds: 5, __autodl_dashscope: JSON.stringify(hostJSON(dashBody)) } };
 nativeFixture('DashScope valid standard decode preserves external identity', 'dashCreate', [dashContext(dashBody)], dashIntent);
 for (const mapped of [dashModel, motionModel]) {
-  const context = { ...base, model: dashModel, upstreamModel: mapped, requestBody: dashIntent.requestBody, usageMeasurements: { seconds: 5 } };
+  const context = { ...base, model: dashModel, upstreamModel: mapped, requestBody: dashIntent.requestBody };
   fixture('DashScope submit mapping with upstream pin ' + mapped, 'buildSubmitRequest', [context], { url: base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + motionModel, method: 'POST', action: 'video_to_video', headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' }, body: dashUpstream, rewriteModel: motionModel });
-  fixture('DashScope reference video measurement with upstream pin ' + mapped, 'measureUsage', [context, null], { seconds: { videoUrl: dashBody.input.video_url } });
   fixture('DashScope measured reservation with upstream pin ' + mapped, 'extractUsage', [context], { ...dashFacts, seconds: 5 });
   fixture('DashScope common submit state with upstream pin ' + mapped, 'parseSubmitResponse', [context, { statusCode: 200, body: envelope('QUEUED') }], { taskId: 'upstream-123', taskData: envelope('QUEUED'), state: { facts: { ...dashFacts, seconds: 5 }, type: 'video', submittedAt: 2000, timeoutSeconds: 1800, workflowId: motionModel } });
 }
-const dashDriver = { ...base, model: dashModel, upstreamModel: motionModel, requestBody: dashIntent.requestBody, usageMeasurements: { seconds: 5 } };
+const dashDriver = { ...base, model: dashModel, upstreamModel: motionModel, requestBody: dashIntent.requestBody };
 const dashState = { facts: { ...dashFacts, seconds: 5 }, type: 'video', submittedAt: 2000, timeoutSeconds: 1800, workflowId: motionModel };
 fixture('DashScope polled success uses unchanged result parser', 'parseTaskResult', [{ ...dashDriver, taskId: 'upstream-123', state: dashState }, envelope('SUCCESS', [{ url: 'https://cdn.example.com/final.mp4', type: 'video' }], { duration: 196 }), { status: 200 }], { status: 'SUCCESS', progress: '100%', url: 'https://cdn.example.com/final.mp4' });
-fixture('DashScope completion measures output, not processing time', 'measureUsage', [{ upstreamModel: motionModel, state: dashState }, { status: 'SUCCESS', url: 'https://cdn.example.com/final.mp4' }], { seconds: { videoUrl: 'https://cdn.example.com/final.mp4' } });
-for (const seconds of [3.25, 7]) fixture('DashScope settles actual output seconds ' + seconds, 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: dashState, usageMeasurements: { seconds } }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], { ...dashFacts, seconds });
+fixture('DashScope settles saved declared seconds', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: dashState }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], dashFacts);
 fixture('DashScope failure refunds all quantities', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: dashState }, { status: 'FAILURE' }], { ...dashFacts, requests: 0, seconds: 0 });
 for (const key of ['model', 'input', 'parameters']) {
   const request = structuredClone(dashBody); delete request[key];
@@ -732,7 +723,6 @@ const dashDataBody = { ...dashBody, input: { image_url: dataMedia.image, video_u
 const dashDataIntent = p.native.dashCreate(dashContext(dashDataBody));
 nativeFixture('DashScope standard image and video Data URL decode', 'dashCreate', [dashContext(dashDataBody)], dashDataIntent);
 fixture('DashScope Data URL shares automatic rewrite and submission', 'buildSubmitRequest', [{ ...dashDriver, requestBody: dashDataIntent.requestBody }], { ...p.buildSubmitRequest(dashDriver), body: { ...dashUpstream, ref_image: dataMedia.image, ref_video: dataMedia.video } });
-fixture('motion Data URL is measured by the existing host hook', 'measureUsage', [ctx(motionModel, { ...examples[motionModel], videos: [dataMedia.video] }), null], { seconds: { videoUrl: dataMedia.video } });
 for (const kind of ['image', 'audio', 'video']) {
   const model = kind === 'video' ? motionModel : 'minimax_h3_image_audio_to_video_v2';
   const field = { image: 'input_reference', audio: 'audios', video: 'videos' }[kind];
@@ -744,5 +734,39 @@ for (const kind of ['image', 'audio', 'video']) {
 for (const kind of ['image', 'audio', 'video']) reject('output ' + kind + ' Data URL remains forbidden', 'listArtifacts', [{ status: 'SUCCESS', data: envelope('SUCCESS', [{ url: dataMedia[kind], type: kind }]) }], 'invalid media URL');
 nativeFixture('native Data URL MIME mismatch rejected', 'rawCreate', [rawContext(motionModel, { ref_image: dataMedia.video })], null, 'invalid media URL');
 nativeFixture('native naked Base64 rejected', 'rawCreate', [rawContext(motionModel, { ref_image: 'AA==' })], null, 'invalid media URL');
+// Duration defaults are the checked AutoDL defaults, never processing time.
+for (const [model, config] of Object.entries(catalog)) if (config.secondsField) {
+  const openai = structuredClone(examples[model]); delete openai.seconds;
+  const mini = structuredClone(formats.minimax[model]); delete mini[config.secondsField];
+  const raw = structuredClone(formats.autodl[model].body); delete raw[config.secondsField];
+  for (const [name, body] of [['OpenAI', openai], ['MiniMax', mini], ['Native', p.native.rawCreate(rawContext(model, raw)).requestBody]]) {
+    const context = ctx(model, body), facts = p.extractUsage(ctx(model));
+    fixture(model + ': omitted duration uses official default in ' + name, 'extractUsage', [context], { ...facts, seconds: config.rules[config.secondsField].default });
+    if (name === 'Native') test(model + ': default billing does not inject native body field', () => assert.equal(Object.hasOwn(p.buildSubmitRequest(context).body, config.secondsField), false));
+  }
+}
+for (const model of ['MiniMax-H3', 'MiniMax-H3-Max']) {
+  const body = structuredClone(formats.minimax[model]); delete body.duration;
+  fixture(model + ': omitted duration uses five-second route and billing', 'extractUsage', [ctx(model, body)], { ...p.extractUsage(ctx(model, formats.minimax[model])), seconds: 5 });
+}
+for (const seconds of ['0.25', '3.25', '3600']) {
+  const raw = { ...rawContext(motionModel, formats.autodl[motionModel].body), query: { billing_seconds: [seconds] } };
+  const dash = { ...dashContext(dashBody), query: { billing_seconds: [seconds] } };
+  for (const [name, decoder, context, model] of [['Native', 'rawCreate', raw, motionModel], ['DashScope', 'dashCreate', dash, dashModel]]) {
+    const intent = p.native[decoder](context);
+    const driver = { ...base, model, upstreamModel: motionModel, requestBody: intent.requestBody };
+    fixture(name + ': query declaration persists ' + seconds, 'extractUsage', [driver], { ...motionState.facts, seconds: Number(seconds) });
+    test(name + ': billing declaration never reaches upstream body ' + seconds, () => { const body = p.buildSubmitRequest(driver).body; for (const key of ['seconds', 'duration', 'billing_seconds', '__autodl_billing_seconds']) assert.equal(Object.hasOwn(body, key), false); });
+  }
+}
+for (const query of [{}, { billing_seconds: [] }, { billing_seconds: ['5', '6'] }, { billing_seconds: ['0'] }, { billing_seconds: ['3601'] }, { billing_seconds: ['NaN'] }, { billing_seconds: ['1e1'] }, { billing_seconds: [''] }]) {
+  nativeFixture('Native rejects absent or invalid seconds query ' + JSON.stringify(query), 'rawCreate', [{ ...rawContext(motionModel, formats.autodl[motionModel].body), query }], null, 'AutoDL:');
+  nativeFixture('DashScope rejects absent or invalid seconds query ' + JSON.stringify(query), 'dashCreate', [{ ...dashContext(dashBody), query }], null, 'AutoDL:');
+}
+nativeFixture('H3 query cannot override its actual duration', 'rawCreate', [{ ...rawContext(nativeModel, { prompt: 'test', duration: 5 }), query: { billing_seconds: ['1'] } }], null, 'only supported for the motion-transfer');
+for (const key of ['seconds', '__autodl_billing_seconds']) {
+  const intent = p.native.rawCreate(rawContext(motionModel, formats.autodl[motionModel].body));
+  reject('Native motion rejects inconsistent stored declaration ' + key, 'extractUsage', [ctx(motionModel, { ...intent.requestBody, [key]: 3 })], 'usage facts conflict');
+}
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

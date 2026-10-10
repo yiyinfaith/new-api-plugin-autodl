@@ -2498,7 +2498,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.0",
+  version: "1.0.1",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2513,16 +2513,32 @@ export const meta = {
   routes: [
     { method: "POST", path: "/v2/video_generation", type: "submit", decode: "miniCreate", render: "miniCreated" },
     { method: "GET", path: "/v2/query/video_generation/:task_id", type: "query", render: "miniTask" },
-    { method: "POST", path: "/api/v1/comfyui/comfyui_workflow/:workflow_id", type: "submit", decode: "rawCreate", render: "task" },
-    { method: "GET", path: "/api/v1/comfyui/comfyui_workflow/result/:task_id", type: "query", render: "task" },
-    { method: "POST", path: "/api/v1/services/aigc/image2video/video-synthesis", type: "submit", models: [DASHSCOPE_MODEL], decode: "dashCreate", render: "dashCreated" },
-    { method: "GET", path: "/api/v1/tasks/:task_id", type: "query", render: "dashTask" },
+    // The public AutoDL/DashScope paths are rewritten by the origin proxy to
+    // this private prefix because New API reserves its own /api namespace.
+    { method: "POST", path: "/plugin-bridge/comfyui/:workflow_id", type: "submit", decode: "rawCreate", render: "task" },
+    { method: "GET", path: "/plugin-bridge/comfyui/result/:task_id", type: "query", render: "task" },
+    { method: "POST", path: "/plugin-bridge/dashscope/video-synthesis", type: "submit", models: [DASHSCOPE_MODEL], decode: "dashCreate", render: "dashCreated" },
+    { method: "GET", path: "/plugin-bridge/dashscope/tasks/:task_id", type: "query", render: "dashTask" },
   ],
   usageSchema: REQUEST_SCHEMA,
   usageProfiles: Object.keys(WORKFLOWS).map(usageProfile).concat(MINIMAX_MODELS.map(officialUsageProfile)),
 };
 
 function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
+function billedSeconds(value, field) {
+  const seconds = typeof value === "number" ? value : (typeof value === "string" && /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value) ? Number(value) : NaN);
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600) throw new Error("AutoDL: " + field + " must be a number greater than 0 and at most 3600 seconds");
+  return seconds;
+}
+function queryBillingSeconds(ctx, required) {
+  const values = ctx.query && ctx.query.billing_seconds;
+  if (values === undefined) {
+    if (required) throw new Error("AutoDL: this workflow has no fixed default duration; provide billing_seconds in the query string");
+    return undefined;
+  }
+  if (!Array.isArray(values) || values.length !== 1) throw new Error("AutoDL: provide billing_seconds exactly once");
+  return billedSeconds(values[0], "billing_seconds");
+}
 function object(value) { return value !== null && typeof value === "object" && !Array.isArray(value); }
 function copyRequest(value) {
   const copy = {};
@@ -2653,6 +2669,8 @@ function normalizeInput(config, input) {
     seconds = numberValue(seconds, rule, "seconds");
     if (input.duration !== undefined && numberValue(input.duration, rule, "seconds") !== seconds) throw new Error("AutoDL: seconds and duration conflict");
     body[config.secondsField] = seconds; facts.seconds = seconds;
+  } else if (config.workflowId === MOTION_WORKFLOW) {
+    facts.seconds = billedSeconds(input.seconds, "seconds");
   } else if (input.seconds !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
   const selected = mapResolution(config, input);
   if (selected) { body.resolution = selected.upstream; facts.resolution = selected.resolution; facts.orientation = selected.orientation; }
@@ -2704,7 +2722,7 @@ function normalizeRaw(config, input) {
   return { body: body, facts: facts, type: config.type };
 }
 
-function analyzeNativeRequest(config, rawBody) {
+function analyzeNativeRequest(config, rawBody, billingSeconds) {
   if (!object(rawBody)) throw new Error("AutoDL: native body must be a JSON object");
   // Validate known media without rewriting the native body or its other fields.
   for (const key of Object.keys(rawBody)) if (typeof rawBody[key] === "string" && has(config.rules, key) && ["image", "audio", "video"].includes(config.rules[key].type)) inputMedia(rawBody[key], config.rules[key].type);
@@ -2715,7 +2733,8 @@ function analyzeNativeRequest(config, rawBody) {
   if (config.secondsField) {
     const key = config.secondsField, rule = config.rules[key];
     facts.seconds = numberValue(has(rawBody, key) ? rawBody[key] : rule.default, rule, key);
-  }
+  } else if (config.workflowId === MOTION_WORKFLOW) facts.seconds = billedSeconds(billingSeconds, "billing_seconds");
+  else if (billingSeconds !== undefined) throw new Error("AutoDL: billing_seconds is only supported for the motion-transfer workflow");
   if (config.resolutions.length) {
     const value = has(rawBody, "resolution") ? rawBody.resolution : config.rules.resolution.default;
     const selected = config.resolutions.find(function (entry) { return entry.upstream === value; });
@@ -2727,11 +2746,12 @@ function analyzeNativeRequest(config, rawBody) {
 }
 
 function savedNative(config, input) {
-  if (Object.keys(input).some(function (key) { return !["model", "__autodl_native", "requests", "seconds", "resolution", "orientation"].includes(key); }) || typeof input.__autodl_native !== "string") throw new Error("AutoDL: invalid internal native request");
+  if (Object.keys(input).some(function (key) { return !["model", "__autodl_native", "__autodl_billing_seconds", "requests", "seconds", "resolution", "orientation"].includes(key); }) || typeof input.__autodl_native !== "string") throw new Error("AutoDL: invalid internal native request");
   if (input.model !== config.workflowId) throw new Error("AutoDL: internal native workflow identity conflicts");
   let rawBody;
   try { rawBody = JSON.parse(input.__autodl_native); } catch (_) { throw new Error("AutoDL: invalid internal native JSON source"); }
-  const analysis = analyzeNativeRequest(config, rawBody);
+  const analysis = analyzeNativeRequest(config, rawBody, input.__autodl_billing_seconds);
+  if (has(input, "__autodl_billing_seconds") !== (config.workflowId === MOTION_WORKFLOW)) throw new Error("AutoDL: invalid internal billing_seconds declaration");
   for (const key of ["requests", "seconds", "resolution", "orientation"]) {
     if (has(input, key) !== has(analysis.facts, key) || input[key] !== analysis.facts[key]) throw new Error("AutoDL: internal native usage facts conflict");
   }
@@ -2765,8 +2785,9 @@ function miniScenario(input) {
 function officialWorkflow(model, input) {
   const scenario = miniScenario(input), maximum = model !== "MiniMax-H3";
   const resolutions = maximum ? ["480P", "768P"] : ["768P", "2K"];
+  const duration = input.duration === undefined ? 5 : input.duration;
   if (!resolutions.includes(input.resolution)) throw new Error("AutoDL: " + model + " resolution must be " + resolutions.join(" or "));
-  if (!Number.isInteger(input.duration) || input.duration < (maximum ? 5 : 4) || input.duration > 15) throw new Error("AutoDL: " + model + " duration must be an integer from " + (maximum ? 5 : 4) + " to 15 seconds");
+  if (!Number.isInteger(duration) || duration < (maximum ? 5 : 4) || duration > 15) throw new Error("AutoDL: " + model + " duration must be an integer from " + (maximum ? 5 : 4) + " to 15 seconds");
   if (scenario.text.length !== 1 || typeof scenario.text[0] !== "string" || !scenario.text[0].trim() || scenario.text[0].length > 7000) throw new Error("AutoDL: " + model + " requires one non-empty text item, at most 7000 characters");
   if (scenario.reference_video) throw new Error("AutoDL: 当前 AutoDL 适配器没有对应的 reference_video workflow");
   if (scenario.reference_audio > 3 || scenario.reference_image > 9) throw new Error("AutoDL: official MiniMax reference limits are 9 images and 3 audio clips");
@@ -2776,9 +2797,9 @@ function officialWorkflow(model, input) {
     selected = "minimax_h3_lightx2v";
   } else if (scenario.reference_image) {
     if (maximum) {
-      if (!scenario.reference_audio) selected = input.duration <= 10 ? "minimax_h3_lightx2v_v5" : "minimax_h3_lightx2v_v5_15s";
+      if (!scenario.reference_audio) selected = duration <= 10 ? "minimax_h3_lightx2v_v5" : "minimax_h3_lightx2v_v5_15s";
       else if (input.ratio === "1:1") selected = "minimax_h3_zm_u08";
-      else selected = input.duration <= 10 ? "minimax_h3_image_audio_to_video_v2" : "minimax_h3_image_audio_to_video_v2_15s";
+      else selected = duration <= 10 ? "minimax_h3_image_audio_to_video_v2" : "minimax_h3_image_audio_to_video_v2_15s";
     } else if (scenario.reference_image >= 7 || input.ratio === "1:1") selected = "minimax_h3_zm_u24";
     else selected = scenario.reference_audio ? "minimax_h3_z0903" : "minimax_h3_z0902";
   } else if (scenario.reference_audio) throw new Error("AutoDL: 当前适配器暂无对应 AutoDL workflow for reference_audio without reference_image");
@@ -2844,8 +2865,12 @@ function normalizeMiniMax(config, input) {
     if (!has(config.rules, key) || key === config.promptField || mediaFields.includes(key)) throw new Error("AutoDL: unsupported or mixed MiniMax field " + key);
     body[key] = input[key];
   }
+  let motionSeconds;
   for (const key of ["duration", "audio_duration", "seed"]) if (has(input, key)) {
-    if (!has(config.rules, key)) throw new Error("AutoDL: this workflow does not support " + key);
+    if (!has(config.rules, key)) {
+      if (config.workflowId === MOTION_WORKFLOW && key === "duration") { motionSeconds = billedSeconds(input[key], "duration"); continue; }
+      throw new Error("AutoDL: this workflow does not support " + key);
+    }
     body[key] = input[key];
   }
   if (config.resolutions.length) {
@@ -2899,25 +2924,34 @@ function normalizeMiniMax(config, input) {
     if (references[kind].length > fields.length) throw new Error("AutoDL: too many " + kind + " references for this workflow");
     references[kind].forEach(function (url, index) { body[fields[index]] = url; });
   }
-  return normalizeRaw(config, body);
+  const normalized = normalizeRaw(config, body);
+  if (config.workflowId === MOTION_WORKFLOW) {
+    if (motionSeconds === undefined) throw new Error("AutoDL: motion transfer has no fixed default duration; provide duration for billing");
+    normalized.facts.seconds = motionSeconds;
+  }
+  return normalized;
 }
 
 function normalizeRequest(config, input) {
   if (object(input) && has(input, "__autodl_native")) return savedNative(config, input);
   if (object(input) && has(input, "__autodl_fields")) {
-    if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "__autodl_minimax", "__autodl_dashscope", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
-    let expected;
+    if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "__autodl_minimax", "__autodl_dashscope", "__autodl_billing_seconds", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
+    let expected, expectedFacts;
+    if (has(input, "__autodl_billing_seconds") && config.workflowId !== MOTION_WORKFLOW) throw new Error("AutoDL: unexpected internal billing_seconds declaration");
     if (has(input, "__autodl_dashscope")) {
       if (has(input, "__autodl_minimax") || typeof input.__autodl_dashscope !== "string" || config.workflowId !== MOTION_WORKFLOW) throw new Error("AutoDL: invalid internal DashScope source");
       let source;
       try { source = JSON.parse(input.__autodl_dashscope); } catch (_) { throw new Error("AutoDL: invalid internal DashScope source"); }
       expected = normalizeDashScope(source).body;
+      expectedFacts = normalizeDashScope(source).facts;
     }
     if (has(input, "__autodl_minimax")) {
       if (typeof input.__autodl_minimax !== "string") throw new Error("AutoDL: invalid internal MiniMax source");
       const source = savedMiniMax(input), selected = officialWorkflow(source.model, source);
       if (selected.workflowId !== config.workflowId) throw new Error("AutoDL: internal MiniMax workflow identity conflicts");
-      expected = normalizeMiniMax(config, source).body;
+      const normalizedSource = normalizeMiniMax(config, source);
+      expected = normalizedSource.body;
+      expectedFacts = normalizedSource.facts;
     }
     const body = {};
     for (const pair of input.__autodl_fields) {
@@ -2925,10 +2959,14 @@ function normalizeRequest(config, input) {
       body[pair[0]] = pair[1];
     }
     const result = normalizeRaw(config, body);
+    if (has(input, "__autodl_billing_seconds")) result.facts.seconds = billedSeconds(input.__autodl_billing_seconds, "internal billing_seconds");
+    if (expectedFacts && expectedFacts.seconds !== undefined) result.facts.seconds = expectedFacts.seconds;
+    if (config.workflowId === MOTION_WORKFLOW && result.facts.seconds === undefined) throw new Error("AutoDL: motion transfer billing seconds are missing");
     if (expected) {
       if (Object.keys(result.body).length !== Object.keys(expected).length || Object.keys(expected).some(function (key) { return !has(result.body, key) || result.body[key] !== expected[key]; })) throw new Error("AutoDL: internal " + (has(input, "__autodl_dashscope") ? "DashScope" : "MiniMax") + " fields conflict with the official request");
     }
     for (const key of ["requests", "seconds", "resolution", "orientation"]) if (has(input, key) && input[key] !== result.facts[key]) throw new Error("AutoDL: internal usage facts conflict");
+    if (config.workflowId === MOTION_WORKFLOW && !has(input, "seconds")) throw new Error("AutoDL: internal motion billing seconds are missing");
     return result;
   }
   if (object(input) && has(input, "content")) return normalizeMiniMax(config, input);
@@ -3070,7 +3108,7 @@ export function parseSubmitResponse(ctx, response) {
   const id = taskId(body.data.task_id);
   const request = normalized(ctx);
   const config = requestWorkflow(ctx);
-  const state = { facts: measuredMotionFacts(ctx, request.facts, config), type: config.type, submittedAt: utils.unixNow(), timeoutSeconds: config.timeoutSeconds, workflowId: config.workflowId };
+  const state = { facts: request.facts, type: config.type, submittedAt: utils.unixNow(), timeoutSeconds: config.timeoutSeconds, workflowId: config.workflowId };
   const parsed = parseTaskResult(Object.assign({}, ctx, { taskId: id, state: state }), body, { status: response.statusCode, headers: {} });
   const output = { taskId: id, taskData: body, state: state };
   if (parsed.status === "SUCCESS" || parsed.status === "FAILURE") output.immediate = parsed;
@@ -3112,28 +3150,8 @@ export function parseTaskResult(ctx, body, response) {
   return { status: status };
 }
 
-function measuredMotionFacts(ctx, facts, config) {
-  if (config.workflowId !== MOTION_WORKFLOW) return facts;
-  const seconds = ctx.usageMeasurements && ctx.usageMeasurements.seconds;
-  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600) throw new Error("AutoDL: motion transfer billing requires host video-duration@1 support and a measurable public MP4/WebM video (0 < duration <= 3600 seconds)");
-  return Object.assign({}, facts, { seconds: seconds });
-}
-
-// This descriptor contains no credentials. The host fetches and measures media
-// outside the JavaScript hook timeout, then supplies trusted usageMeasurements.
-export function measureUsage(ctx, result) {
-  const model = ctx.upstreamModel || ctx.model || (ctx.state && ctx.state.workflowId);
-  if (model !== MOTION_WORKFLOW && !(model === DASHSCOPE_MODEL && object(ctx.requestBody) && has(ctx.requestBody, "__autodl_dashscope"))) return null;
-  if (result) {
-    if (result.status !== "SUCCESS") return null;
-    if (typeof result.url !== "string" || !result.url) throw new Error("AutoDL: completed motion transfer has no measurable video URL");
-    return { seconds: { videoUrl: result.url } };
-  }
-  return { seconds: { videoUrl: normalized(ctx).body.ref_video } };
-}
-
 export function extractUsage(ctx) {
-  return measuredMotionFacts(ctx, normalized(ctx).facts, requestWorkflow(ctx));
+  return normalized(ctx).facts;
 }
 
 export function extractUsageOnComplete(task, result) {
@@ -3141,11 +3159,9 @@ export function extractUsageOnComplete(task, result) {
   if (!state || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
   // data.duration is processing wall time, NOT generated video seconds.
   const facts = Object.assign({}, state.facts);
-  if (result.status === "FAILURE") {
+  if (result.status === "FAILURE" || result.status === "CANCELLED") {
     facts.requests = 0;
     if (facts.seconds !== undefined) facts.seconds = 0;
-  } else if (result.status === "SUCCESS" && (task.upstreamModel || state.workflowId) === MOTION_WORKFLOW) {
-    return measuredMotionFacts(task, facts, WORKFLOWS[MOTION_WORKFLOW]);
   }
   return facts;
 }
@@ -3255,7 +3271,9 @@ function decodeCompatible(ctx, pinnedModel) {
 function canonicalRequest(model, normalized) {
   // Key/value pairs prevent the host's recursive usage preflight from treating
   // generated resolution enum labels as billing enum values. Facts stay explicit.
-  return Object.assign({ model: model, __autodl_fields: Object.entries(normalized.body) }, normalized.facts);
+  const request = Object.assign({ model: model, __autodl_fields: Object.entries(normalized.body) }, normalized.facts);
+  if ([MOTION_WORKFLOW, DASHSCOPE_MODEL].includes(model) && normalized.facts.seconds !== undefined) request.__autodl_billing_seconds = normalized.facts.seconds;
+  return request;
 }
 
 function decodeRaw(ctx) {
@@ -3263,10 +3281,13 @@ function decodeRaw(ctx) {
   const model = text((ctx.params || {}).workflow_id);
   if (!model) throw new Error("AutoDL: raw endpoint requires a workflow ID in the URL");
   const config = workflow(model);
-  const analysis = analyzeNativeRequest(config, ctx.body.value);
+  const declaration = queryBillingSeconds(ctx, config.workflowId === MOTION_WORKFLOW);
+  if (declaration !== undefined && config.workflowId !== MOTION_WORKFLOW) throw new Error("AutoDL: billing_seconds is only supported for the motion-transfer workflow");
+  const analysis = analyzeNativeRequest(config, ctx.body.value, declaration);
   // The host recursively scans usage field names. An opaque JSON string keeps
   // client fields (including nested lookalikes) isolated from trusted facts.
   const request = Object.assign({ model: model, __autodl_native: JSON.stringify(ctx.body.value) }, analysis.facts);
+  if (declaration !== undefined) request.__autodl_billing_seconds = declaration;
   return { kind: "submit", model: model, action: analysis.action, requestBody: request };
 }
 
@@ -3275,8 +3296,8 @@ function dashScopeMediaURL(value, kind) {
   if (/^data:/i.test(url)) return url;
   const authority = url.match(/^https?:\/\/([^/?#]+)/i)[1];
   const host = authority.replace(/:\d+$/, "").replace(/\.$/, "").toLowerCase();
-  // Reject literal local destinations; the host's existing protected media
-  // fetcher checks DNS and redirects when measuring ref_video.
+  // Reject literal local destinations. Input media is fetched by AutoDL;
+  // this plugin does not download or measure the reference video.
   const ipv4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || (!host.includes(".") && !host.startsWith("[")) ||
       /^\[(?:::|::1\]|::ffff:|f[cd]|fe[89ab])/i.test(host) ||
@@ -3304,6 +3325,7 @@ function normalizeDashScope(input) {
 function decodeDashScope(ctx) {
   if (!(ctx.body && ctx.body.kind === "json")) throw new Error("AutoDL: DashScope endpoint requires a JSON object");
   const parsed = normalizeDashScope(ctx.body.value);
+  parsed.facts.seconds = queryBillingSeconds(ctx, true);
   const request = canonicalRequest(DASHSCOPE_MODEL, parsed);
   // NativeDecodeContext has no headers in rc.42; asynchronous operation is
   // inherent in this route. The raw source is revalidated before billing/HTTP.

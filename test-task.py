@@ -1,6 +1,7 @@
 """Unified Task API client: submit once, poll with a deadline, download an artifact."""
 import argparse
 import json
+import math
 import os
 import pathlib
 import sys
@@ -17,6 +18,7 @@ def main():
     choice.add_argument('--example', help='examples.json 中的官网工作流 ID；必需媒体要先替换为真实 URL')
     parser.add_argument('--format', choices=['openai', 'minimax', 'autodl', 'dashscope'], default='openai', help='请求格式；默认保持现有 OpenAI 格式')
     parser.add_argument('--model', help='AutoDL 原生 --request 请求的官网工作流 ID，放在 URL 中，不加入 body')
+    parser.add_argument('--billing-seconds', type=float, help='Native Wan / DashScope 必填的参考视频秒数声明，仅用于计费')
     parser.add_argument('--out', required=True, help='输出文件，禁止覆盖已有文件')
     parser.add_argument('--artifact', help='产物类型，如 video 或 audio；默认下载首个适用产物')
     parser.add_argument('--timeout', type=int, default=1800)
@@ -56,6 +58,13 @@ def main():
         submit_path = '/api/v1/comfyui/comfyui_workflow/' + urllib.parse.quote(model, safe='')
     elif not body.get('model'):
         raise ValueError('JSON 请求必须包含 model')
+    needs_declaration = args.format == 'dashscope' or (args.format == 'autodl' and model == 'wan2.2animate-v4-motion_retargeting')
+    if needs_declaration:
+        if args.billing_seconds is None or not math.isfinite(args.billing_seconds) or not 0 < args.billing_seconds <= 3600:
+            raise ValueError('该工作流没有固定默认时长；请用 --billing-seconds 声明参考视频秒数（0 < 秒数 <= 3600）')
+        submit_path += '?billing_seconds=' + format(args.billing_seconds, '.15g')
+    elif args.billing_seconds is not None:
+        raise ValueError('--billing-seconds 仅适用于 Native Wan / DashScope；其他格式使用请求体时长字段')
     if 'your-public-file-host.example' in json.dumps(body):
         raise ValueError('请将媒体占位 URL 替换为公开可下载的真实图片、音频或视频 URL / 标准 Data URL，再通过 --request 提交')
     output = pathlib.Path(args.out).expanduser().resolve()

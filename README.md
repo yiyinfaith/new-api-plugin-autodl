@@ -2,7 +2,7 @@
 
 为 New API 提供 AutoDL.Art Task Plugin 适配，将 AutoDL ComfyUI 工作流接入 New API。
 
-插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.0**（插件元数据为 `1.0.0`）。
+插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.1**（插件元数据为 `1.0.1`）。
 
 **调用方从这里开始：[5 分钟快速开始与完整 API 参考](API.md#5-分钟快速开始)。** 一份文档平等介绍 OpenAI、MiniMax、AutoDL Native、DashScope Wan 四种接口；每种都有完整 curl、创建响应、任务查询和成功结果字段。覆盖文生视频、图片 URL/Data URL、图+音频、图+视频，并提供常用模型与错误速查；后半部分保留完整字段类型、必填/默认值、工作流范围、MiniMax 自动路由、原生透传、计费及技术限制，无需跳到其他说明文档。
 
@@ -46,7 +46,7 @@ flowchart TD
     Host --> Submit["共用提交钩子；使用渠道 AutoDL Token"]
     Submit --> Vendor["AutoDL ComfyUI 异步任务"]
     Vendor --> Poll["New API 后台轮询；状态与产物解析"]
-    Poll --> Settle["保存结果；H3 沿用请求 facts，动作迁移测量成片；失败归零"]
+    Poll --> Settle["保存结果；H3 沿用请求 facts，Wan 使用声明秒数；失败归零"]
     Settle --> Render["按调用接口呈现结果"]
     Render --> Query["客户端：公开任务 ID 查询与下载"]
 ```
@@ -55,17 +55,17 @@ OpenAI 解码器将 `seconds / size / input_reference` 等统一字段转换成�
 
 原生入口保存原始 JSON，保持发送给 AutoDL 的 body 在 JSON 语义上完全一致；它只旁路分析时长、分辨率、任务类型和 action。未知非计费字段、数字字符串、嵌套扩展字段不会被重写，缺省值仅用于内部计费。即使原生 body 含有宿主的附件标记同名字段，也按普通业务 JSON 发送。插件仅校验已知媒体字符串的 URL/Data URL 格式并原样透传；媒体实际内容和业务参数由 AutoDL 校验。
 
-四种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量，动作迁移完成时测量成片并结算；AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
+四种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量，Wan 完成时沿用已保存的声明秒数；AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
 
 插件不会自动导入价格、探测远程媒体尺寸或替用户上传本地媒体。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#比例与-adaptive)。上线前请为全部要调用的工作流及官方模型别名配置价格；仅安装插件不足以完成渠道和计费配置。
 
 ## URL 安装
 
-**宿主前提：**已验证 New API **v1.0.0-rc.42**（源码 `QuantumNous/new-api@6370b29424168039e94d40d610191e7d2e65dbf4`）。原版宿主保留 `/api` 命名空间，会以 `intersects reserved namespace /api` 拒绝插件路由；先应用 [new-api-comfyui-routes.patch](new-api-comfyui-routes.patch)，重建并更新宿主。该补丁精确放行两条 ComfyUI 和两条 DashScope 路由的指定方法、类型、参数名，不开放整个 `/api`；其他管理、动态、通配路径仍被拒绝。它沿用宿主 Token 鉴权、归属检查、渠道和计费处理。动作迁移另需[时长计量补丁](new-api-video-duration.patch)及 `ffprobe`。其他宿主版本应先核对补丁适用性。
+**宿主前提：**使用官方 New API **v1.0.0-rc.43**，无需源码补丁、自定义镜像或 FFmpeg。插件只注册非保留路径；Native/DashScope 的四条官方公网路径由 Nginx 转发到插件内部入口，配置见 [API 基本配置](API.md#基本配置)。OpenAI/MiniMax 不需要路径改写。
 
-在对应源码根目录执行 `git apply /path/to/new-api-comfyui-routes.patch` 和 `git apply /path/to/new-api-video-duration.patch`，按原有流程构建与部署。Docker 构建测试环境、运行镜像都安装 FFmpeg；确保 `VERSION` 为 `v1.0.0-rc.42`，部署后核对 `/api/status`。已包含这些改动的宿主无需重复打补丁；宿主补丁不是插件的运行时文件依赖。
+将 [nginx-plugin-routes.conf](nginx-plugin-routes.conf) 内容加入现有域名的 server 块、置于 location 前；保留原有鉴权和代理头。执行 `nginx -t` 后 reload。此文件只是部署参考配置，插件运行时不读取它。
 
-1. 登录 New API 管理后台。已验证的 New API **v1.0.0-rc.42** 需要使用 **Root 账户**安装任务插件。
+1. 登录 New API 管理后台。已验证的 New API **v1.0.0-rc.43** 需要使用 **Root 账户**安装任务插件。
 2. 打开「任务插件」，确认任务插件功能已启用。
 3. 点击「上传插件」，在弹窗中选择「从 URL 导入」。
 4. 粘贴下面的唯一推荐安装地址，并点击「读取 / Fetch」下载源码：
@@ -89,7 +89,11 @@ URL 导入在浏览器中下载源码，因此使用管理后台的浏览器需�
 
 仓库只维护根目录的一个 `plugin.js` 和一个当前版本，更新后仍使用同一个 `main` Raw URL。`workflows.json`、`official-workflows.json`、`examples.json` 和 `prices.json` 用于查阅、示例及开发验证，插件运行时不会读取它们；测试脚本、校验文件、许可证和 `.github/` 也不是安装依赖。
 
-更新已有安装时需留意 rc.41 的同版本校验：如果已经安装 `autodl / 1.0.0`，再次导入不同源码会提示 `plugin key and version already exist with different source`。请先备份已有插件源码；该版本未激活时可在任务插件中删除它后重新导入。如果它正在使用，先暂停关联渠道并等待运行中任务结束，再按后台提示删除旧安装、从同一个 Raw URL 导入并启用，最后恢复渠道。本仓库仍只维护 v1.0.0，不需要创建 tag 或选择安装版本。
+从 1.0.0 更新：配置 Nginx 转发后，从上方唯一 Raw URL 导入并启用 AutoDL 1.0.1。保留任务记录、渠道、价格表达式和分组倍率；Wan 调用需要按下文新增计费时长声明。只维护一个当前版本和安装地址。
+
+**宿主升级：**继续使用官方 `calciumion/new-api:latest`，不维护源码修改；Nginx 配置独立于 New API 镜像。升级后检查插件 registered、模型价格 schema 及四类入口；未来若官方 Plugin API 发生不兼容变更，仍需正常回归验证。
+
+**价格页只显示“特殊计费表达式”：**先在「任务插件」确认 AutoDL 运行状态为 registered。插件注册失败会使 `/api/pricing` 缺失 `billing_usage_schema`，每秒单价表退回显示原始表达式；这不等于保存的价格公式语法错误。恢复兼容宿主和插件注册后刷新价格页，保留原有公式、价格与分组倍率。
 
 URL 安装不会自动配置渠道或导入模型价格。请完成上述渠道配置，并为要使用的模型设置价格；未配置价格时可能返回 `model_price_error`。7 个已核实模型的官方价格及表达式见下方价格章节和 [prices.json](prices.json)。
 
@@ -136,11 +140,11 @@ OpenAI 和原生格式继续使用官网完整工作流 ID，例如 `minimax_h3_
 | 阿里云百炼 / DashScope Wan | `POST /api/v1/services/aigc/image2video/video-synthesis` | `model + input + parameters`，仅动作迁移 | `output.task_id`；查询 `GET /api/v1/tasks/{task_id}` |
 | AutoDL 原生兼容 | `POST /api/v1/comfyui/comfyui_workflow/{workflow_id}` | 由独立入口明确选择，body 直接使用官网字段 | 返回公开 `task_id`；查询 `GET /api/v1/comfyui/comfyui_workflow/result/{task_id}` |
 
-**OpenAI 参数格式和原有校验保持不变。** 不通过 `duration`、`resolution` 或 `ref_image_*` 等容易冲突的字段猜测原生格式。四种格式均使用 New API 密钥鉴权、AutoDL 渠道和同一套价格配置。插件注册上述 MiniMax 与原生路径，OpenAI 路径由宿主提供；原生路径只接收原生 body。
+**H3 的 OpenAI 参数格式和校验保持不变；Wan 新增必需的秒数声明。** 不通过 `duration`、`resolution` 或 `ref_image_*` 等容易冲突的字段猜测原生格式。四种格式均使用 New API 密钥鉴权、AutoDL 渠道和同一套价格配置。插件注册 MiniMax 路径，原生/DashScope 公网路径经 Nginx 转发，OpenAI 路径由宿主提供；原生路径只接收原生 body。
 
 ## 输入媒体：URL 与 Data URL
 
-已完成四套接口的付费生成验证，任务 ID、视频结果和测试边界见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md)。
+1.0.0 曾完成四套接口的付费生成验证；1.0.1 另以官方 rc.43 隔离测试验证新计费规则，任务 ID、视频结果和测试边界见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md)。
 
 | 请求格式 | 图片 | 音频 | 视频 |
 |---|---|---|---|
@@ -151,15 +155,15 @@ OpenAI 和原生格式继续使用官网完整工作流 ID，例如 `minimax_h3_
 
 以上已有媒体字段同时接受公网 HTTP(S) URL 和标准 `data:image/...;base64,...`、`data:audio/...;base64,...`、`data:video/...;base64,...`。MIME 前缀必须匹配字段类型；Base64 必须使用标准字母表和正确补位，不能传裸 Base64、百分号编码、换行、额外 charset 参数或 `file_id`。仍按 workflow 校验媒体数量，不增加官方协议字段。Data URL 是适配器的输入扩展，实际媒体格式、尺寸与内容仍受上游限制。
 
-**输出继续返回公网 URL，不返回 Base64。** 动作迁移的视频 Data URL 需要应用本仓库更新后的[时长计量补丁](new-api-video-duration.patch)：宿主只对输入的 `video/mp4` 或 `video/webm` 解码为临时文件，再沿用 `ffprobe` 测量；256 MiB、3600 秒限制、预扣/成片结算与输出 URL 抓取策略不变。完整编码示例见 [API 输入媒体说明](API.md#输入媒体url-与-data-url)。
+**输出继续返回公网 URL，不返回 Base64。** 输入 Data URL 原样传给 AutoDL，无本地视频探测依赖；仍受 New API 请求体/JS 资源及上游媒体限制。完整编码示例见 [API 输入媒体说明](API.md#输入媒体url-与-data-url)。
 
 ## 阿里云百炼 / DashScope Wan
 
 新增官方路径：`POST /api/v1/services/aigc/image2video/video-synthesis`、`GET /api/v1/tasks/{task_id}`。仅支持 `wan2.2-animate-move`，插件自动映射到 `wan2.2animate-v4-motion_retargeting`，无需该入口的人工模型映射；原有同名映射可保留。渠道需声明外部模型并配置价格、分组权限。完整 curl、字段表、响应与状态映射见 [DashScope Wan API 文档](API.md#阿里云百炼--dashscope-wan-api)。
 
-`input.image_url / video_url` 转成 `ref_image / ref_video`，固定采用官网默认 `464*832px(竖版)`。只接受必填 `parameters.mode: "wan-std"`；`wan-pro`、`watermark: true`、`check_image: false` 明确报错，上游没有对应控制。所有层级严格拒绝未知字段。提交、轮询、产物和动作迁移按秒计费继续共用现有底层钩子；提交前测量参考视频，完成后测量成片并补扣/退差额。
+`input.image_url / video_url` 转成 `ref_image / ref_video`，固定采用官网默认 `464*832px(竖版)`。只接受必填 `parameters.mode: "wan-std"`；`wan-pro`、`watermark: true`、`check_image: false` 明确报错，上游没有对应控制。所有层级严格拒绝未知字段。提交、轮询、产物和动作迁移按秒计费继续共用现有底层钩子；提交前按查询参数 billing_seconds 预扣，成功按保存值结算，失败退款。
 
-客户端应发送 `X-DashScope-Async: enable`；rc.42 native decoder 不暴露请求头，无法强制校验它，New API 鉴权仍有效。公开 TaskView 不提供最终已结算秒数，因此查询省略 `usage`；`request_id` 返回空字符串，不使用私有上游任务 ID。此兼容格式属于 Wan（万相）API，不能视为完整 DashScope 服务或 Qwen 模型接口。
+客户端应发送 `X-DashScope-Async: enable`；rc.43 native decoder 不暴露请求头，无法强制校验它，New API 鉴权仍有效。公开 TaskView 不提供最终已结算秒数，因此查询省略 `usage`；`request_id` 返回空字符串，不使用私有上游任务 ID。此兼容格式属于 Wan（万相）API，不能视为完整 DashScope 服务或 Qwen 模型接口。
 
 ## MiniMax 官方兼容 API
 
@@ -195,7 +199,7 @@ OpenAI 和原生格式继续使用官网完整工作流 ID，例如 `minimax_h3_
 | 首帧 / 尾帧 / 首尾帧 | 始终按 `adaptive`；其他合法比例接受后也按 adaptive 处理，遵循官方 i2va 语义 |
 | 参考图 / 视频 / 音频 | ratio 可省略，默认 `adaptive`；也可显式指定任一具体比例 |
 
-**单文件插件的 adaptive 降级限制：**当前 New API rc.42 的 Plugin API v1 不提供网络请求或远程图片/视频尺寸探测。仅下载 `plugin.js` 无法测量参考媒体的真实宽高，也不会根据文件名、URL 参数或客户端具体 ratio 假装推断尺寸。因此本适配器接受 adaptive，并按已确认的方案使用所选工作流官网默认分辨率的方向，再在请求档位中选择同方向选项。当前工作流默认方向为竖屏；默认 resolution 档位不会覆盖请求的 resolution。此方案不保证输出与参考媒体真实比例一致，也不是 MiniMax 服务端的尺寸自适应实现。
+**单文件插件的 adaptive 降级限制：**当前单文件插件未实现远程图片/视频尺寸探测。仅下载 `plugin.js` 无法测量参考媒体的真实宽高，也不会根据文件名、URL 参数或客户端具体 ratio 假装推断尺寸。因此本适配器接受 adaptive，并按已确认的方案使用所选工作流官网默认分辨率的方向，再在请求档位中选择同方向选项。当前工作流默认方向为竖屏；默认 resolution 档位不会覆盖请求的 resolution。此方案不保证输出与参考媒体真实比例一致，也不是 MiniMax 服务端的尺寸自适应实现。
 
 具体比例映射：`21:9 / 16:9 / 4:3` 选择横屏，`3:4 / 9:16` 选择竖屏，`1:1` 优先选择方形。该分辨率没有方形选项时，降级到官网默认方向。AutoDL 只提供固定横/竖/方档位，插件不额外缩放或裁切，因此 21:9、4:3、3:4 以及缺少方形选项时的 1:1 不保证精确比例；实际像素仍以工作流官方档位为准。分辨率和时长不做降级。
 
@@ -210,7 +214,7 @@ OpenAI 和原生格式继续使用官网完整工作流 ID，例如 `minimax_h3_
 | `MiniMax-H3` | `768P / 2K` | 整数 4–15 秒 |
 | `MiniMax-H3-Max` | `480P / 768P` | 整数 5–15 秒 |
 
-官方别名请求必须包含一项非空 text，最多 7000 字符。`resolution`、`duration` 仍为必填；调用时优先使用准确的官方大小写：`MiniMax-H3` / `MiniMax-H3-Max`。
+官方别名请求必须包含一项非空 text，最多 7000 字符。`resolution` 必填，`duration` 省略按 AutoDL 默认 5 秒；调用时优先使用准确的官方大小写：`MiniMax-H3` / `MiniMax-H3-Max`。
 
 | model | 输入内容 / 路由条件 | AutoDL 目标 |
 |---|---|---|
@@ -379,7 +383,7 @@ AutoDL 仍只收到 `prompt`；内部采用该 workflow 默认时长与分辨率
 
 省略可选参数时采用该工作流官网默认值。工作流能力不同，统一的是**参数名字**，不代表全部工作流具有相同的分辨率和时长控制。
 
-动作迁移工作流没有 `prompt` 或 `seconds` 控制，时长跟随参考视频；indexTTS2 没有 `seconds`、`resolution` 或 `orientation` 控制，音频时长由文本合成决定。插件会明确拒绝这些不支持的控制。
+动作迁移没有 prompt 或可控生成时长，OpenAI seconds 只声明计费秒数；indexTTS2 没有 seconds、resolution 或 orientation 控制，音频时长由文本合成决定。
 
 TTS `emotion.mode` 接受 `voice`（默认，沿用音色参考情感）、`reference`（必须 `audios[1]`）、`vector`（情感向量）。向量参数为 `afraid`、`angry`、`calm`、`disgusted`、`happy`、`melancholic`、`sad`、`surprised`，范围见 catalog；`emotion.random` 是 boolean。官网当前 `surprised` 枚举仅有字符串 `"0"`，本插件接受统一数值 `0` 并转换，拒绝其他值。
 
@@ -387,7 +391,7 @@ JSON 和文本表单均可使用统一参数。表单里的 `input_reference` �
 
 ## input_reference 与协议限制
 
-已核对当前部署的 New API v1.0.0-rc.42：[Plugin API v1 文档的 Request body / Host protocols](https://github.com/QuantumNous/new-api/blob/6370b29424168039e94d40d610191e7d2e65dbf4/docs/plugin-api/v1.md) 明确支持 `POST /v1/videos` 的 JSON 和 multipart 请求。JSON 对象和数组可原样传给插件；multipart 同名文本字段保留多个值和顺序，同名文件则各自具有独立 `FileReference`。本插件从引用对象的 `image_url` 提取公开 URL，文本表单使用 JSON 编码的引用对象。
+已核对当前部署的 New API v1.0.0-rc.43：[Plugin API v1 文档的 Request body / Host protocols](https://github.com/QuantumNous/new-api/blob/c6741c36a9a1a729554ad94ee99f21602a214a23/docs/plugin-api/v1.md) 明确支持 `POST /v1/videos` 的 JSON 和 multipart 请求。JSON 对象和数组可原样传给插件；multipart 同名文本字段保留多个值和顺序，同名文件则各自具有独立 `FileReference`。本插件从引用对象的 `image_url` 提取公开 URL，文本表单使用 JSON 编码的引用对象。
 
 [OpenAI 保留的 Videos Create 文档](https://developers.openai.com/api/reference/resources/videos/methods/create) 将 JSON `input_reference` 定义为一个引用对象，包含 `image_url` 或 `file_id`。本插件的**单图输入采用其中的 `image_url` 对象形式**；多图只在此结构基础上扩展为对象数组，通过 New API 透传实现。多图对象数组是 **AutoDL 插件扩展**，不声称 OpenAI 自身的 Videos API 接受多图数组。
 
@@ -454,10 +458,10 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" -H "Authorization: Bearer
 {"model":"minimax_h3_image_audio_to_video","seconds":"5","size":"480x864","input_reference":{"image_url":"https://your-public-file-host.example/person.png"},"audios":["https://your-public-file-host.example/voice.wav"]}
 ```
 
-动作迁移（无秒数、无文本控制）：
+动作迁移（无可控生成时长或文本，seconds 仅声明计费秒数）：
 
 ```json
-{"model":"wan2.2animate-v4-motion_retargeting","resolution":"832p","orientation":"portrait","input_reference":{"image_url":"https://your-public-file-host.example/person.png"},"videos":["https://your-public-file-host.example/motion.mp4"]}
+{"model":"wan2.2animate-v4-motion_retargeting","seconds":5,"resolution":"832p","orientation":"portrait","input_reference":{"image_url":"https://your-public-file-host.example/person.png"},"videos":["https://your-public-file-host.example/motion.mp4"]}
 ```
 
 TTS 语音合成，通过 AutoDL 原生兼容接口提交：
@@ -496,7 +500,11 @@ curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" -H 
 
 当前指定实例使用 CNY 展示、`USDExchangeRate=1`，表达式直接填写上述数值，未做外汇换算或加价。其他实例如使用不同展示汇率，应由管理员按站点币种设置换算，不能盲目复制；既有分组倍率仍由 New API 应用。官网价格后续变化不会自动同步，本文件是已核实日期的快照。
 
-每个模型有独立 `usageProfiles`。可控时长视频上报请求次数、请求秒数、分辨率和方向，完成时沿用保存的请求用量。动作迁移工作流 `wan2.2animate-v4-motion_retargeting` 按实际成片秒数收费：提交前由宿主测量参考视频用于预扣，完成后测量输出视频替换 `seconds`，通过宿主原有结算逻辑补扣或退差额；客户端仍不能传 `seconds` 或 `duration` 控制该工作流。TTS 不上报视频秒数。上游 `data.duration` 是运行耗时，绝不用于视频按秒结算。失败结算次数/秒数归零。宿主时间函数在预扣和结算时计算当前时间，跨 00:00/08:00 的任务可能命中不同时段；AutoDL 公共资料未明确其跨时段判定时点。
+**计费秒数（v1.0.1，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`），Native 使用官网原字段；Native 缺省值只用于计费，不注入 body。官方 H3/H3-Max 别名省略 duration 也用 5 秒参与路由。TTS 仍按请求次数计费。
+
+Wan 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`，Native/DashScope 用 URL 查询参数 `?billing_seconds=5`。声明支持数值/普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；查询参数只能出现一次。该值仅用于计费，**不裁剪视频、不写入 AutoDL body，也不测量输入或输出**。请由可信客户端如实提供参考视频时长；无法自动核实恶意少报，最终成片与声明不一致时也不会自动补差。这是避免自定义宿主的明确限制。
+
+提交时 New API 预扣；成功按保存的请求用量结算，最终失败按 0 次/0 秒结算并退回预扣。上游 `data.duration` 是处理耗时，绝不作为生成秒数。New API 退款不代表 AutoDL 同时退款。
 
 ### 动作迁移按秒计费与渠道别名
 
@@ -506,9 +514,9 @@ curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" -H 
 hour("Asia/Shanghai") < 8 ? tier("off_peak", u("seconds") * 0.03) : tier("peak", u("seconds") * 0.04)
 ```
 
-该工作流的准确按秒计费需要宿主支持 `video-duration@1`，并安装 `ffprobe`。本仓库提供针对 New API rc.42 的 [宿主时长计量补丁](new-api-video-duration.patch)，与前面的 ComfyUI 路由补丁一起应用后重建宿主；Docker 运行镜像和构建测试环境均需安装 FFmpeg 包。只安装 `plugin.js` 仍是单文件插件，无仓库文件运行时依赖；没有该宿主能力时，动作迁移请求会在提交前报错，其他工作流沿用原有逻辑。
+该工作流使用上述请求声明秒数，不再依赖宿主扩展。高峰声明 5 秒预扣及成功结算均为 ¥0.20，失败退回 ¥0.20；受站点分组倍率影响。
 
-宿主测量公开 MP4/WebM 视频，使用视频轨道时长，避免较长音轨抬高视频费用；单文件上限 256 MiB、测量总时限 45 秒、有效时长为 `0 < 秒数 <= 3600`。下载遵守宿主的媒体抓取和 SSRF 设置，不向媒体地址转发渠道密钥。无法测量输入时拒绝提交；输出暂时不可读时交由宿主轮询重试，不用运行耗时或虚构秒数结算。
+原生/DashScope 示例创建 URL 需加 `?billing_seconds=5`；查询时无需重复。OpenAI 的 `seconds` 和 MiniMax 的 `duration` 在 Wan 中仅是计费声明；与 H3 的可控生成时长不同。
 
 OpenAI 格式若使用 `wan2.2-animate-move`，继续在渠道配置模型映射：
 
@@ -533,7 +541,7 @@ python .\test-task.py --format autodl --model indextts2-v1 --request tts-body.js
 `test-task.py` 使用四种模式各自的提交和查询路径：OpenAI 为 Videos API，MiniMax 为官方 V2，原生为 ComfyUI 兼容 API，DashScope 为 Wan 官方创建与查询路径。提交一次、有截止时间地轮询，再下载产物。OpenAI 模式支持 16 个视频工作流；音频请选原生或 MiniMax 扩展模式。`--example <工作流ID或MiniMax别名>` 配合 `--format openai|minimax|autodl|dashscope` 可选四种示例，但必需媒体占位 URL 要先换为真实地址。OpenAI 和 DashScope 的 `--artifact` 只接受 `video`；MiniMax 接受 `video|audio` 并检查查询的 `modality`；原生接受 `video|audio|image|file`，按 `results[].type` 选择首个匹配产物。无效类型在提交前拒绝，下载不覆盖已有文件。
 
 ```powershell
-python .\test-task.py --format dashscope --request wan-request.json --out wan-result.mp4
+python .\test-task.py --format dashscope --billing-seconds 5 --request wan-request.json --out wan-result.mp4
 python .\test-task.py --format minimax --request minimax-request.json --out result.mp4
 python .\test-task.py --format minimax --example MiniMax-H3-Max --out result.mp4
 python .\test-task.py --format autodl --model minimax_h3_lightx2v --request autodl-body.json --out result.mp4
@@ -547,7 +555,7 @@ python .\test-task.py --format autodl --model minimax_h3_lightx2v --request auto
 - 401/403 检查 ComfyUI 分组和原始 Token；400/422 是参数错误；404/410 是任务或工作流不存在；429 是限流；5xx 是上游服务异常。
 - 无效 JSON、成功响应缺少 `task_id`、空/异常 `results`、非法媒体 URL 都会报错或进入失败终态。错误文本中的渠道 Token 会脱敏。
 - 重试/后台轮询由 New API 负责。正常排队、运行和未知状态有 30 分钟插件截止时间；不会取消上游任务，也不保证 AutoDL 退款。宿主默认连续轮询错误上限为 20，最终遵循实例配置。
-- 单次 HTTP 超时由宿主 `RELAY_TIMEOUT`、`RELAY_RESPONSE_HEADER_TIMEOUT` 控制；插件 API v1 无请求级 `timeout` 字段。插件沿用宿主超时配置；宿主补丁的部署方式另由管理员决定。
+- 单次 HTTP 超时由宿主 `RELAY_TIMEOUT`、`RELAY_RESPONSE_HEADER_TIMEOUT` 控制；插件 API v1 无请求级 `timeout` 字段。插件沿用宿主超时配置。
 - 产物支持 video/audio/image/file，稳定 key 如 `video`、`audio`、`video-2`。音频识别 WAV、MP3、FLAC，视频识别 MP4、WebM。
 - `/content` 支持 GET、HEAD 和宿主安全转发的 Range。AutoDL 的 TOS 结果 URL 按 GET 签名，因此插件统一用 GET 请求 CDN；客户端请求 HEAD 时，rc.41 宿主复制响应头后关闭上游正文，只返回响应头。使用 `credentialless: true`，不把渠道密钥发给 CDN；宿主校验目标和重定向。
 - AutoDL 结果 URL 有效期较短，代理下载不会延长 URL 有效期。本插件没有自动转存，需要长期保存时及时下载到自己的存储。
