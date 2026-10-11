@@ -2498,7 +2498,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.3",
+  version: "1.0.4",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -3209,6 +3209,73 @@ function measuredOutputDuration(url) {
   }
 }
 
+// Input media measurement for the motion-transfer workflow. The reference video
+// decides the billed length, so the plugin reads its track duration itself with a
+// bounded Range request (public URL) or an inline decode (data URL). The result is
+// cached per URL for the life of the plugin runtime, so the submission hook does
+// the work once, while the vendor renders, and every later poll reuses it.
+const MEASURED_INPUTS = {};
+const MEASURED_INPUT_LIMIT = 64;
+const DATA_VIDEO_HEADERS = ["data:video/mp4;base64", "data:video/webm;base64"];
+
+function base64Bytes(payload) {
+  const table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const clean = payload.replace(/=+$/, "");
+  const bytes = new Uint8Array(Math.floor(clean.length * 3 / 4));
+  let bits = 0, count = 0, index = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const value = table.indexOf(clean[i]);
+    if (value < 0) return null;
+    // Keep the accumulator below 2^31 so it stays an exact integer.
+    bits = (bits << 6 | value) & 0xffffff;
+    count += 6;
+    if (count >= 8) {
+      count -= 8;
+      bytes[index++] = (bits >> count) & 0xff;
+    }
+  }
+  return index ? bytes.subarray(0, index) : null;
+}
+
+function measuredInputDuration(url) {
+  if (typeof url !== "string" || !url) return null;
+  if (has(MEASURED_INPUTS, url)) return MEASURED_INPUTS[url];
+  let seconds = null;
+  const lower = url.toLowerCase();
+  const header = DATA_VIDEO_HEADERS.find(function (candidate) { return lower.startsWith(candidate + ","); });
+  if (header) {
+    // A local file arrives inline; nothing to fetch.
+    try { seconds = parseVideoDuration(base64Bytes(url.slice(header.length + 1))); } catch (_) { seconds = null; }
+  } else if (/^https?:\/\//i.test(url) && typeof utils !== "undefined" && typeof utils.fetch === "function") {
+    seconds = measuredOutputDuration(url);
+  }
+  if (!(typeof seconds === "number" && seconds > 1e-9 && seconds <= 3600)) seconds = null;
+  if (Object.keys(MEASURED_INPUTS).length >= MEASURED_INPUT_LIMIT) for (const key of Object.keys(MEASURED_INPUTS)) delete MEASURED_INPUTS[key];
+  MEASURED_INPUTS[url] = seconds;
+  return seconds;
+}
+
+function inputVideoURL(config, body) {
+  const fields = config.videos || [];
+  for (const field of fields) {
+    const value = body && body[field];
+    if (typeof value === "string" && value) return value;
+  }
+  return "";
+}
+
+// Record the measured input length on the task state so the value survives
+// polling without re-reading the media. Only the motion workflow depends on it.
+function withMeasuredInput(state, config, body) {
+  if (config.workflowId !== MOTION_WORKFLOW) return state;
+  const url = inputVideoURL(config, body);
+  if (!url) return state;
+  const state2 = Object.assign({}, state, { inputVideoUrl: url });
+  const seconds = measuredInputDuration(url);
+  if (seconds !== null) state2.inputSeconds = seconds;
+  return state2;
+}
+
 function results(body, fallbackType) {
   const payload = envelope(body).data;
   if (!Array.isArray(payload.results) || payload.results.length === 0) throw new Error("AutoDL: SUCCESS response has empty or invalid results");
@@ -3269,7 +3336,9 @@ export function parseSubmitResponse(ctx, response) {
   const id = taskId(body.data.task_id);
   const request = normalized(ctx);
   const config = requestWorkflow(ctx);
-  const state = { facts: request.facts, type: config.type, submittedAt: utils.unixNow(), timeoutSeconds: config.timeoutSeconds, workflowId: config.workflowId };
+  // The vendor is already rendering, so the input measurement runs now and every
+  // later poll reuses it; the submission reservation itself stays as declared.
+  const state = withMeasuredInput({ facts: request.facts, type: config.type, submittedAt: utils.unixNow(), timeoutSeconds: config.timeoutSeconds, workflowId: config.workflowId }, config, request.body);
   const parsed = parseTaskResult(Object.assign({}, ctx, { taskId: id, state: state }), body, { status: response.statusCode, headers: {} });
   const output = { taskId: id, taskData: body, state: state };
   if (parsed.status === "SUCCESS" || parsed.status === "FAILURE") output.immediate = parsed;
@@ -3323,8 +3392,9 @@ export function parseTaskResult(ctx, body, response) {
 // adopts the state written by the terminal poll only afterwards, so the duration
 // read while polling is not part of the hook context. The completion result does
 // carry the media URL and every hook call gets its own byte-range budget, so
-// settlement repeats the bounded probe; unreadable or non-range media keeps the
-// polling measurement and then the declared fallback.
+// settlement repeats the bounded probe. The reference video was already measured
+// at submission, and motion transfer renders one output second per input second,
+// so the measured input length is the strongest available signal.
 function completionStatus(result) {
   if (object(result)) return text(result.status);
   if (typeof result === "string") return text(result);
@@ -3355,7 +3425,9 @@ export function extractUsageOnComplete(task, result) {
         seconds = parseVideoDuration(mediaRange(url, 0, MEDIA_PROBE_END).bytes);
       } catch (_) { seconds = null; }
     }
-    const settled = motionSecondsInRange(seconds) || motionSecondsInRange(state.measuredSeconds);
+    const settled = motionSecondsInRange(seconds)
+      || motionSecondsInRange(state.measuredSeconds)
+      || motionSecondsInRange(state.inputSeconds);
     if (settled !== null) facts.seconds = settled;
   }
   if (status === "FAILURE" || status === "CANCELLED") {

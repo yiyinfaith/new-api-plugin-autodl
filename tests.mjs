@@ -20,7 +20,7 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.3');
+  assert.equal(p.meta.version, '1.0.4');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
@@ -98,7 +98,10 @@ for (const [model, config] of Object.entries(catalog)) {
     test(model + ': seed range', () => assert.equal(p.buildSubmitRequest(ctx(model, { ...input, seed })).body.seed, seed));
     reject(model + ': invalid seed', 'buildSubmitRequest', [ctx(model, { ...input, seed: source.input_rules.seed.max + 1 })], 'seed must');
   } else reject(model + ': no seed control', 'buildSubmitRequest', [ctx(model, { ...input, seed: 1 })], 'no seed control');
-  const state = { facts: expectedFacts, type: config.type, submittedAt: 2000, timeoutSeconds: 1800, workflowId: config.workflowId };
+  // The motion workflow also records the reference video it must measure for
+  // billing; every other workflow keeps the plain state shape.
+  const inputVideo = model === motionModel ? (Array.isArray(input.videos) ? input.videos[0] : undefined) : undefined;
+  const state = { facts: expectedFacts, type: config.type, submittedAt: 2000, timeoutSeconds: 1800, workflowId: config.workflowId, ...(inputVideo ? { inputVideoUrl: inputVideo } : {}) };
   test(model + ': submit persists facts and media type', () => {
     assert.deepEqual(p.parseSubmitResponse(ctx(model), { statusCode: 200, body: envelope('QUEUED') }).state, state);
     assert.equal(p.native.create({ body: { kind: 'json', value: input } }).action, action);
@@ -641,7 +644,7 @@ for (const mapped of [dashModel, motionModel]) {
   const context = { ...base, model: dashModel, upstreamModel: mapped, requestBody: dashIntent.requestBody };
   fixture('DashScope submit mapping with upstream pin ' + mapped, 'buildSubmitRequest', [context], { url: base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + motionModel, method: 'POST', action: 'video_to_video', headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' }, body: dashUpstream, rewriteModel: motionModel });
   fixture('DashScope measured reservation with upstream pin ' + mapped, 'extractUsage', [context], { ...dashFacts, seconds: 5 });
-  fixture('DashScope common submit state with upstream pin ' + mapped, 'parseSubmitResponse', [context, { statusCode: 200, body: envelope('QUEUED') }], { taskId: 'upstream-123', taskData: envelope('QUEUED'), state: { facts: { ...dashFacts, seconds: 5 }, type: 'video', submittedAt: 2000, timeoutSeconds: 1800, workflowId: motionModel } });
+  fixture('DashScope common submit state with upstream pin ' + mapped, 'parseSubmitResponse', [context, { statusCode: 200, body: envelope('QUEUED') }], { taskId: 'upstream-123', taskData: envelope('QUEUED'), state: { facts: { ...dashFacts, seconds: 5 }, type: 'video', submittedAt: 2000, timeoutSeconds: 1800, workflowId: motionModel, inputVideoUrl: dashUpstream.ref_video } });
 }
 const dashDriver = { ...base, model: dashModel, upstreamModel: motionModel, requestBody: dashIntent.requestBody };
 const dashState = { facts: { ...dashFacts, seconds: 5 }, type: 'video', submittedAt: 2000, timeoutSeconds: 1800, workflowId: motionModel };
@@ -816,6 +819,83 @@ test('non-motion settlement keeps usage facts untouched and never probes media',
     const state = p.parseSubmitResponse(ctx('minimax_h3_lightx2v_no_pic'), { statusCode: 200, body: envelope('QUEUED') }).state;
     assert.deepEqual(p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/h3.mp4' }), state.facts);
     assert.equal(fetches, 0);
+  } finally { utils.fetch = previousFetch; }
+});
+// The reference video fixes the billed length for motion transfer, so the plugin
+// measures it once at submission, while the vendor renders.
+test('motion submission measures a public reference video with a bounded range read', () => {
+  const previousFetch = utils.fetch, media = mp4Fixture(2.5);
+  const ranges = [];
+  try {
+    utils.fetch = request => {
+      ranges.push(request.headers.Range);
+      const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      assert.ok(range, request.headers.Range);
+      const start = Number(range[1]), end = Math.min(Number(range[2]), media.length - 1), body = media.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}`, 'Content-Length': String(body.length) }, body: body.buffer };
+    };
+    const request = structuredClone(examples[motionModel]);
+    request.videos = ['https://cdn.example.com/reference.mp4'];
+    const state = p.parseSubmitResponse(ctx(motionModel, request), { statusCode: 200, body: envelope('QUEUED') }).state;
+    assert.equal(state.inputVideoUrl, 'https://cdn.example.com/reference.mp4');
+    assert.ok(Math.abs(state.inputSeconds - 2.5) < 0.001, 'measured input seconds');
+    assert.equal(state.facts.seconds, 5, 'the submission reservation still uses the declared seconds');
+    assert.equal(ranges.length, 1, 'one bounded range read');
+    assert.equal(ranges[0], 'bytes=0-1048575');
+  } finally { utils.fetch = previousFetch; }
+});
+test('motion submission decodes an inline data URL without any network read', () => {
+  const previousFetch = utils.fetch, media = mp4Fixture(4);
+  let fetches = 0;
+  try {
+    utils.fetch = request => { fetches++; return previousFetch(request); };
+    const dataUrl = 'data:video/mp4;base64,' + Buffer.from(media).toString('base64');
+    const request = structuredClone(examples[motionModel]);
+    request.videos = [dataUrl];
+    const state = p.parseSubmitResponse(ctx(motionModel, request), { statusCode: 200, body: envelope('QUEUED') }).state;
+    assert.ok(Math.abs(state.inputSeconds - 4) < 0.001, 'inline reference measured');
+    assert.equal(fetches, 0, 'an inline reference needs no fetch');
+  } finally { utils.fetch = previousFetch; }
+});
+test('motion submission keeps going when the reference cannot be measured', () => {
+  const previousFetch = utils.fetch;
+  try {
+    utils.fetch = () => { throw new Error('range unsupported'); };
+    const request = structuredClone(examples[motionModel]);
+    request.videos = ['https://cdn.example.com/unreadable.mp4'];
+    const state = p.parseSubmitResponse(ctx(motionModel, request), { statusCode: 200, body: envelope('QUEUED') }).state;
+    assert.equal(state.inputVideoUrl, 'https://cdn.example.com/unreadable.mp4');
+    assert.equal(state.inputSeconds, undefined);
+    assert.equal(state.facts.seconds, 5);
+  } finally { utils.fetch = previousFetch; }
+});
+test('the measured reference length is cached so later polls do not re-read it', () => {
+  const previousFetch = utils.fetch, media = mp4Fixture(1.5);
+  let fetches = 0;
+  try {
+    utils.fetch = request => {
+      fetches++;
+      const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      const start = Number(range[1]), end = Math.min(Number(range[2]), media.length - 1), body = media.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}`, 'Content-Length': String(body.length) }, body: body.buffer };
+    };
+    const request = structuredClone(examples[motionModel]);
+    request.videos = ['https://cdn.example.com/cached.mp4'];
+    const context = ctx(motionModel, request);
+    const first = p.parseSubmitResponse(context, { statusCode: 200, body: envelope('QUEUED') }).state;
+    assert.ok(Math.abs(first.inputSeconds - 1.5) < 0.001);
+    const second = p.parseSubmitResponse(context, { statusCode: 200, body: envelope('QUEUED') }).state;
+    assert.equal(second.inputSeconds, first.inputSeconds);
+    assert.equal(fetches, 1, 'the second submission reused the cached measurement');
+  } finally { utils.fetch = previousFetch; }
+});
+test('motion settlement bills the measured reference length when the output cannot be read', () => {
+  const previousFetch = utils.fetch;
+  try {
+    utils.fetch = () => { throw new Error('output host blocks range reads'); };
+    const facts = p.extractUsageOnComplete({ state: { ...settlementState(undefined), inputSeconds: 2.5 } }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.mp4' });
+    assert.equal(facts.seconds, 2.5);
+    assert.equal(facts.requests, 1);
   } finally { utils.fetch = previousFetch; }
 });
 for (const [model, config] of Object.entries(catalog)) {
