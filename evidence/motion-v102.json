@@ -1,0 +1,31 @@
+{
+  "started_at": 1791698246,
+  "submitted_via": "https://api.yiyinfaith.com",
+  "model": "wan2.2-animate-move",
+  "workflow": "wan2.2animate-v4-motion_retargeting",
+  "request_seconds": 1,
+  "create_http_status": 200,
+  "task_id": "task_Qojxt0nkDDr1Q7IwGWW4Q0qxybgAr4n9",
+  "query_http_status": 200,
+  "status": "completed",
+  "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+  "result_path": "/comfyui/outputs/2026/10/11/b134f14d-2871-42a6-8c3c-2e1b5377dc01/591571b6-7fee-4b7d-b628-b00870b8d661.mp4",
+  "result_url_returned": true,
+  "video_verified": true,
+  "task_status": "SUCCESS",
+  "billed_cny": 0.04,
+  "plugin_state": {
+    "facts": {
+      "orientation": "portrait",
+      "requests": 1,
+      "resolution": "832p",
+      "seconds": 1
+    },
+    "measuredSeconds": 0.9666666666666667,
+    "workflowId": "wan2.2animate-v4-motion_retargeting"
+  },
+  "usage_facts": null,
+  "passed": true,
+  "temporary_api_key_removed": true,
+  "temporary_management_token_removed": true
+}

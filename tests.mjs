@@ -623,7 +623,7 @@ fixture('audit preview-only output cannot settle video success', 'parseTaskResul
 fixture('audit untyped audio output cannot settle video success', 'parseTaskResult', [query, envelope('SUCCESS', ['https://cdn.example.com/voice.wav']), { status: 200 }], { status: 'FAILURE', reason: 'AutoDL: SUCCESS response contains no expected media output' });
 const motionContext = ctx(motionModel);
 const motionState = p.parseSubmitResponse(motionContext, { statusCode: 200, body: envelope('QUEUED') }).state;
-fixture('motion success keeps declared seconds and ignores processing time', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], motionState.facts);
+fixture('motion declared fallback when settlement cannot re-read the output', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], motionState.facts);
 for (const status of ['FAILURE', 'CANCELLED']) fixture('motion unsuccessful task refunds ' + status, 'extractUsageOnComplete', [{ state: motionState }, { status }], { ...motionState.facts, requests: 0, seconds: 0 });
 for (const seconds of [undefined, 0, -1, 3601, null, '', false, '1e1', 'NaN', [], {}]) reject('motion rejects invalid declaration ' + String(seconds), 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], 'seconds must be a number');
 for (const seconds of [0.25, 1, 3.25, 3600, '3.25']) fixture('motion accepts declared seconds ' + seconds, 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], { ...motionState.facts, seconds: Number(seconds) });
@@ -761,6 +761,61 @@ test('motion polling reads a bounded tail range when MP4 moov is not in the head
     };
     const parsed = p.parseTaskResult({ ...motionContext, taskId: 'upstream-123', state: motionState }, envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/out.mp4', type: 'video', file_type: 'mp4' }]), { status: 200 });
     assert.ok(Math.abs(parsed.state.measuredSeconds - 2.5) < 0.001);
+  } finally { utils.fetch = previousFetch; }
+});
+// Stock rc.43 runs extractUsageOnComplete with the state persisted before the
+// terminal poll, so settlement must read the media itself and only then fall back
+// to the value measured while polling and finally to the declared seconds.
+function settlementState(measuredSeconds) {
+  return { ...motionState, ...(measuredSeconds === undefined ? {} : { measuredSeconds }) };
+}
+function serveMedia(media) {
+  return request => {
+    assert.equal(request.responseType, 'bytes');
+    const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+    assert.ok(range);
+    const start = Number(range[1]), end = Math.min(Number(range[2]), media.length - 1), body = media.slice(start, end + 1);
+    return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}`, 'Content-Length': String(body.length) }, body: body.buffer };
+  };
+}
+test('motion settlement re-reads the result URL and bills the measured duration', () => {
+  const previousFetch = utils.fetch;
+  try {
+    utils.fetch = serveMedia(mp4Fixture(3));
+    const settled = p.extractUsageOnComplete({ state: settlementState(9) }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/settled.mp4' });
+    assert.ok(Math.abs(settled.seconds - 3) < 0.001, 'settlement measurement wins over both the polling value and the declaration');
+    assert.deepEqual({ ...settled, seconds: 0 }, { ...motionState.facts, seconds: 0 });
+  } finally { utils.fetch = previousFetch; }
+});
+test('motion settlement falls back to the polling measurement when no URL is available', () => {
+  const before = p.extractUsageOnComplete({ state: settlementState(4) }, { status: 'SUCCESS' });
+  assert.equal(before.seconds, 4);
+});
+test('motion settlement keeps the declared seconds when the media cannot be read', () => {
+  const previousFetch = utils.fetch;
+  try {
+    utils.fetch = () => { throw new Error('range unsupported'); };
+    assert.equal(p.extractUsageOnComplete({ state: settlementState(4) }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.mp4' }).seconds, 4);
+    assert.equal(p.extractUsageOnComplete({ state: settlementState(undefined) }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.mp4' }).seconds, motionState.facts.seconds);
+  } finally { utils.fetch = previousFetch; }
+});
+test('motion settlement ignores processing duration and does not probe failed tasks', () => {
+  const previousFetch = utils.fetch;
+  let fetches = 0;
+  try {
+    utils.fetch = request => { fetches++; return previousFetch(request); };
+    assert.deepEqual(p.extractUsageOnComplete({ state: settlementState(4) }, { status: 'FAILURE', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/failed.mp4', data: { duration: 196 } }), { ...motionState.facts, requests: 0, seconds: 0 });
+    assert.equal(fetches, 0, 'a failed task must not read the result media');
+  } finally { utils.fetch = previousFetch; }
+});
+test('non-motion settlement keeps usage facts untouched and never probes media', () => {
+  const previousFetch = utils.fetch;
+  let fetches = 0;
+  try {
+    utils.fetch = request => { fetches++; return previousFetch(request); };
+    const state = p.parseSubmitResponse(ctx('minimax_h3_lightx2v_no_pic'), { statusCode: 200, body: envelope('QUEUED') }).state;
+    assert.deepEqual(p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/h3.mp4' }), state.facts);
+    assert.equal(fetches, 0);
   } finally { utils.fetch = previousFetch; }
 });
 for (const [model, config] of Object.entries(catalog)) {

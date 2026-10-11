@@ -228,7 +228,7 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 
 **计费秒数（v1.0.2，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`），Native 使用官网原字段；Native 缺省值只用于计费，不注入 body。官方 H3/H3-Max 别名省略 duration 也用 5 秒参与路由。TTS 仍按请求次数计费。
 
-Wan 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`，Native/DashScope 用 URL 查询参数 `?billing_seconds=5`。声明支持数值/普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；查询参数只能出现一次。该值用于预扣与探测失败时的结算回退，不裁剪视频、不写入 AutoDL body。成功轮询时插件对首个公网 MP4/WebM 成片做受限 Range 探测并按视频轨道时长结算；探测失败沿用声明值。请由可信客户端如实提供参考视频时长，声明仍决定预扣上限。
+Wan 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`，Native/DashScope 用 URL 查询参数 `?billing_seconds=5`。声明支持数值/普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；查询参数只能出现一次。该值用于预扣与探测失败时的结算回退，不裁剪视频、不写入 AutoDL body。成功轮询时插件对首个公网 MP4/WebM 成片做受限 Range 探测并记录视频轨道时长，结算按「新探测 → 轮询记录 → 声明值」的顺序取值；**在官方 rc.43 上完成钩子只能拿到上一次轮询的状态，因此最终结算额度等于声明的秒数**，实测过程见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md#102-按成片时长结算的实测边界2026-10-11)。请由可信客户端如实提供参考视频时长，声明决定预扣上限与最终结算。
 
 提交时 New API 预扣；成功按保存的请求用量结算，最终失败按 0 次/0 秒结算并退回预扣。上游 `data.duration` 是处理耗时，绝不作为生成秒数。New API 退款不代表 AutoDL 同时退款。
 

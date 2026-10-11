@@ -1,0 +1,476 @@
+{
+  "started_at": 1791696191,
+  "base": "https://api.yiyinfaith.com",
+  "host_version": null,
+  "plugin_version": null,
+  "workflows": [
+    "minimax_h3_z0903",
+    "minimax_h3_z0902",
+    "minimax_h3_z0901",
+    "minimax_h3_zm_u24",
+    "minimax_h3_zm_u08",
+    "minimax_h3_b99_002",
+    "minimax_h3_b99_001",
+    "minimax_h3_b99_003_12s",
+    "minimax_h3_image_audio_to_video_v2_15s",
+    "minimax_h3_lightx2v_v5_15s",
+    "minimax_h3_image_audio_to_video_v2",
+    "minimax_h3_image_audio_to_video",
+    "minimax_h3_lightx2v_v5",
+    "minimax_h3_lightx2v_no_pic",
+    "minimax_h3_lightx2v",
+    "wan2.2animate-v4-motion_retargeting"
+  ],
+  "cases": [
+    {
+      "workflow": "minimax_h3_z0903",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_cZ3gwoabGXQ3DimYPGnWGnjPqvo6ycKR",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/052f7484-a3dc-4b91-be4a-42bd5d3fc4e4/b394a09d-acb7-41c0-a5d0-e889fdb6d13a.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.04,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_z0903"
+      },
+      "usage_facts": null,
+      "output_bytes": 249622,
+      "video_verified": true,
+      "output_bytes_on_vps": 249622,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_z0902",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_tjEdeRDZtlRzte3dhrf2neiHbDjOmL0Y",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/734094b7-f5f4-4d85-a675-47d2fca0c533/50b2f6b9-e4cc-4317-93fb-4dce352a931c.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.04,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_z0902"
+      },
+      "usage_facts": null,
+      "output_bytes": 307090,
+      "video_verified": true,
+      "output_bytes_on_vps": 307090,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_z0901",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_ao25gHDuqVlHq7eadwCbmxVqJXIuEjdY",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/57429464-df1f-40b0-a26d-91a8847e31db/6ae9a9ee-ee6c-471d-a124-f76d337996d9.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.04,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_z0901"
+      },
+      "usage_facts": null,
+      "output_bytes": 247485,
+      "video_verified": true,
+      "output_bytes_on_vps": 247485,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_zm_u24",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_jdx4748CJXu97sVQUEAiiy7wSHxhksol",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/f6b59607-6525-4470-9004-276979f97e62/a395c39a-cc34-4169-a98e-123b28486730.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_zm_u24"
+      },
+      "usage_facts": null,
+      "output_bytes": 484266,
+      "video_verified": true,
+      "output_bytes_on_vps": 484266,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_zm_u08",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_cwst6K6vFVujKpRIimTMPZ0t2gi49yg3",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/3912f540-3b80-4f23-856f-ec338f9deebe/104ae275-c582-40f4-8185-8203c6b2e184.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_zm_u08"
+      },
+      "usage_facts": null,
+      "output_bytes": 417951,
+      "video_verified": true,
+      "output_bytes_on_vps": 417951,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_b99_002",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 503,
+      "create_error": {
+        "code": "server_error",
+        "message": "Task request failed (request id: 202610110535136872608378268d9d6bmvsySl4)",
+        "data": null
+      },
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_b99_001",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 503,
+      "create_error": {
+        "code": "server_error",
+        "message": "Task request failed (request id: 202610110535139020351408268d9d6bYB92cQV)",
+        "data": null
+      },
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_b99_003_12s",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 503,
+      "create_error": {
+        "code": "server_error",
+        "message": "Task request failed (request id: 202610110535140143873358268d9d6SCcS3WnF)",
+        "data": null
+      },
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_image_audio_to_video_v2_15s",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_USBzZDYu4FkdwMPSRVhhifFD1VDfJqgE",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/159c6bc1-c68c-4940-b245-8f824ddb3a95/06776dcf-7b31-4ab0-85e4-11a26c310598.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_image_audio_to_video_v2_15s"
+      },
+      "usage_facts": null,
+      "output_bytes": 286532,
+      "video_verified": true,
+      "output_bytes_on_vps": 286532,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_lightx2v_v5_15s",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_tuy7QhFwuu9Nvq0UMK95suDsOXLXeirT",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/32ad2ec0-9fc5-4a93-85f3-a5a197961abd/df2e1b14-7fcf-4e48-90e7-19a8bdd3bdf0.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_lightx2v_v5_15s"
+      },
+      "usage_facts": null,
+      "output_bytes": 478195,
+      "video_verified": true,
+      "output_bytes_on_vps": 478195,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_image_audio_to_video_v2",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_LsVL0CPIZTAujOAjtHM1bNyX2EjWUaVp",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/416e2e73-7043-441f-854a-35e81c83aff6/90c58374-3584-4335-a77d-c0679fd7abe3.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_image_audio_to_video_v2"
+      },
+      "usage_facts": null,
+      "output_bytes": 241953,
+      "video_verified": true,
+      "output_bytes_on_vps": 241953,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_image_audio_to_video",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_eVNLcUSok12j1nTq81LGNbBVv1GbXwOu",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/5f200e2f-38d8-4a6c-a412-4aa50f33d7d5/13a3db51-3511-4cd3-88e1-631c33d952cf.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_image_audio_to_video"
+      },
+      "usage_facts": null,
+      "output_bytes": 491152,
+      "video_verified": true,
+      "output_bytes_on_vps": 491152,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_lightx2v_v5",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_KEkoOKxbtH58ZWillF0nwzv1mrVKpUhW",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/513d0140-d7d4-4a35-b469-74922aedc67d/9d56716e-8916-49bd-a580-fd173a6624e4.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_lightx2v_v5"
+      },
+      "usage_facts": null,
+      "output_bytes": 514982,
+      "video_verified": true,
+      "output_bytes_on_vps": 514982,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_lightx2v_no_pic",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_Ws0oiL04tHbi2dwEIYKGwbP57d6k258z",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/2458843c-bba9-473c-a978-8610fbc127b8/33df87cb-dd2e-4f29-9e8b-2f0a55f8e0df.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_lightx2v_no_pic"
+      },
+      "usage_facts": null,
+      "output_bytes": 654008,
+      "video_verified": true,
+      "output_bytes_on_vps": 654008,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "minimax_h3_lightx2v",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 200,
+      "task_id": "task_t4MOsNDMO1gin5XsR31fG0iVAd6Mbm1t",
+      "last_query_http_status": 200,
+      "status": "succeeded",
+      "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+      "result_path": "/comfyui/outputs/2026/10/11/ddc332e5-3651-4f3c-b2ad-fcca6b6a023b/2851a627-ab6c-450a-98d2-f279e30f8d73.mp4",
+      "passed": true,
+      "task_status": "SUCCESS",
+      "billed_cny": 0.03,
+      "plugin_state": {
+        "facts": {
+          "orientation": "portrait",
+          "requests": 1,
+          "resolution": "480p",
+          "seconds": 1
+        },
+        "measuredSeconds": null,
+        "workflowId": "minimax_h3_lightx2v"
+      },
+      "usage_facts": null,
+      "output_bytes": 430314,
+      "video_verified": true,
+      "output_bytes_on_vps": 430314,
+      "note": "The official rc.43 container has no ffprobe, so the downloaded MP4 was verified by its ftyp header together with tasks.private_data.plugin_state and tasks.quota. Creation and generation both succeeded.",
+      "database_cross_checked": true,
+      "plugin_version": "1.0.2"
+    },
+    {
+      "workflow": "wan2.2animate-v4-motion_retargeting",
+      "submitted_via": "https://api.yiyinfaith.com",
+      "request_seconds": 1,
+      "create_attempts": 1,
+      "create_http_status": 400,
+      "create_error": {
+        "code": "invalid_request",
+        "message": "AutoDL: motion transfer has no fixed default duration; provide duration for billing (request id: 202610110549295504017968268d9d6R47ACIFe)",
+        "data": null
+      },
+      "plugin_version": "1.0.2"
+    }
+  ],
+  "cleanup": {
+    "temporary_api_key_removed": true,
+    "temporary_management_token_removed": true
+  },
+  "finished_at": 1791697769,
+  "passed_cases": 12,
+  "failed_cases": 4,
+  "note": "The official rc.43 container has no ffprobe. Result files were verified by their ftyp header, and each task terminal status, plugin_state facts and billed quota was cross-checked against production PostgreSQL (public.tasks). Motion output duration is recorded by the plugin as measuredSeconds.",
+  "verification": {
+    "database": "public.tasks cross-checked row by row: all 12 successful tasks match",
+    "result_files": "downloaded; MP4 headers contain ftyp",
+    "paid_tasks_reused": true,
+    "recharged_for_this_report": false
+  }
+}

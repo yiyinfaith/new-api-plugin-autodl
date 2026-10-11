@@ -3319,19 +3319,46 @@ export function parseTaskResult(ctx, body, response) {
   return { status: status };
 }
 
+// Stock rc.43 runs this hook with the state persisted by the previous poll and
+// adopts the state written by the terminal poll only afterwards, so the duration
+// read while polling is not part of the hook context. The completion result does
+// carry the media URL and every hook call gets its own byte-range budget, so
+// settlement repeats the bounded probe; unreadable or non-range media keeps the
+// polling measurement and then the declared fallback.
+function completionStatus(result) {
+  if (object(result)) return text(result.status);
+  if (typeof result === "string") return text(result);
+  return "";
+}
+
+// The plugin runtime only reports usable numbers to strict typeof comparisons,
+// so bound candidates without Number.isFinite.
+function motionSecondsInRange(value) {
+  return typeof value === "number" && value > 1e-9 && value <= 3600 ? value : null;
+}
+
 export function extractUsage(ctx) {
   return normalized(ctx).facts;
 }
 
 export function extractUsageOnComplete(task, result) {
-  const state = task.state;
-  if (!state || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
+  const state = task && task.state;
+  if (!object(state) || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
+  const status = completionStatus(result);
   // data.duration is processing wall time, NOT generated video seconds.
   const facts = Object.assign({}, state.facts);
-  if (result.status === "SUCCESS" && state.workflowId === MOTION_WORKFLOW && Number.isFinite(state.measuredSeconds) && state.measuredSeconds > 0 && state.measuredSeconds <= 3600) {
-    facts.seconds = state.measuredSeconds;
+  if (status === "SUCCESS" && state.workflowId === MOTION_WORKFLOW) {
+    const url = object(result) ? text(result.url) : "";
+    let seconds = null;
+    if (url) {
+      try {
+        seconds = parseVideoDuration(mediaRange(url, 0, MEDIA_PROBE_END).bytes);
+      } catch (_) { seconds = null; }
+    }
+    const settled = motionSecondsInRange(seconds) || motionSecondsInRange(state.measuredSeconds);
+    if (settled !== null) facts.seconds = settled;
   }
-  if (result.status === "FAILURE" || result.status === "CANCELLED") {
+  if (status === "FAILURE" || status === "CANCELLED") {
     facts.requests = 0;
     if (facts.seconds !== undefined) facts.seconds = 0;
   }

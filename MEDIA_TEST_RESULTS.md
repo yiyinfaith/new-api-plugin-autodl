@@ -50,3 +50,27 @@
 | minimax | `task_mpkPOhFLpY6rcypMPoqDYqchW4vDrIMP` | succeeded | 1 | ¥0.03 |
 
 旧任务 `task_qC9dwZMsJi5elwpSHfAKvOy4LzUGhWPz` 在插件恢复注册后自动完成：15 秒、¥0.60。生产 13 个既有模型的按秒 usage schema 恢复，价格表达式及渠道配置保持不变。
+
+## 1.0.2 按成片时长结算的实测边界（2026-10-11）
+
+动作迁移的目标是按成片实际秒数结算。生产任务 `task_Qojxt0nkDDr1Q7IwGWW4Q0qxybgAr4n9` 证明了探测本身可用，也暴露了当前官方 rc.43 的边界：
+
+| 观测项 | 值 | 来源 |
+|---|---|---|
+| 探测结果 | `measuredSeconds = 0.9666666666666667` | `tasks.private_data.plugin_state` |
+| 结算用量 | `usage_facts.seconds = 1` | `tasks.private_data.billing_context.tiered_snapshot` |
+| 结算额度 | `quota = 20000`（¥0.04，等于声明的 1 秒） | `tasks.quota` |
+| 结算日志 | `pre-consumed quota matches the actual quota` | 宿主日志 |
+
+为定位差异，在官方镜像 `sha256:da2f0f06…` 的隔离实例上用 mock 上游和真实 MP4 字节复现（不产生 AutoDL 费用）：
+
+- 插件在轮询成功时确实读到成片时长并写入 `plugin_state.measuredSeconds`（声明 5 秒 / 实测 3 秒、声明 8 秒 / 实测 12 秒两种组合都复现）。
+- 结算钩子拿到的 `task.state` 是**上一次轮询**持久化的状态，因此不含本次探测结果；`task.data` 同理。
+- 该钩子**能**读到 `result.url`，也**能**用 `utils.fetch` 做 Range 读取并解析时长；但无论返回探测值还是声明值，宿主最终采用的 `billing_context.usage_facts.seconds` 始终是提交时声明的秒数。
+
+结论：**在未修改的官方 rc.43 上，动作迁移按秒计费的输入是调用方声明的秒数；成片真实时长可以在插件内测出并记录，但不会改变最终结算额度。** 要让实测值参与结算，需要宿主提供更完整的完成钩子上下文或官方 `measureUsage` 能力，本插件不修改 New API 源码，因此不做该改动。
+
+插件侧据此保留可用的部分并明确回退顺序：结算钩子先用 `result.url`（或持久化状态中的结果 URL）做一次受限探测，失败则用轮询记录的 `measuredSeconds`，再失败则沿用声明值。请求声明仍是预扣上限，失败任务按 0 秒退款。
+
+离线覆盖：`node tests.mjs` 的 2,654 项检查包含动作迁移结算的三种分支（重新探测成功、回退轮询值、回退声明值），并断言失败任务与 15 个 H3 工作流不会触发媒体探测。
+
