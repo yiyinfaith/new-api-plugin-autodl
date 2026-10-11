@@ -20,7 +20,7 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.11');
+  assert.equal(p.meta.version, '1.0.12');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
@@ -464,8 +464,24 @@ const motionContext = ctx(motionModel);
 const motionState = p.parseSubmitResponse(motionContext, { statusCode: 200, body: envelope('QUEUED') }).state;
 fixture('motion declared fallback when settlement cannot re-read the output', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], motionState.facts);
 for (const status of ['FAILURE', 'CANCELLED']) fixture('motion unsuccessful task refunds ' + status, 'extractUsageOnComplete', [{ state: motionState }, { status }], { ...motionState.facts, requests: 0, seconds: 0 });
-for (const seconds of [undefined, 0, -1, 3601, null, '', false, '1e1', 'NaN', [], {}, 0.25, 0.0001, '0.999']) reject('motion rejects invalid declaration ' + String(seconds), 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], 'seconds must be a number');
+for (const seconds of [0, -1, 3601, null, '', false, '1e1', 'NaN', [], {}, 0.25, 0.0001, '0.999']) reject('motion rejects invalid declaration ' + String(seconds), 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], 'seconds must be a number');
 for (const seconds of [1, 3.25, 3600, '3.25']) fixture('motion accepts declared seconds ' + seconds, 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], { ...motionState.facts, seconds: Number(seconds) });
+// The declaration is optional: upstream has no duration control and settlement
+// bills the measured clip, so an omitted value must keep a non-zero reservation
+// rather than fail the request or leave nothing to bill.
+test('motion declaration is optional and still reserves a billable default', () => {
+  const without = ctx(motionModel, (() => { const body = { ...examples[motionModel] }; delete body.seconds; delete body.duration; return body; })());
+  assert.equal(p.extractUsage(without).seconds, 5, 'omitted declaration reserves the default');
+  for (const field of ['seconds', 'duration']) {
+    const body = { ...examples[motionModel] };
+    delete body.seconds; delete body.duration;
+    body[field] = undefined;
+    assert.equal(p.extractUsage(ctx(motionModel, body)).seconds, 5, field + ': undefined behaves as omitted');
+  }
+  // An explicit value still wins, and the two spellings must agree when both are set.
+  assert.equal(p.extractUsage(ctx(motionModel, { ...examples[motionModel], seconds: undefined, duration: 3 })).seconds, 3);
+  assert.throws(() => p.extractUsage(ctx(motionModel, { ...examples[motionModel], seconds: 4, duration: 6 })), /seconds and duration conflict/);
+});
 test('motion declares seconds schema without any custom host capability', () => assert.equal(p.meta.usageProfiles.find(profile => profile.models.includes(motionModel)).schema.seconds.unit, 'second'));
 const dataMedia = { image: 'data:image/png;base64,AA==', audio: 'data:audio/wav;base64,AA==', video: 'data:video/mp4;base64,AA==' };
 
@@ -678,9 +694,9 @@ test('motion settlement uses the upstream official usage block only as a last re
     // Official MiniMax shape: {"usage":{"total_seconds":...}} beside duration.
     const official = { usage: { total_seconds: 5, input_seconds: 0, output_seconds: 5 }, duration: 5 };
     assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, official).seconds, 5);
-    // output_seconds is honoured when total_seconds is missing, still capped by
-    // the declared ceiling (this state declares 5, so 7 settles as 5).
-    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 7 } }).seconds, motionState.facts.seconds);
+    // output_seconds is honoured when total_seconds is missing. The upstream
+    // value is billed as reported; the caller's reservation no longer caps it.
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 7 } }).seconds, 7);
     assert.equal(p.extractUsageOnComplete({ state: { workflowId: motionModel, facts: { requests: 1, seconds: 9 } } }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 7 } }).seconds, 7);
     // A duration mirror is honoured only when the authoritative usage block is
     // present; on its own it is AutoDL's render wall time, not video length.
@@ -696,9 +712,10 @@ test('motion settlement uses the upstream official usage block only as a last re
     assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { duration: 196 }).seconds, motionState.facts.seconds);
     assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, envelope('SUCCESS', [], { duration: 196 })).seconds, motionState.facts.seconds, 'the AutoDL envelope wrapper is not an upstream usage block');
     assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { input_seconds: 9 }, duration: 196 }).seconds, motionState.facts.seconds, 'a usage block without output seconds does not make duration trustworthy');
-    // The declared value is the quoted pre-charge ceiling: a measurement may
-    // refund downwards but must never settle above it.
-    assert.equal(p.extractUsageOnComplete({ state: { workflowId: motionModel, facts: { requests: 1, seconds: 1 } } }, { status: 'SUCCESS', url: blocked }, { usage: { total_seconds: 300 } }).seconds, 1);
+    // The declaration is only the reservation and never caps the bill. Capping
+    // at it let a caller declare one second against a much longer render and pay
+    // a fraction of the price, so the measured or upstream value wins outright.
+    assert.equal(p.extractUsageOnComplete({ state: { workflowId: motionModel, facts: { requests: 1, seconds: 1 } } }, { status: 'SUCCESS', url: blocked }, { usage: { total_seconds: 300 } }).seconds, 300);
     assert.equal(p.extractUsageOnComplete({ state: { workflowId: motionModel, facts: { requests: 1, seconds: 5 } } }, { status: 'SUCCESS', url: blocked }, { usage: { total_seconds: 2 } }).seconds, 2);
     // Failed tasks still refund and never read the block.
     assert.deepEqual(p.extractUsageOnComplete({ state: settlementState(4) }, { status: 'FAILURE' }, official), { ...motionState.facts, requests: 0, seconds: 0 });
@@ -862,6 +879,76 @@ test('an upstream status never renders as a live task once it is terminal', () =
     const rendered = p.native.miniTask({}, { task_id: 'x', status: token, data: payload }).task.status;
     assert.equal(rendered, want, token + ' rendered as ' + rendered);
   }
+});
+test('an under-declared motion task is billed the measured clip, not the declaration', () => {
+  const previousFetch = utils.fetch;
+  const motionTrack = (seconds) => {
+    const mdhd = new Uint8Array(20), view = new DataView(mdhd.buffer);
+    view.setUint32(12, 1000); view.setUint32(16, Math.round(seconds * 1000));
+    const hdlr = new Uint8Array(20);
+    for (let i = 0; i < 4; i++) hdlr[8 + i] = 'vide'.charCodeAt(i);
+    return mp4Box('trak', mp4Box('mdia', concatBytes(mp4Box('hdlr', hdlr), mp4Box('mdhd', mdhd), mp4Box('minf', mp4Box('stbl', new Uint8Array(8))))));
+  };
+  const file = concatBytes(mp4Box('ftyp', new Uint8Array(8)), mp4Box('moov', motionTrack(10)));
+  const url = 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/ten.mp4';
+  try {
+    utils.fetch = (request) => {
+      const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      const start = Number(range[1]), end = Math.min(Number(range[2]), file.length - 1);
+      const body = file.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Range': 'bytes ' + start + '-' + end + '/' + file.length, 'Content-Length': String(body.length) }, body: body.buffer };
+    };
+    // The declaration never reaches the vendor, so it must not cap the bill:
+    // declaring 1s against a 10s render used to pay a tenth of the price.
+    for (const declared of [1, 5]) {
+      const facts = p.extractUsageOnComplete(
+        { state: { workflowId: motionModel, facts: { requests: 1, seconds: declared }, submittedAt: 1, timeoutSeconds: 1800 } },
+        { status: 'SUCCESS', url }, {});
+      assert.equal(facts.seconds, 10, 'declared ' + declared + ' must still bill the measured 10s');
+    }
+    // A larger declaration must not over-bill either: the measurement wins outright.
+    const generous = p.extractUsageOnComplete(
+      { state: { workflowId: motionModel, facts: { requests: 1, seconds: 30 }, submittedAt: 1, timeoutSeconds: 1800 } },
+      { status: 'SUCCESS', url }, {});
+    assert.equal(generous.seconds, 10, 'a generous declaration must not over-bill');
+  } finally { utils.fetch = previousFetch; }
+});
+test('an unmeasurable motion task without a declaration still bills a reservation', () => {
+  const previousFetch = utils.fetch;
+  try {
+    utils.fetch = () => ({ status: 403, headers: {}, body: new ArrayBuffer(0) });
+    const url = 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.mp4';
+    // Nothing measurable and no upstream usage block: the reservation must stand,
+    // otherwise an unmeasurable render settles at zero seconds and is free.
+    const facts = p.extractUsageOnComplete(
+      { state: { workflowId: motionModel, facts: { requests: 1, seconds: 5 }, submittedAt: 1, timeoutSeconds: 1800 } },
+      { status: 'SUCCESS', url }, {});
+    assert.equal(facts.seconds, 5, 'the reservation is kept when nothing can be measured');
+    // Even a state that somehow reached settlement with no seconds at all.
+    const bare = p.extractUsageOnComplete(
+      { state: { workflowId: motionModel, facts: { requests: 1 }, submittedAt: 1, timeoutSeconds: 1800 } },
+      { status: 'SUCCESS', url }, {});
+    assert.equal(bare.seconds, 5, 'a missing reservation falls back to the default');
+    // A failed task still refunds to zero regardless.
+    const failed = p.extractUsageOnComplete(
+      { state: { workflowId: motionModel, facts: { requests: 1, seconds: 5 }, submittedAt: 1, timeoutSeconds: 1800 } },
+      { status: 'FAILURE', url }, {});
+    assert.deepEqual(failed, { requests: 0, seconds: 0 }, 'failure refunds');
+  } finally { utils.fetch = previousFetch; }
+});
+test('an upstream usage block is trusted only for its own seconds', () => {
+  const previousFetch = utils.fetch;
+  try {
+    utils.fetch = () => ({ status: 403, headers: {}, body: new ArrayBuffer(0) });
+    const url = 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.mp4';
+    const state = { workflowId: motionModel, facts: { requests: 1, seconds: 5 }, submittedAt: 1, timeoutSeconds: 1800 };
+    assert.equal(p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url }, { usage: { total_seconds: 7 } }).seconds, 7);
+    assert.equal(p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url }, { usage: { output_seconds: 7 } }).seconds, 7);
+    // `duration` is AutoDL render wall time; a usage block without its own seconds
+    // must not make it trustworthy, or a 3-minute render bills as 196 seconds.
+    assert.equal(p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url }, { usage: { input_seconds: 9 }, duration: 196 }).seconds, 5);
+    assert.equal(p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url }, { duration: 196 }).seconds, 5);
+  } finally { utils.fetch = previousFetch; }
 });
 test('safeReason redacts a credential split by intervening characters', () => {
   const secret = 'super-secret-autodl-token';

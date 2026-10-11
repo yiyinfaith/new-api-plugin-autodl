@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.11**。两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.12**。两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -112,7 +112,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" \
 | 单图生视频（也可多图） | `minimax_h3_lightx2v_v5` | prompt + 1–9 图；1–10 秒；480p/768p/1080p。 |
 | 图+音频生视频 | `minimax_h3_image_audio_to_video_v2` | prompt，可带 0–9 图、0–3 音频；图+音频场景各传至少 1 个；1–10 秒。 |
 | 首尾帧 | `minimax_h3_lightx2v` | prompt + 恰好 2 图；1–15 秒；480p/768p。 |
-| 动作迁移 | `wan2.2animate-v4-motion_retargeting` | 1 图+1 视频；无 prompt/可控时长；必须声明计费秒数；只有 OpenAI 格式可用渠道映射别名 `wan2.2-animate-move`。 |
+| 动作迁移 | `wan2.2animate-v4-motion_retargeting` | 1 图+1 视频；无 prompt/可控时长；计费秒数可选（结算以实测成片时长为准）；只有 OpenAI 格式可用渠道映射别名 `wan2.2-animate-move`。 |
 
 OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。上表是工作流能力，不能把不同协议字段混写；全部 17 项默认值、媒体范围与分辨率在后面的[工作流参数表](#工作流目录与能力边界)。
 
@@ -155,11 +155,11 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 
 **计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（`duration` 是所有工作流的等价别名），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1` 没有视频秒数字段，仍按请求次数计费。
 
-动作迁移（`wan2.2animate-v4-motion_retargeting`）没有官方固定时长或默认秒数，成片时长跟随参考视频，因此必须声明计费秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`。声明支持数值或普通十进制字符串，`1 <= 秒数 <= 3600`，允许小数；它只用于计费，不裁剪视频、不写入 AutoDL body。
+动作迁移（`wan2.2animate-v4-motion_retargeting`）没有官方固定时长或默认秒数，成片时长跟随参考视频，因此计费秒数**可选**：OpenAI body 用 `seconds`，MiniMax body 用 `duration`；省略时按默认 5 秒预扣。声明支持数值或普通十进制字符串，`1 <= 秒数 <= 3600`，允许小数；它只用于预扣，不裁剪视频、不写入 AutoDL body，**也不作为计费上限**。
 
 插件还会自己测量参考视频：提交成功、任务创建后立刻对输入视频做一次受限 Range 读取（公网 HTTP(S) URL）或内联解码（`data:video/mp4;base64` / `data:video/webm;base64`），结果按 URL 缓存复用；此时上游已在渲染，测量与渲染并行，不占用客户端等待时间。读取失败或无法解析时不测量，回退到声明值。
 
-动作迁移成功的结算顺序是「**成片新探测 → 轮询期间记录的成片时长 → 提交阶段测得的输入时长 → 上游官方 usage 块**」，再以声明秒数为上限取较小值（可向下退还，不会超收）；实测过程见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md#104-提交阶段测量输入视频2026-10-11)。请由可信客户端如实提供参考视频时长。
+动作迁移成功的结算顺序是「**成片新探测 → 轮询期间记录的成片时长 → 提交阶段测得的输入时长 → 上游官方 usage 块**」，**取到的值即为最终计费秒数，不再以声明秒数为上限**：声明只是预扣，声明小了不会少收，声明大了不会多收。四项都取不到时保留预扣值，避免按 0 秒结算。实测过程见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md#104-提交阶段测量输入视频2026-10-11)。请由可信客户端如实提供参考视频时长。
 
 提交时 New API 预扣；成功按保存的请求用量结算，最终失败按 0 次/0 秒结算并退回预扣。上游 `data.duration` 是处理耗时，绝不作为生成秒数。New API 退款不代表 AutoDL 同时退款。
 
@@ -195,7 +195,7 @@ audio = data_url("reference.wav", "audio/wav")
 video = data_url("motion.mp4", "video/mp4")
 ```
 
-**输出只返回公网 URL**；两种接口的 URL/Data URL 输入已付费验证。内联输入受宿主请求体/JS 资源限制，大文件优先 URL；动作迁移另有[秒数声明要求](#动作迁移与-wan22-animate-move-渠道别名)。
+**输出只返回公网 URL**；两种接口的 URL/Data URL 输入已付费验证。内联输入受宿主请求体/JS 资源限制，大文件优先 URL；动作迁移另有[秒数声明说明](#动作迁移与-wan22-animate-move-渠道别名)。
 
 ## OpenAI Videos API
 
@@ -207,7 +207,7 @@ video = data_url("motion.mp4", "video/mp4")
 |---|---|---|---|
 | `model` | string | 必填，无默认 | 16 个视频 workflow ID；渠道映射后的动作迁移别名 `wan2.2-animate-move` 也可用。 |
 | `prompt` | string | 有文本槽位时必填，无默认 | 非空；H3 按工作流文本上限。音频同步/动作迁移没有文本槽位、拒绝此字段。 |
-| `seconds` | number 或十进制字符串 | H3 可选默认 5；动作迁移必填 | 映射 duration 或 audio_duration；工作流范围为 1–10/12/15，详见能力表。H3 非整数/超范围拒绝。动作迁移必填，可小数，1 <= seconds <= 3600，仅声明计费时长。 |
+| `seconds` | number 或十进制字符串 | 均可选：H3 默认 5，动作迁移默认 5（仅预扣） | 映射 duration 或 audio_duration；工作流范围为 1–10/12/15，详见能力表。H3 非整数/超范围拒绝。动作迁移可小数，1 <= seconds <= 3600，仅预扣；结算以实测成片时长为准。 |
 | `resolution` | string | 可选，用工作流默认档位 | 全部统一档位为 480p/464p/736p/768p/832p/1080p/1088p/1440p；具体允许项见工作流分辨率组，不是每个模型都支持全部值。 |
 | `orientation` | string | 可选，用默认方向 | portrait/landscape/square；档位与方向必须存在对应组合。 |
 | `size` | string | 可选，无独立默认 | 精确 `宽x高`（小写 x），只接受尺寸表中该工作流已确认的值；与显式 resolution/orientation 冲突报错。 |
@@ -278,7 +278,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 | `model` | string | 必填，无默认 | 17 个注册 workflow ID 之一；不增加 workflow_id。 |
 | `content` | object[] | 必填；所需文本/媒体依工作流 | 只接受下表项，最多 1 条 text；每项必须是 object，媒体数量按工作流。 |
 | `resolution` | string | 有分辨率控制时必填；TTS 拒绝 | MiniMax 档位 480P→480p、768P→768p、2K→1440p；其余扩展档位（736p/1080p/1088p/464p/832p）与完整官网标签按工作流能力表。裸 480p/768p/1440p 拒绝。 |
-| `duration` | integer（可写十进制字符串）；动作迁移为 number | 有 duration 控制的工作流可省略，默认 5；动作迁移必填 | 整数范围按工作流，见能力表；动作迁移接受 1 <= duration <= 3600（可小数），仅计费声明。音频同步用 audio_duration，TTS 拒绝。 |
+| `duration` | integer（可写十进制字符串）；动作迁移为 number | 有 duration 控制的工作流可省略，默认 5；动作迁移可选，默认 5（仅预扣） | 整数范围按工作流，见能力表；动作迁移接受 1 <= duration <= 3600（可小数），仅预扣；结算以实测成片时长为准。音频同步用 audio_duration，TTS 拒绝。 |
 | `audio_duration` | integer 或数字字符串 | 仅音频同步工作流可选，默认 5 | minimax_h3_image_audio_to_video 的 1–15 秒字段；不与 duration 互换，其余工作流拒绝。 |
 | `ratio` | string | 纯文生必填；参考场景省略为 adaptive；TTS 拒绝 | adaptive/21:9/16:9/4:3/1:1/3:4/9:16；纯文生不能 adaptive，首尾帧按 adaptive，详见[比例说明](#比例与-adaptive)。 |
 | `seed` | integer 或数字字符串 | 有 seed 能力时可选，不补写默认 | 按目标 workflow 的种子范围；没有 seed 能力则拒绝。 |
@@ -427,7 +427,7 @@ seed 上限 **999999999999999**，下限 **1**（zm_u24/zm_u08 为 **0**），�
 
 ## 动作迁移与 wan2.2-animate-move 渠道别名
 
-`wan2.2animate-v4-motion_retargeting`（动作迁移）：1 图+1 视频，不传 prompt/text/audio_duration，也没有可控时长字段；OpenAI 格式必填 `seconds`，MiniMax 格式必填 `duration`，都只用于计费声明。`model` 可填实际 workflow ID；OpenAI 格式也可用渠道把外部别名 `wan2.2-animate-move` 映射到该工作流。渠道需允许请求模型，并按请求 model 配置价格。
+`wan2.2animate-v4-motion_retargeting`（动作迁移）：1 图+1 视频，不传 prompt/text/audio_duration，也没有可控时长字段；OpenAI `seconds` 与 MiniMax `duration` 都可省略，只用于预扣，结算以实测成片时长为准。`model` 可填实际 workflow ID；OpenAI 格式也可用渠道把外部别名 `wan2.2-animate-move` 映射到该工作流。渠道需允许请求模型，并按请求 model 配置价格。
 
 **动作迁移按成片秒数计费（含别名）。** 别名 `wan2.2-animate-move` 现在自带 `seconds` usage profile（1.0.7 修复；此前该别名只继承 `usageSchema` 的 `requests`，价格页缺少秒数输入，按秒计费会静默退化为按次），价格页与工作流 ID 一样有「视频生成单价」输入。别名与 workflow ID 各自配置价格表达式，两者都必须包含 `u("seconds")` 才会按秒结算。
 
@@ -445,9 +445,9 @@ MiniMax（提交到 `/v2/video_generation`）：
 {"model":"wan2.2animate-v4-motion_retargeting","duration":5,"resolution":"832p","ratio":"9:16","content":[{"type":"image_url","role":"reference_image","image_url":{"url":"https://media.example.com/person.png"}},{"type":"video_url","role":"reference_video","video_url":{"url":"https://media.example.com/motion.mp4"}}]}
 ```
 
-计费用量按本文件「请求时长与结算」规则：动作迁移没有默认时长、必须声明；成功后按「成片新探测 → 轮询记录 → 输入实测 → 声明秒数」取值，失败按 0 秒结算并退回预扣；插件不裁剪任何媒体。
+计费用量按本文件「请求时长与结算」规则：动作迁移的声明可省略（默认预扣 5 秒）；成功后按「成片新探测 → 轮询记录 → 输入实测 → 上游 usage 块」取值并**以取到的值为准**，四项都取不到时保留预扣；失败按 0 秒结算并退回预扣；插件不裁剪任何媒体。
 
-官网单价为北京 08:00–24:00 ¥0.04/成片秒、00:00–08:00 ¥0.03。声明秒数决定预扣上限且结算不会超过它：高峰声明 5 秒预扣 ¥0.20，声明 3.25 秒预扣 ¥0.13，失败退还全部预扣；另受组倍率及跨时段价格影响。
+官网单价为北京 08:00–24:00 ¥0.04/成片秒、00:00–08:00 ¥0.03。声明秒数只决定预扣（可省略，默认 5 秒），**结算按实测成片秒数计费、不再受声明上限约束**：高峰声明 5 秒预扣 ¥0.20，若成片实测 7 秒则按 7 秒结算 ¥0.28；失败退还全部预扣；另受组倍率及跨时段价格影响。
 
 ## 错误、轮询和计费
 
@@ -504,4 +504,4 @@ flowchart TD
   Settle --> Response["按两种格式返回公开 ID 和产物 URL"]
 ```
 
-只区分解码/响应层；MiniMax 侧保留调用方填写的外部 model 身份，`rewriteModel` 保存实际 workflow。两种格式都只接受可信用量 facts，客户端业务字段不能覆盖内部计费事实；动作迁移的声明秒数依赖可信客户端，底层任务逻辑共用。
+只区分解码/响应层；MiniMax 侧保留调用方填写的外部 model 身份，`rewriteModel` 保存实际 workflow。两种格式都只接受可信用量 facts，客户端业务字段不能覆盖内部计费事实；动作迁移的计费秒数以实测成片时长为准、不依赖客户端的声明，底层任务逻辑共用。

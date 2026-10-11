@@ -1,0 +1,50 @@
+{
+  "plugin_version": "1.0.12",
+  "change": "motion-transfer seconds/duration are optional; settlement is measured, not capped by the declaration",
+  "active_version": "1.0.12",
+  "source_sha256": "1ff98595594f5686e1281e5f6cb1ec1ccc11835c8ca3b15652b382f627193301",
+  "source_bytes": 136384,
+  "source_hash_matches_file": true,
+  "runtime_status": "registered",
+  "plugin_errors": {},
+  "enabled": true,
+  "active": true,
+  "models_advertised": 18,
+  "usage_profiles": 18,
+  "pricing_models_verified": 13,
+  "pricing_models_with_seconds": 13,
+  "row_counts": {
+    "channels": 106,
+    "tasks": 3388,
+    "abilities": 411,
+    "models": 181
+  },
+  "nginx_unchanged": true,
+  "live_verification": {
+    "task_id": "task_zBatAeJWncbBkhM78N54T6IjzTiexSh7",
+    "model": "wan2.2-animate-move",
+    "request_declared_seconds": null,
+    "note": "the submitted body contained no seconds and no duration field",
+    "task_status": "SUCCESS",
+    "task_quota": 20000,
+    "precharge_usage_facts": {
+      "orientation": "portrait",
+      "requests": 1,
+      "resolution": "832p",
+      "seconds": 5
+    },
+    "precharge_quota": 100000,
+    "settlement_usage_facts": {
+      "orientation": "portrait",
+      "requests": 1,
+      "resolution": "832p",
+      "seconds": 1
+    },
+    "settlement_actual_quota": 20000,
+    "settlement_log_quota": 80000,
+    "refunded_quota": 80000,
+    "pricing_expression": "hour(\"Asia/Shanghai\") < 8 ? tier(\"off_peak\", u(\"seconds\") * 0.03) : tier(\"peak\", u(\"seconds\") * 0.04)",
+    "quota_per_yuan": 500000,
+    "conclusion": "declaration omitted -> 5s reservation -> settled at the measured 1s; the reservation did not cap or fix the bill"
+  }
+}

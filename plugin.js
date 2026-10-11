@@ -2467,6 +2467,12 @@ const MOTION_WORKFLOW = "wan2.2animate-v4-motion_retargeting";
 // Channel-mapped external model name for motion transfer over OpenAI /v1/videos.
 const MOTION_ALIAS = "wan2.2-animate-move";
 
+// Motion transfer has no upstream duration control, so a caller's declaration is
+// only the pre-charge reservation and settlement replaces it with the measured
+// length of the delivered clip. This is the reservation used when a caller
+// declares nothing, so an omitted declaration can never settle at zero seconds.
+const MOTION_DEFAULT_SECONDS = 5;
+
 // `publicModel` lets the channel-mapped motion alias reuse the motion workflow's
 // capability profile while still being advertised and priced under its own name.
 // It is validated as a string because Array.map would otherwise pass an index.
@@ -2476,7 +2482,7 @@ function usageProfile(model, publicModel) {
   const facts = { requests: 1 };
   if (config.secondsField || model === MOTION_WORKFLOW) {
     schema.seconds = { type: "number", unit: "second", description: { en: "Video generation unit price", zh: "视频生成单价" } };
-    facts.seconds = config.secondsField ? config.rules[config.secondsField].default : 5;
+    facts.seconds = config.secondsField ? config.rules[config.secondsField].default : MOTION_DEFAULT_SECONDS;
   }
   if (config.resolutions.length) {
     schema.resolution = { enum: Array.from(new Set(config.resolutions.map(function (entry) { return entry.resolution; }))), description: { en: "Output resolution", zh: "输出分辨率" } };
@@ -2492,7 +2498,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.11",
+  version: "1.0.12",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2533,6 +2539,19 @@ function billedSeconds(value, field) {
   const seconds = typeof value === "number" ? value : (typeof value === "string" && /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value) ? Number(value) : NaN);
   if (!Number.isFinite(seconds) || seconds < MIN_BILLABLE_SECONDS || seconds > 3600) throw new Error("AutoDL: " + field + " must be a number between " + MIN_BILLABLE_SECONDS + " and 3600 seconds");
   return seconds;
+}
+// The reservation for a motion-transfer request. The declaration is optional:
+// upstream has no duration parameter, so it never reaches the vendor, and
+// settlement bills the measured clip instead. Falling back to the default keeps
+// the reservation non-zero so a caller who declares nothing still pays for a
+// render whose output cannot be measured.
+function motionDeclaredSeconds(input) {
+  const declared = input.seconds === undefined ? input.duration : input.seconds;
+  if (input.seconds !== undefined && input.duration !== undefined
+    && billedSeconds(input.duration, "duration") !== billedSeconds(input.seconds, "seconds")) {
+    throw new Error("AutoDL: seconds and duration conflict");
+  }
+  return declared === undefined ? MOTION_DEFAULT_SECONDS : billedSeconds(declared, "seconds");
 }
 function object(value) { return value !== null && typeof value === "object" && !Array.isArray(value); }
 function copyRequest(value) {
@@ -2700,7 +2719,9 @@ function normalizeInput(config, input) {
     if (input.seconds !== undefined && input.duration !== undefined && numberValue(input.duration, rule, "seconds") !== seconds) throw new Error("AutoDL: seconds and duration conflict");
     body[config.secondsField] = seconds; facts.seconds = seconds;
   } else if (config.workflowId === MOTION_WORKFLOW) {
-    facts.seconds = billedSeconds(input.seconds === undefined ? input.duration : input.seconds, "seconds");
+    // Optional: motion transfer has no upstream seconds control, so this only
+    // seeds the reservation and settlement bills the measured clip instead.
+    facts.seconds = motionDeclaredSeconds(input);
   } else if (input.seconds !== undefined || input.duration !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
   const selected = mapResolution(config, input);
   if (selected) { body.resolution = selected.upstream; facts.resolution = selected.resolution; facts.orientation = selected.orientation; }
@@ -2885,8 +2906,9 @@ function normalizeMiniMax(config, input) {
   }
   const normalized = normalizeMiniMaxBody(config, body);
   if (config.workflowId === MOTION_WORKFLOW) {
-    if (motionSeconds === undefined) throw new Error("AutoDL: motion transfer has no fixed default duration; provide duration for billing");
-    normalized.facts.seconds = motionSeconds;
+    // `duration` is optional here: it never reaches upstream, and settlement
+    // bills the measured clip. Omitting it leaves the default reservation.
+    normalized.facts.seconds = motionSeconds === undefined ? MOTION_DEFAULT_SECONDS : motionSeconds;
   }
   return normalized;
 }
@@ -3458,9 +3480,11 @@ function upstreamDeclaredSeconds(body) {
     const seconds = motionSecondsInRange(candidate);
     if (seconds !== null) return seconds;
   }
-  // The official example mirrors the duration beside its usage block, so it is
-  // trustworthy only when that authoritative block is present.
-  return motionSecondsInRange(body.duration);
+  // The block's own seconds are required. A bare `duration` beside a usage object
+  // that lacks them is still un-corroborated render wall time, and trusting it
+  // would charge a 3-minute render as 196 seconds. Nothing is lost by refusing:
+  // MiniMax always reports total_seconds/output_seconds alongside its duration.
+  return null;
 }
 
 export function extractUsage(ctx) {
@@ -3489,14 +3513,15 @@ export function extractUsageOnComplete(task, result, body) {
       || motionSecondsInRange(state.measuredSeconds)
       || motionSecondsInRange(state.inputSeconds)
       || upstreamDeclaredSeconds(body);
-    // The declared seconds are the pre-charge ceiling the caller was quoted, so
-    // a measurement may refund downwards but must never bill above it. When no
-    // candidate measured anything, keep the declaration rather than letting an
-    // upstream usage block (or a missing value) settle above the quoted ceiling.
-    const cap = motionSecondsInRange(facts.seconds);
-    const ceiling = settled === null ? null : (cap === null ? settled : Math.min(settled, cap));
-    if (ceiling !== null) facts.seconds = ceiling;
-    else if (cap !== null) facts.seconds = cap;
+    // The delivered file is authoritative. The caller's declaration is only the
+    // pre-charge reservation and deliberately does NOT cap the bill: motion
+    // transfer has no upstream duration parameter, so the declaration never
+    // reaches the vendor, and capping at it let a caller declare one second,
+    // submit a ten-second reference clip and pay a tenth of the price. A
+    // declaration still acts as the reservation, so nothing here bills zero:
+    // when no candidate measured anything, the reservation stands.
+    if (settled !== null) facts.seconds = settled;
+    else if (motionSecondsInRange(facts.seconds) === null) facts.seconds = MOTION_DEFAULT_SECONDS;
   }
   // Compare the status by meaning, not by exact spelling. native.miniTask
   // renders this plugin's own FAILURE/CANCELLED as the lowercase strings

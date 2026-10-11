@@ -2,7 +2,7 @@
 
 为 New API 提供 AutoDL.Art Task Plugin 适配，将 AutoDL ComfyUI 工作流接入 New API。
 
-插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.11**（插件元数据为 `1.0.11`）。
+插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.12**（插件元数据为 `1.0.12`）。
 
 **调用方从这里开始：[5 分钟快速开始与完整 API 参考](API.md#5-分钟快速开始)。** 一份文档介绍 OpenAI 与 MiniMax 官方 V2 两种接口；每种都有完整 curl、创建响应、任务查询和成功结果字段。覆盖文生视频、图片 URL/Data URL、图+音频、图+视频，并提供常用模型与错误速查；后半部分保留完整字段类型、必填/默认值、工作流范围、计费及技术限制，无需跳到其他说明文档。
 
@@ -47,11 +47,11 @@ OpenAI 解码器将 `prompt / seconds / size / input_reference / audios / videos
 
 两种入口最终都生成同一份 AutoDL ComfyUI body（`ref_image_* / ref_audio_* / ref_video / duration / resolution` 等官网字段），工作流身份由 `model` 决定，请求体不参与路由。
 
-两种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量；动作迁移提交时按调用方声明秒数预扣，任务创建成功后立即对参考视频做一次受限 Range 读取（公网 URL）或内联 Base64 解码（Data URL），把实测输入时长写入任务状态。结算顺序是「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 声明秒数」；声明值决定预扣上限。AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
+两种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量；动作迁移提交时按调用方声明秒数预扣（省略则默认 5 秒），任务创建成功后立即对参考视频做一次受限 Range 读取（公网 URL）或内联 Base64 解码（Data URL），把实测输入时长写入任务状态。结算顺序是「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 上游 usage 块」，取到的值即为最终计费秒数，不再以声明秒数为上限。AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
 
 插件不会替用户上传本地媒体，也不会自动导入价格。动作迁移的输入测量最多读取首个 1 MiB，按 URL 缓存结果，并受 rc.43 的 4 次 fetch、单次 15 秒、单 hook 30 秒限制；无法读取或无法解析时不测量，回退到声明秒数，不阻塞任务。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#比例与-adaptive)。上线前请为全部要调用的工作流（含 OpenAI 动作迁移别名）配置价格；仅安装插件不足以完成渠道和计费配置。
 
-**动作迁移结算的实测顺序：**测量在提交阶段与渲染并行完成，结算钩子会再次尝试读取成片，取值顺序是「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 声明秒数」；声明值仍决定提交时的预扣上限。实测过程与证据见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md#104-提交阶段测量输入视频2026-10-11)。
+**动作迁移结算的实测顺序：**测量在提交阶段与渲染并行完成，结算钩子会再次尝试读取成片，取值顺序是「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 上游 usage 块」，取到的值即为最终计费秒数；声明值只决定提交时的预扣，不封顶结算。实测过程与证据见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md#104-提交阶段测量输入视频2026-10-11)。
 
 ## URL 安装
 
@@ -81,7 +81,7 @@ URL 导入在浏览器中下载源码，因此使用管理后台的浏览器需�
 
 仓库只维护根目录的一个 `plugin.js` 和一个当前版本，更新后仍使用同一个 `main` Raw URL。`workflows.json`、`official-workflows.json`、`examples.json` 和 `prices.json` 用于查阅、示例及开发验证，插件运行时不会读取它们；测试脚本、校验文件、许可证和 `.github/` 也不是安装依赖。
 
-从 1.0.7 更新：从上方唯一 Raw URL 导入并启用 AutoDL 1.0.11。保留任务记录、渠道、价格表达式和分组倍率；插件不需要任何路径转发配置。1.0.6 提升了官方格式容错，1.0.7 修复了动作迁移别名的按秒计费：`input_reference` 仍是推荐字段，旧 `images` 恢复为等价兼容别名（映射到同一批图片槽位，不会丢图），`duration` 成为全部工作流的 `seconds` 别名，官方非媒体字段接受并忽略，MiniMax 的 `callback_url` / `extra` 接受并忽略。只维护一个当前版本和安装地址。
+从 1.0.7 更新：从上方唯一 Raw URL 导入并启用 AutoDL 1.0.12。保留任务记录、渠道、价格表达式和分组倍率；插件不需要任何路径转发配置。1.0.6 提升了官方格式容错，1.0.7 修复了动作迁移别名的按秒计费：`input_reference` 仍是推荐字段，旧 `images` 恢复为等价兼容别名（映射到同一批图片槽位，不会丢图），`duration` 成为全部工作流的 `seconds` 别名，官方非媒体字段接受并忽略，MiniMax 的 `callback_url` / `extra` 接受并忽略。只维护一个当前版本和安装地址。
 
 **宿主升级：**继续使用官方 `calciumion/new-api:latest`，不维护源码修改。升级后检查插件 registered、模型价格 schema 及两种请求入口；未来若官方 Plugin API 发生不兼容变更，仍需正常回归验证。
 
@@ -373,7 +373,7 @@ curl -sS "$NEW_API_BASE_URL/v2/query/video_generation/$TASK_ID" -H "Authorizatio
 
 **计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`）。TTS 仍按请求次数计费。
 
-动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`。声明支持数值/普通十进制字符串，`1 <= 秒数 <= 3600`，允许小数；该值决定提交时的预扣上限，结算不会超过它，不裁剪视频、不写入 AutoDL body。提交成功后插件立即对参考视频做一次测量：公网 MP4/WebM 用 `bytes=0-1048575` 受限 Range 读取，`data:video/...;base64` 内联解码。结算按「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 上游官方 usage 块」取值，再以声明秒数为上限取较小值（可向下退还，不会超收）；远程服务器不支持 Range、URL 不在管理员允许主机或媒体格式无法解析时沿用声明值。请由可信客户端如实提供参考视频时长。
+动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此计费秒数**可选**：OpenAI body 用 `seconds`，MiniMax body 用 `duration`；省略时按默认 5 秒预扣。声明支持数值/普通十进制字符串，`1 <= 秒数 <= 3600`，允许小数；该值只决定提交时的预扣，**不再封顶结算**，不裁剪视频、不写入 AutoDL body。提交成功后插件立即对参考视频做一次测量：公网 MP4/WebM 用 `bytes=0-1048575` 受限 Range 读取，`data:video/...;base64` 内联解码。结算按「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 上游官方 usage 块」取值，取到的值即为最终计费秒数（声明小了不会少收，声明大了不会多收）；四项都取不到时保留预扣值，避免按 0 秒结算。远程服务器不支持 Range、URL 不在管理员允许主机或媒体格式无法解析时，继续尝试后面的候选值。
 
 提交时 New API 预扣；成功按保存的请求用量结算，最终失败按 0 次/0 秒结算并退回预扣。上游 `data.duration` 是处理耗时，绝不作为生成秒数。New API 退款不代表 AutoDL 同时退款。
 

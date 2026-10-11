@@ -1,0 +1,24 @@
+{
+  "plugin_version": "1.0.12",
+  "model": "wan2.2-animate-move",
+  "declared_seconds": null,
+  "expectation": "optional declaration accepted; billed from the measured clip, not the 5s reservation",
+  "paid_submissions": 1,
+  "temporary_api_key_id": 44,
+  "request_fields": [
+    "input_reference",
+    "model",
+    "videos"
+  ],
+  "create_http_status": 200,
+  "task_id": "task_zBatAeJWncbBkhM78N54T6IjzTiexSh7",
+  "final_status": "completed",
+  "has_media": true,
+  "reported_usage": {},
+  "quota_used": 100000,
+  "billed_seconds_at_peak_rate": 5.0,
+  "reservation_if_declaration_capped": 5,
+  "billed_from_measurement": false,
+  "task_quota": "20000",
+  "temporary_api_key_removed": true
+}
