@@ -1,0 +1,96 @@
+{
+  "source_sha256": "97be25c3c7b51db73bbb832509d83f08f36efdc349432d38218ca3c7f340766c",
+  "checked_at": 1791708201,
+  "host_version": "v1.0.0-rc.43",
+  "container": "running healthy",
+  "active_plugin": {
+    "key": "autodl",
+    "version": "1.0.3",
+    "enabled": "true",
+    "active": "true",
+    "source_hash": "97be25c3c7b51db73bbb832509d83f08f36efdc349432d38218ca3c7f340766c"
+  },
+  "tasks": [
+    {
+      "workflow": "minimax_h3_z0903",
+      "task_id": "task_cZ3gwoabGXQ3DimYPGnWGnjPqvo6ycKR",
+      "status": "SUCCESS",
+      "billed_cny": 0.04
+    },
+    {
+      "workflow": "minimax_h3_z0902",
+      "task_id": "task_tjEdeRDZtlRzte3dhrf2neiHbDjOmL0Y",
+      "status": "SUCCESS",
+      "billed_cny": 0.04
+    },
+    {
+      "workflow": "minimax_h3_z0901",
+      "task_id": "task_ao25gHDuqVlHq7eadwCbmxVqJXIuEjdY",
+      "status": "SUCCESS",
+      "billed_cny": 0.04
+    },
+    {
+      "workflow": "minimax_h3_zm_u24",
+      "task_id": "task_jdx4748CJXu97sVQUEAiiy7wSHxhksol",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "minimax_h3_zm_u08",
+      "task_id": "task_cwst6K6vFVujKpRIimTMPZ0t2gi49yg3",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "minimax_h3_image_audio_to_video_v2_15s",
+      "task_id": "task_USBzZDYu4FkdwMPSRVhhifFD1VDfJqgE",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "minimax_h3_lightx2v_v5_15s",
+      "task_id": "task_tuy7QhFwuu9Nvq0UMK95suDsOXLXeirT",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "minimax_h3_image_audio_to_video_v2",
+      "task_id": "task_LsVL0CPIZTAujOAjtHM1bNyX2EjWUaVp",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "minimax_h3_image_audio_to_video",
+      "task_id": "task_eVNLcUSok12j1nTq81LGNbBVv1GbXwOu",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "minimax_h3_lightx2v_v5",
+      "task_id": "task_KEkoOKxbtH58ZWillF0nwzv1mrVKpUhW",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "minimax_h3_lightx2v_no_pic",
+      "task_id": "task_Ws0oiL04tHbi2dwEIYKGwbP57d6k258z",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "minimax_h3_lightx2v",
+      "task_id": "task_t4MOsNDMO1gin5XsR31fG0iVAd6Mbm1t",
+      "status": "SUCCESS",
+      "billed_cny": 0.03
+    },
+    {
+      "workflow": "wan2.2animate-v4-motion_retargeting",
+      "task_id": "task_Qojxt0nkDDr1Q7IwGWW4Q0qxybgAr4n9",
+      "status": "SUCCESS",
+      "billed_cny": 0.04,
+      "measured_seconds": 0.9666666666666667
+    }
+  ],
+  "billed_cny_total": 0.43,
+  "passed": true
+}

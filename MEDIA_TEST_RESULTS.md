@@ -74,3 +74,22 @@
 
 离线覆盖：`node tests.mjs` 的 2,654 项检查包含动作迁移结算的三种分支（重新探测成功、回退轮询值、回退声明值），并断言失败任务与 15 个 H3 工作流不会触发媒体探测。
 
+
+## 1.0.3 生产部署与实时验证（2026-10-11）
+
+1.0.3 只改动 plugin.js 内部：完成钩子先按结果 URL 重新探测成片，再回退到轮询记录，最后回退到声明秒数，并容忍缺少 
+esult 参数的宿主。它仍然只注册非保留路径、不声明额外宿主能力，因此安装方式与 1.0.2 完全一致：只导入同一个 Raw URL，不需要修改 New API 源码。
+
+| 项目 | 结果 |
+|---|---|
+| 生产激活插件 | utodl **1.0.3**，ctive=true，
+untime_status=registered，plugin_errors={} |
+| 插件源码哈希 | 97be25c3c7b51db73bbb832509d83f08f36efdc349432d38218ca3c7f340766c（与 GitHub main 一致） |
+| 13 个模型价格表达式 | 部署前后逐条比对一致，illing_usage_schema.seconds.unit = second |
+| 行数核对 | channels 106 / tasks 3371 / abilities 414 / models 181，部署前后一致 |
+| 实时测试 | POST /v1/videos 创建 200，查询 completed，任务 SUCCESS，实扣 **¥0.04** |
+| 实测时长 | plugin_state.measuredSeconds = 0.9666666666666667 |
+| 产物 | GET /v1/videos/{id}/content 返回 200、738,724 字节、文件头含 typ |
+| 临时凭据 | 测试用 New API Key 与管理 token 均已删除 |
+
+历史 12 个 MiniMax 任务与动作迁移任务保持原状（重新核对：全部 SUCCESS，实扣合计 ¥0.43），没有重复提交任何付费任务。结算额度仍等于调用方声明的秒数，原因见上一节；插件侧的探测与回退顺序已按设计实现并有离线覆盖。

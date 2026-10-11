@@ -1,0 +1,21 @@
+{
+  "plugin_version": "1.0.3",
+  "source_sha256": "97be25c3c7b51db73bbb832509d83f08f36efdc349432d38218ca3c7f340766c",
+  "source_bytes": 135928,
+  "previous_active_version": "1.0.2",
+  "previous_active_hash": "b90d3a0d5ef1f063597f449eccaab4c546b12f7c3e9eb36d120b4a3a72119c8e",
+  "paid_submissions": 0,
+  "official_host_image_unchanged": true,
+  "nginx_unchanged": true,
+  "passed": true,
+  "runtime_registered": true,
+  "plugin_errors": {},
+  "pricing_models_verified": 13,
+  "pricing_expressions_preserved": true,
+  "row_counts_unchanged": {
+    "channels": "106",
+    "tasks": "3371",
+    "abilities": "414",
+    "models": "181"
+  }
+}

@@ -1,15 +1,15 @@
 {
-  "plugin_version": "1.0.2",
+  "plugin_version": "1.0.3",
   "host_image": "sha256:da2f0f0676d1e803ea6d5e5b970d4c58526666a4a4dd46d9a239cc68c8cd7829",
   "uses_isolated_sqlite": true,
   "upstream": "mock",
   "paid_submissions": 0,
   "rate_cny_per_second": 0.04,
-  "source_sha256": "273b9c8ddf70a1efe2470d32ef421990aa51c76e7242ecc6c2cc19d289a486dc",
+  "source_sha256": "97be25c3c7b51db73bbb832509d83f08f36efdc349432d38218ca3c7f340766c",
   "cases": [
     {
       "name": "openai_alias_measured_3s_declared_5s",
-      "task_id": "task_yVrNClCQFkYZF48CSPX628jR35sMmGjd",
+      "task_id": "task_UYQ8UDpA3tHACn2mNDEoZerpOqsnD7M0",
       "status": "completed",
       "declared_seconds": 5,
       "measured_seconds": 3.0,
@@ -30,7 +30,7 @@
     },
     {
       "name": "native_workflow_measured_12s_declared_8s",
-      "task_id": "task_XaUgELLFRrvdEDCWOUIGMVfVQmXWiWb4",
+      "task_id": "task_oLU1TpsFgXRDafrew29WGTjV2kPAMWx7",
       "status": "SUCCESS",
       "declared_seconds": 8,
       "measured_seconds": 12.0,
@@ -51,7 +51,7 @@
     },
     {
       "name": "openai_alias_range_unsupported_falls_back_to_declared",
-      "task_id": "task_lSqMx37lIo4pHnITVUkMrjuNFGlODWKW",
+      "task_id": "task_41ALKSzBQlZBmStKmlPQlWBN7u9rNbNc",
       "status": "completed",
       "declared_seconds": 5,
       "measured_seconds": null,
@@ -67,15 +67,17 @@
       },
       "expects_measured_settlement": false,
       "settled_as_expected": true,
-      "measurement_absent_in_state": false
+      "polling_measurement_recorded": true,
+      "kept_declared_reservation": true
     }
   ],
   "measured_duration_used_for_settlement": false,
   "declared_fallback_untested": false,
-  "declared_fallback_kept_reservation": false,
+  "declared_fallback_kept_reservation": true,
   "summary": {
     "cases": 3,
     "measured_settlement_cases": 2,
     "settled_as_expected": 1
-  }
+  },
+  "note": "Isolated stock rc.43 instance with a mock provider and real MP4 bytes. Shows that the plugin records the output duration while polling and that the stock completion hook still settles the declared seconds."
 }
