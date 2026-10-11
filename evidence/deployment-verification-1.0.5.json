@@ -1,0 +1,24 @@
+{
+  "plugin_version": "1.0.5",
+  "source_sha256": "ddea9b64083b0a995fe4673915e5e405be78bbfa377abebe68afbc8c27b51ebf",
+  "source_bytes": 121484,
+  "previous_active_version": "1.0.4",
+  "previous_active_hash": "816bff7bbfd04973266e19dc6a7a64430da74c8c94a4cf7cec59e9886ac7f91a",
+  "paid_submissions": 0,
+  "official_host_image_unchanged": true,
+  "nginx_unchanged": true,
+  "passed": true,
+  "runtime_registered": true,
+  "plugin_errors": {},
+  "pricing_models_verified": 13,
+  "pricing_expressions_preserved": true,
+  "row_counts_unchanged": {
+    "channels": "106",
+    "tasks": "3375",
+    "abilities": "411",
+    "models": "181"
+  },
+  "row_counts_note": "abilities 414 -> 411 is the expected removal of the three MiniMax-H3/-Max alias rows; public.abilities now holds 0 rows for those models and all 26 workflow rows remain.",
+  "temporary_api_key_removed": true,
+  "temporary_management_token_removed": true
+}

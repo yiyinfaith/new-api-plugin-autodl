@@ -167,3 +167,46 @@ URL 缓存复用，以及结算时成片不可读而改用输入测量值的分�
 **离线验证：**`node tests.mjs` **1,097 项检查**、872 个宿主 fixture，覆盖 17 个工作流的 OpenAI 与 MiniMax 双格式映射、MiniMax V2 全生命周期（解码 → 提交 → 持久化 → 轮询 → 结算 → 失败退款）、动作迁移的测量与结算分支，以及被删除能力与已移除模型名的拒绝路径；`tests-client.py` 38 项通过。
 
 **生产变更：**插件更新为 1.0.5；同时从 `api.yiyinfaith.com` 的 vhost 中删除了插件专用的 4 条 rewrite 与内部 `/plugin-bridge/` location（改动前已备份，`nginx -t` 通过）。删除后 `/api/status`、`/api/pricing` 等通用接口不受影响，旧的插件路径按预期返回 404。
+
+## 1.0.5 生产部署与双格式实时验证（2026-10-11）
+
+**部署**
+
+| 项目 | 值 |
+|---|---|
+| 生产激活插件 | `autodl` **1.0.5**，`active=true`，`runtime_status=registered`，`plugin_errors={}` |
+| 插件源码哈希 | `ddea9b64083b0a995fe4673915e5e405be78bbfa377abebe68afbc8c27b51ebf`（与 GitHub `main` 一致） |
+| 13 个模型价格表达式 | 部署前后逐条比对一致 |
+| 行数核对 | channels 106 / tasks 3375 / models 181 不变；abilities 414 → **411** |
+
+`abilities` 少 3 行是**预期结果**：被删除的 `MiniMax-H3` / `MiniMax-H3-Max` 别名不再由插件声明，宿主随之清理了对应行。核对结果：`abilities` 中这两个模型名当前为 **0 行**，没有渠道再声明它们，17 个工作流 + 动作迁移别名的 **26 行**全部保留。没有手工删除任何生产数据。
+
+**Nginx 转发已删除**
+
+从 `api.yiyinfaith.com` 的 vhost 中删除了插件专用的 4 条 `rewrite` 与内部 `location ^~ /plugin-bridge/` 块（改动前已备份到 `/root/yiyin/new-api/backups/autodl-v102-deploy/nginx-origin-before-105-*.conf`，`nginx -t` 通过后热重载）。删除后：
+
+| 请求 | 结果 |
+|---|---|
+| `POST /api/v1/comfyui/comfyui_workflow/{id}` | 404 |
+| `POST /api/v1/comfyui/comfyui_workflow/result/{id}` | 404 |
+| `POST /api/v1/services/aigc/image2video/video-synthesis` | 404 |
+| `POST /api/v1/tasks/{id}` | 404 |
+| `POST /v1/videos`（宿主提供） | 401（鉴权正常） |
+| `POST /v2/video_generation`（插件注册） | 401（鉴权正常） |
+| `GET /api/status` | 200 |
+
+**实时付费验证：两种格式各一笔**
+
+| 项目 | OpenAI 格式 | MiniMax V2 格式 |
+|---|---|---|
+| model | `wan2.2-animate-move`（渠道映射到动作迁移） | `minimax_h3_lightx2v_no_pic`（直接填工作流 ID） |
+| 入口 | `POST /v1/videos` → 200 | `POST /v2/video_generation` → 200 |
+| 任务 | `task_MP9quPfGm6DMI9wL7OaSKnU5uj86tMR0` | `task_5wEKPAZyTWXhws0D7RUbk7AcHzukL13H` |
+| 声明 / 预扣 | 3 秒 / ¥0.12 | 1 秒 / ¥0.03 |
+| 终态 | `completed`，`SUCCESS` | `succeeded`，`SUCCESS` |
+| plugin state | `measuredSeconds = 0.9667`，`inputSeconds = 1` | `facts.seconds = 1`，`resolution = 480p` |
+| **实扣** | **¥0.04** | **¥0.03** |
+| 产物 | `/content` 200、738,724 字节、含 `ftyp` | 查询响应含公开 `content.url` |
+| 结果主机 | `cg-comfyui-prod.tos-cn-beijing.volces.com` | 同 |
+
+OpenAI 那笔再次证明按实测结算：声明 3 秒预扣 ¥0.12，实测成片 0.9667 秒，最终实扣 ¥0.04。两笔测试用的临时 New API Key 与管理 token 均已删除（数据库核对 0 行）。

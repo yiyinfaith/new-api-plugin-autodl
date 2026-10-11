@@ -1,0 +1,28 @@
+{
+  "plugin_version": "1.0.5",
+  "format": "minimax_v2",
+  "submitted_via": "https://api.yiyinfaith.com",
+  "model": "minimax_h3_lightx2v_no_pic",
+  "declared_seconds": 1,
+  "paid_submissions": 1,
+  "temporary_api_key_id": 37,
+  "create_http_status": 200,
+  "task_id": "task_5wEKPAZyTWXhws0D7RUbk7AcHzukL13H",
+  "plugin_facts": {
+    "orientation": "landscape",
+    "requests": 1,
+    "resolution": "480p",
+    "seconds": 1
+  },
+  "workflow_id": "minimax_h3_lightx2v_no_pic",
+  "reserved_cny": 0.03,
+  "query_http_status": 200,
+  "status": "succeeded",
+  "task_status": "SUCCESS",
+  "billed_cny": 0.03,
+  "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+  "content_url_present": true,
+  "passed": true,
+  "temporary_api_key_removed": true,
+  "temporary_management_token_removed": true
+}
