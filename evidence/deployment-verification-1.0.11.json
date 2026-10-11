@@ -1,0 +1,23 @@
+{
+  "plugin_version": "1.0.11",
+  "captured_from": "live production admin API",
+  "source_sha256": "0a2ef01471df494c28aaac52a6f62d4b603eb5a3628f5b5e9e4fd59ce938e551",
+  "source_bytes": 134780,
+  "active_version": "1.0.11",
+  "source_hash_matches_file": true,
+  "runtime_status": "registered",
+  "plugin_errors": {},
+  "enabled": true,
+  "active": true,
+  "models_advertised": 18,
+  "usage_profiles": 18,
+  "pricing_models_verified": 13,
+  "pricing_models_with_seconds": 13,
+  "nginx_unchanged": true,
+  "row_counts": {
+    "channels": 106,
+    "tasks": 3383,
+    "abilities": 411,
+    "models": 181
+  }
+}
