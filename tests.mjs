@@ -20,7 +20,7 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.1');
+  assert.equal(p.meta.version, '1.0.2');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
@@ -697,6 +697,72 @@ test('DashScope examples match the decoder and official routes', () => {
   assert.equal(formats.dashscope_api.query_path, '/api/v1/tasks/{task_id}');
 });
 const dataMedia = { image: 'data:image/png;base64,AA==', audio: 'data:audio/wav;base64,AA==', video: 'data:video/mp4;base64,AA==' };
+
+function concatBytes(...parts) {
+  const result = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+  let offset = 0;
+  for (const part of parts) { result.set(part, offset); offset += part.length; }
+  return result;
+}
+function mp4Box(type, payload) {
+  const result = new Uint8Array(8 + payload.length), view = new DataView(result.buffer);
+  view.setUint32(0, result.length);
+  for (let i = 0; i < 4; i++) result[4 + i] = type.charCodeAt(i);
+  result.set(payload, 8);
+  return result;
+}
+function mp4Fixture(seconds) {
+  const mdhd = new Uint8Array(20), mdhdView = new DataView(mdhd.buffer);
+  mdhdView.setUint32(12, 1000); mdhdView.setUint32(16, Math.round(seconds * 1000));
+  const hdlr = new Uint8Array(20);
+  for (let i = 0; i < 4; i++) hdlr[8 + i] = 'vide'.charCodeAt(i);
+  const media = mp4Box('mdia', concatBytes(mp4Box('hdlr', hdlr), mp4Box('mdhd', mdhd)));
+  return concatBytes(mp4Box('ftyp', new Uint8Array(8)), mp4Box('moov', mp4Box('trak', media)));
+}
+function ebmlElement(id, payload) {
+  const size = payload.length;
+  assert.ok(size < 127);
+  return concatBytes(Uint8Array.from(id), Uint8Array.of(0x80 | size), payload);
+}
+function webmFixture(seconds) {
+  const scale = ebmlElement([0x2a, 0xd7, 0xb1], Uint8Array.of(0x0f, 0x42, 0x40));
+  const duration = new Uint8Array(8), durationView = new DataView(duration.buffer);
+  durationView.setFloat64(0, seconds * 1000000000 / 1000000, false);
+  const info = ebmlElement([0x15, 0x49, 0xa9, 0x66], concatBytes(scale, ebmlElement([0x44, 0x89], duration)));
+  return ebmlElement([0x18, 0x53, 0x80, 0x67], info);
+}
+test('motion polling measures MP4 and WebM output without changing submission reservation', () => {
+  const previousFetch = utils.fetch;
+  try {
+    for (const [format, media] of [['mp4', mp4Fixture(3.25)], ['webm', webmFixture(3.25)]]) {
+      utils.fetch = request => {
+        assert.equal(request.responseType, 'bytes');
+        const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+        assert.ok(range);
+        const start = Number(range[1]), end = Math.min(Number(range[2]), media.length - 1);
+        const body = media.slice(start, end + 1);
+        return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}`, 'Content-Length': String(body.length) }, body: body.buffer };
+      };
+      const parsed = p.parseTaskResult({ ...motionContext, taskId: 'upstream-123', state: motionState }, envelope('SUCCESS', [{ url: `https://cg-comfyui-prod.tos-cn-beijing.volces.com/out.${format}`, type: 'video', file_type: format }]), { status: 200 });
+      assert.equal(parsed.status, 'SUCCESS');
+      assert.ok(Math.abs(parsed.state.measuredSeconds - 3.25) < 0.001, format);
+      assert.equal(p.extractUsageOnComplete({ state: parsed.state }, { status: 'SUCCESS' }).seconds, parsed.state.measuredSeconds);
+    }
+  } finally { utils.fetch = previousFetch; }
+});
+test('motion polling reads a bounded tail range when MP4 moov is not in the head', () => {
+  const previousFetch = utils.fetch, small = mp4Fixture(2.5), media = concatBytes(new Uint8Array(1024 * 1024 + 128), small);
+  try {
+    utils.fetch = request => {
+      const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      assert.ok(range); const start = Number(range[1]), end = Math.min(Number(range[2]), media.length - 1);
+      const body = media.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}`, 'Content-Length': String(body.length) }, body: body.buffer };
+    };
+    const parsed = p.parseTaskResult({ ...motionContext, taskId: 'upstream-123', state: motionState }, envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/out.mp4', type: 'video', file_type: 'mp4' }]), { status: 200 });
+    assert.ok(Math.abs(parsed.state.measuredSeconds - 2.5) < 0.001);
+  } finally { utils.fetch = previousFetch; }
+});
 for (const [model, config] of Object.entries(catalog)) {
   const expected = p.buildSubmitRequest(ctx(model));
   const body = { ...expected.body };

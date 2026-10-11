@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.1**。四套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.2**。四套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -169,7 +169,7 @@ OpenAI 用 prompt/seconds 等统一字段；MiniMax 用 content/duration 等；N
 | `model_price_error` | 请求 model 未配置价格或计费规则无效；管理员补齐该 model 的价格。官方 H3 别名也需单独配置。 |
 | `no_eligible_channel` | 渠道未启用、未包含请求 model，或 Key/用户组无可用渠道；检查 Task Plugin→AutoDL、模型列表及分组权限。 |
 | `invalid media URL` | 输入不是有效 HTTP(S) URL/标准 Data URL，MIME 不匹配或 Base64 格式错误；不用裸 Base64，按对应字段类型编码。 |
-| `intersects reserved namespace /api` | 安装了直接声明保留路径的旧插件；更新为 1.0.1，并按本文件配置 Nginx 转发，无需改宿主源码。 |
+| `intersects reserved namespace /api` | 安装了直接声明保留路径的旧插件；更新为 1.0.2，并按本文件配置 Nginx 转发，无需改宿主源码。 |
 | `502 / 5xx` | 根据响应错误与宿主日志定位上游/宿主异常；暂时错误退避重试，若已取得 task ID，先查询该任务，避免重复付费提交。 |
 
 以下保留完整字段、响应、工作流能力、计费和技术说明，可在本文件内继续查阅。
@@ -212,7 +212,7 @@ location ^~ /plugin-bridge/ {
 
 上例 `new_api_backend` 须替换为现有 location 的后端名称/地址，并复制现有可信代理头设置；已配置来源验证的实例继续保留验证。`internal` 阻止直接或编码形式访问内部入口。查询参数会保留，Native JSON body 不变；用户继续使用下表四套公开接口，不能直访内部前缀。OpenAI/MiniMax 不改写。Nginx 配置独立于 New API 容器，后续仍可更新官方镜像；更新后检查插件 registered、价格 schema 及入口可用性。
 
-rc.43 用 Root 安装，浏览器需可访问 Raw URL。同 key/版本、不同源码报 `plugin key and version already exist with different source`；1.0.0 升级 1.0.1 直接导入新版本并启用，保留旧任务记录；同版本不同源码的开发调试应按后台版本冲突提示处理。
+rc.43 用 Root 安装，浏览器需可访问 Raw URL。同 key/版本、不同源码报 `plugin key and version already exist with different source`；1.0.0 升级 1.0.2 直接导入新版本并启用，保留旧任务记录；同版本不同源码的开发调试应按后台版本冲突提示处理。
 
 客户端用 **New API 根地址与 Key**，不传 AutoDL Token。curl 共用以下变量；request.json 保存所选接口的 body，其他 POST 替换路径，GET 仅保留 Authorization：
 
@@ -226,9 +226,9 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 
 ### 请求时长与结算
 
-**计费秒数（v1.0.1，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`），Native 使用官网原字段；Native 缺省值只用于计费，不注入 body。官方 H3/H3-Max 别名省略 duration 也用 5 秒参与路由。TTS 仍按请求次数计费。
+**计费秒数（v1.0.2，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`），Native 使用官网原字段；Native 缺省值只用于计费，不注入 body。官方 H3/H3-Max 别名省略 duration 也用 5 秒参与路由。TTS 仍按请求次数计费。
 
-Wan 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`，Native/DashScope 用 URL 查询参数 `?billing_seconds=5`。声明支持数值/普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；查询参数只能出现一次。该值仅用于计费，**不裁剪视频、不写入 AutoDL body，也不测量输入或输出**。请由可信客户端如实提供参考视频时长；无法自动核实恶意少报，最终成片与声明不一致时也不会自动补差。这是避免自定义宿主的明确限制。
+Wan 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`，Native/DashScope 用 URL 查询参数 `?billing_seconds=5`。声明支持数值/普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；查询参数只能出现一次。该值用于预扣与探测失败时的结算回退，不裁剪视频、不写入 AutoDL body。成功轮询时插件对首个公网 MP4/WebM 成片做受限 Range 探测并按视频轨道时长结算；探测失败沿用声明值。请由可信客户端如实提供参考视频时长，声明仍决定预扣上限。
 
 提交时 New API 预扣；成功按保存的请求用量结算，最终失败按 0 次/0 秒结算并退回预扣。上游 `data.duration` 是处理耗时，绝不作为生成秒数。New API 退款不代表 AutoDL 同时退款。
 

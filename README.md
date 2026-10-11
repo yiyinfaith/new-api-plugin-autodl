@@ -2,7 +2,7 @@
 
 为 New API 提供 AutoDL.Art Task Plugin 适配，将 AutoDL ComfyUI 工作流接入 New API。
 
-插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.1**（插件元数据为 `1.0.1`）。
+插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.2**（插件元数据为 `1.0.2`）。
 
 **调用方从这里开始：[5 分钟快速开始与完整 API 参考](API.md#5-分钟快速开始)。** 一份文档平等介绍 OpenAI、MiniMax、AutoDL Native、DashScope Wan 四种接口；每种都有完整 curl、创建响应、任务查询和成功结果字段。覆盖文生视频、图片 URL/Data URL、图+音频、图+视频，并提供常用模型与错误速查；后半部分保留完整字段类型、必填/默认值、工作流范围、MiniMax 自动路由、原生透传、计费及技术限制，无需跳到其他说明文档。
 
@@ -46,7 +46,7 @@ flowchart TD
     Host --> Submit["共用提交钩子；使用渠道 AutoDL Token"]
     Submit --> Vendor["AutoDL ComfyUI 异步任务"]
     Vendor --> Poll["New API 后台轮询；状态与产物解析"]
-    Poll --> Settle["保存结果；H3 沿用请求 facts，Wan 使用声明秒数；失败归零"]
+    Poll --> Settle["保存结果；H3 沿用请求 facts，Wan 轮询探测视频轨道后结算；失败归零"]
     Settle --> Render["按调用接口呈现结果"]
     Render --> Query["客户端：公开任务 ID 查询与下载"]
 ```
@@ -55,9 +55,9 @@ OpenAI 解码器将 `seconds / size / input_reference` 等统一字段转换成�
 
 原生入口保存原始 JSON，保持发送给 AutoDL 的 body 在 JSON 语义上完全一致；它只旁路分析时长、分辨率、任务类型和 action。未知非计费字段、数字字符串、嵌套扩展字段不会被重写，缺省值仅用于内部计费。即使原生 body 含有宿主的附件标记同名字段，也按普通业务 JSON 发送。插件仅校验已知媒体字符串的 URL/Data URL 格式并原样透传；媒体实际内容和业务参数由 AutoDL 校验。
 
-四种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量，Wan 完成时沿用已保存的声明秒数；AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
+四种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量；Wan 提交时按调用方声明秒数预扣，成功轮询时对首个视频产物做一次受限 MP4/WebM Range 探测，探测成功则用视频轨道秒数结算，探测失败回退到声明值。AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
 
-插件不会自动导入价格、探测远程媒体尺寸或替用户上传本地媒体。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#比例与-adaptive)。上线前请为全部要调用的工作流及官方模型别名配置价格；仅安装插件不足以完成渠道和计费配置。
+插件不会在提交阶段下载参考媒体、自动导入价格或替用户上传本地媒体。动作迁移成功轮询最多读取首尾各 1 MiB，并受 rc.43 的 4 次 fetch、单次 15 秒、单 hook 30 秒限制；探测失败不阻塞任务，只沿用已声明秒数。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#比例与-adaptive)。上线前请为全部要调用的工作流及官方模型别名配置价格；仅安装插件不足以完成渠道和计费配置。
 
 ## URL 安装
 
@@ -89,7 +89,7 @@ URL 导入在浏览器中下载源码，因此使用管理后台的浏览器需�
 
 仓库只维护根目录的一个 `plugin.js` 和一个当前版本，更新后仍使用同一个 `main` Raw URL。`workflows.json`、`official-workflows.json`、`examples.json` 和 `prices.json` 用于查阅、示例及开发验证，插件运行时不会读取它们；测试脚本、校验文件、许可证和 `.github/` 也不是安装依赖。
 
-从 1.0.0 更新：配置 Nginx 转发后，从上方唯一 Raw URL 导入并启用 AutoDL 1.0.1。保留任务记录、渠道、价格表达式和分组倍率；Wan 调用需要按下文新增计费时长声明。只维护一个当前版本和安装地址。
+从 1.0.1 更新：配置 Nginx 转发后，从上方唯一 Raw URL 导入并启用 AutoDL 1.0.2。保留任务记录、渠道、价格表达式和分组倍率；Wan 调用需要按下文新增计费时长声明。只维护一个当前版本和安装地址。
 
 **宿主升级：**继续使用官方 `calciumion/new-api:latest`，不维护源码修改；Nginx 配置独立于 New API 镜像。升级后检查插件 registered、模型价格 schema 及四类入口；未来若官方 Plugin API 发生不兼容变更，仍需正常回归验证。
 
@@ -500,9 +500,9 @@ curl -sS "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/result/$TASK_ID" -H 
 
 当前指定实例使用 CNY 展示、`USDExchangeRate=1`，表达式直接填写上述数值，未做外汇换算或加价。其他实例如使用不同展示汇率，应由管理员按站点币种设置换算，不能盲目复制；既有分组倍率仍由 New API 应用。官网价格后续变化不会自动同步，本文件是已核实日期的快照。
 
-**计费秒数（v1.0.1，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`），Native 使用官网原字段；Native 缺省值只用于计费，不注入 body。官方 H3/H3-Max 别名省略 duration 也用 5 秒参与路由。TTS 仍按请求次数计费。
+**计费秒数（v1.0.2，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`），Native 使用官网原字段；Native 缺省值只用于计费，不注入 body。官方 H3/H3-Max 别名省略 duration 也用 5 秒参与路由。TTS 仍按请求次数计费。
 
-Wan 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`，Native/DashScope 用 URL 查询参数 `?billing_seconds=5`。声明支持数值/普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；查询参数只能出现一次。该值仅用于计费，**不裁剪视频、不写入 AutoDL body，也不测量输入或输出**。请由可信客户端如实提供参考视频时长；无法自动核实恶意少报，最终成片与声明不一致时也不会自动补差。这是避免自定义宿主的明确限制。
+Wan 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`，Native/DashScope 用 URL 查询参数 `?billing_seconds=5`。声明支持数值/普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；查询参数只能出现一次。该值用于预扣与探测失败时的结算回退，不裁剪视频、不写入 AutoDL body。成功轮询时插件只对首个公网 MP4/WebM 成片做受限 Range 探测，按视频轨道时长结算；远程服务器不支持 Range、URL 不在管理员允许主机或媒体格式无法解析时沿用声明值。请由可信客户端如实提供参考视频时长，声明仍决定预扣上限。
 
 提交时 New API 预扣；成功按保存的请求用量结算，最终失败按 0 次/0 秒结算并退回预扣。上游 `data.duration` 是处理耗时，绝不作为生成秒数。New API 退款不代表 AutoDL 同时退款。
 

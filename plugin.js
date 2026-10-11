@@ -2498,13 +2498,16 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.1",
+  version: "1.0.2",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
   website: "https://autodl.art/large-model/comfyui",
   baseUrl: "https://autodl.art",
   auth: "api_key",
+  // Result URLs are signed Volcengine objects. Polling uses credentialless
+  // byte-range reads against this exact media host for motion duration checks.
+  allowedHosts: ["cg-comfyui-prod.tos-cn-beijing.volces.com"],
   models: Object.keys(WORKFLOWS).concat(MINIMAX_MODELS, [DASHSCOPE_MODEL]),
   fetchMode: "per_task",
   // Keep the pre-existing channel-mapped OpenAI motion alias selectable after
@@ -3048,6 +3051,164 @@ function resultMediaType(url, fileType, fallbackType) {
   return match && has(types, match[1]) ? types[match[1]] : fallbackType;
 }
 
+const MEDIA_PROBE_BYTES = 1024 * 1024;
+const MEDIA_PROBE_END = MEDIA_PROBE_BYTES - 1;
+
+function bytesView(value) {
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (value && value.buffer instanceof ArrayBuffer) return new Uint8Array(value.buffer, value.byteOffset || 0, value.byteLength);
+  return null;
+}
+
+function ascii4(bytes, offset) {
+  return String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+}
+
+function u32(bytes, offset) {
+  return bytes[offset] * 0x1000000 + bytes[offset + 1] * 0x10000 + bytes[offset + 2] * 0x100 + bytes[offset + 3];
+}
+
+function u64(bytes, offset) {
+  const high = u32(bytes, offset), low = u32(bytes, offset + 4);
+  const value = high * 0x100000000 + low;
+  return Number.isSafeInteger(value) ? value : NaN;
+}
+
+function mp4Boxes(bytes, start, end, visit) {
+  let offset = start;
+  while (offset + 8 <= end) {
+    let size = u32(bytes, offset), header = 8;
+    const type = ascii4(bytes, offset + 4);
+    if (size === 1) { if (offset + 16 > end) return; size = u64(bytes, offset + 8); header = 16; }
+    else if (size === 0) size = end - offset;
+    if (!Number.isSafeInteger(size) || size < header || offset + size > end) return;
+    visit(type, offset + header, offset + size, offset, size);
+    offset += size;
+  }
+}
+
+function mp4Duration(bytes) {
+  let videoDuration = null;
+  let movieDuration = null;
+  function inspectMovie(start, end) {
+    mp4Boxes(bytes, start, end, function (type, data, boxEnd) {
+      if (type === "mvhd" && data + 20 <= boxEnd) {
+        const version = bytes[data];
+        const timescaleOffset = version === 1 ? data + 20 : data + 12;
+        const durationOffset = version === 1 ? data + 24 : data + 16;
+        const timescale = u32(bytes, timescaleOffset);
+        const duration = version === 1 ? u64(bytes, durationOffset) : u32(bytes, durationOffset);
+        if (timescale > 0 && Number.isFinite(duration)) movieDuration = duration / timescale;
+      }
+      if (type !== "trak") return;
+      let handler = "", timescale = 0, duration = NaN;
+      mp4Boxes(bytes, data, boxEnd, function (trakType, trakData, trakEnd) {
+        if (trakType !== "mdia") return;
+        mp4Boxes(bytes, trakData, trakEnd, function (mediaType, mediaData, mediaEnd) {
+          if (mediaType === "hdlr" && mediaData + 12 <= mediaEnd) handler = ascii4(bytes, mediaData + 8);
+          if (mediaType === "mdhd" && mediaData + 20 <= mediaEnd) {
+            const version = bytes[mediaData];
+            const scaleOffset = version === 1 ? mediaData + 20 : mediaData + 12;
+            const durationOffset = version === 1 ? mediaData + 24 : mediaData + 16;
+            timescale = u32(bytes, scaleOffset);
+            duration = version === 1 ? u64(bytes, durationOffset) : u32(bytes, durationOffset);
+          }
+        });
+      });
+      if (handler === "vide" && timescale > 0 && Number.isFinite(duration)) videoDuration = duration / timescale;
+    });
+  }
+  mp4Boxes(bytes, 0, bytes.length, function (type, data, end) { if (type === "moov") inspectMovie(data, end); });
+  // A tail range can begin in the middle of an earlier box. Find a complete
+  // moov header inside that range as a second bounded pass.
+  if (videoDuration === null && movieDuration === null) for (let offset = 1; offset + 8 <= bytes.length; offset++) {
+    if (ascii4(bytes, offset + 4) !== "moov") continue;
+    const size = u32(bytes, offset);
+    if (size >= 8 && offset + size <= bytes.length) inspectMovie(offset + 8, offset + size);
+  }
+  return videoDuration === null ? movieDuration : videoDuration;
+}
+
+function ebmlVint(bytes, offset, mask) {
+  if (offset >= bytes.length) return null;
+  let first = bytes[offset], length = 1;
+  while (length <= 8 && (first & (0x80 >> (length - 1))) === 0) length++;
+  if (length > 8 || offset + length > bytes.length) return null;
+  let value = mask ? first & (0xff >> length) : first;
+  for (let i = 1; i < length; i++) value = value * 0x100 + bytes[offset + i];
+  return { length: length, value: value };
+}
+
+function webmDuration(bytes) {
+  let timecodeScale = 1000000, duration = null;
+  function walk(start, end, parent) {
+    let offset = start;
+    while (offset < end) {
+      const id = ebmlVint(bytes, offset, false); if (!id) return;
+      const size = ebmlVint(bytes, offset + id.length, true); if (!size) return;
+      const data = offset + id.length + size.length;
+      const childEnd = size.value === (2 ** (7 * size.length) - 1) ? end : data + size.value;
+      if (childEnd > end) return;
+      if (id.value === 0x2ad7b1) {
+        let value = 0; for (let i = data; i < childEnd; i++) value = value * 0x100 + bytes[i];
+        if (value > 0) timecodeScale = value;
+      } else if (id.value === 0x4489 && childEnd > data) {
+        const view = new DataView(bytes.buffer, bytes.byteOffset + data, childEnd - data);
+        if (view.byteLength === 4) duration = view.getFloat32(0, false);
+        else if (view.byteLength === 8) duration = view.getFloat64(0, false);
+      }
+      const container = id.value === 0x18538067 || id.value === 0x1549a966 || id.value === 0x1654ae6b || id.value === 0xae;
+      if (container) walk(data, childEnd, id.value);
+      offset = childEnd;
+    }
+  }
+  walk(0, bytes.length, 0);
+  return duration === null || !Number.isFinite(duration) ? null : duration * timecodeScale / 1000000000;
+}
+
+
+function parseVideoDuration(bytes) {
+  if (!bytes || bytes.length === 0) return null;
+  const mp4 = mp4Duration(bytes);
+  if (Number.isFinite(mp4) && mp4 > 0) return mp4;
+  const webm = webmDuration(bytes);
+  return Number.isFinite(webm) && webm > 0 ? webm : null;
+}
+
+function mediaRange(url, start, end) {
+  const response = utils.fetch({ url: url, method: "GET", headers: { Range: "bytes=" + start + "-" + end }, responseType: "bytes" });
+  if (!response || (response.status !== 200 && response.status !== 206)) throw new Error("media range request failed");
+  const bytes = bytesView(response.body);
+  if (!bytes || bytes.length > MEDIA_PROBE_BYTES) throw new Error("media range is too large");
+  const contentRange = response.headers && response.headers["Content-Range"];
+  const rangeMatch = typeof contentRange === "string" && contentRange.match(/\/(\d+)$/);
+  const contentLength = response.headers && Number(response.headers["Content-Length"]);
+  return { bytes: bytes, total: rangeMatch ? Number(rangeMatch[1]) : (Number.isSafeInteger(contentLength) ? contentLength : undefined) };
+}
+
+function measuredOutputDuration(url) {
+  if (typeof utils === "undefined" || typeof utils.fetch !== "function") return null;
+  try {
+    const head = mediaRange(url, 0, MEDIA_PROBE_END);
+    let seconds = parseVideoDuration(head.bytes);
+    if (seconds !== null) return seconds;
+    let total = head.total;
+    if (!Number.isSafeInteger(total)) {
+      const response = utils.fetch({ url: url, method: "HEAD", responseType: "bytes" });
+      const value = response && response.headers && Number(response.headers["Content-Length"]);
+      total = Number.isSafeInteger(value) ? value : undefined;
+    }
+    if (Number.isSafeInteger(total) && total > MEDIA_PROBE_BYTES) {
+      const start = total - MEDIA_PROBE_BYTES;
+      const tail = mediaRange(url, start, total - 1);
+      seconds = parseVideoDuration(tail.bytes);
+    }
+    return seconds === null || !Number.isFinite(seconds) || seconds <= 0 || seconds > 3600 ? null : seconds;
+  } catch (_) {
+    return null;
+  }
+}
+
 function results(body, fallbackType) {
   const payload = envelope(body).data;
   if (!Array.isArray(payload.results) || payload.results.length === 0) throw new Error("AutoDL: SUCCESS response has empty or invalid results");
@@ -3138,7 +3299,15 @@ export function parseTaskResult(ctx, body, response) {
       const config = workflow(ctx.upstreamModel || ctx.model);
       const outputs = results(body, config.type).filter(function (item) { return item.type === config.type; });
       if (!outputs.length) throw new Error("AutoDL: SUCCESS response contains no expected media output");
-      return { status: "SUCCESS", progress: "100%", url: outputs[0].url };
+      const parsed = { status: "SUCCESS", progress: "100%", url: outputs[0].url };
+      // Stock rc.43 exposes byte-range fetches only from polling hooks. Keep
+      // the declared reservation for submission, then opportunistically save
+      // a bounded video-track measurement for motion-transfer settlement.
+      if (config.workflowId === MOTION_WORKFLOW) {
+        const seconds = measuredOutputDuration(outputs[0].url);
+        if (seconds !== null) parsed.state = Object.assign({}, ctx.state || {}, { measuredSeconds: seconds });
+      }
+      return parsed;
     } catch (error) { return { status: "FAILURE", reason: error.message }; }
   }
   const state = ctx.state;
@@ -3159,6 +3328,9 @@ export function extractUsageOnComplete(task, result) {
   if (!state || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
   // data.duration is processing wall time, NOT generated video seconds.
   const facts = Object.assign({}, state.facts);
+  if (result.status === "SUCCESS" && state.workflowId === MOTION_WORKFLOW && Number.isFinite(state.measuredSeconds) && state.measuredSeconds > 0 && state.measuredSeconds <= 3600) {
+    facts.seconds = state.measuredSeconds;
+  }
   if (result.status === "FAILURE" || result.status === "CANCELLED") {
     facts.requests = 0;
     if (facts.seconds !== undefined) facts.seconds = 0;
