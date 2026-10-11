@@ -1,0 +1,32 @@
+{
+  "plugin_version": "1.0.11",
+  "submitted_via": "https://api.yiyinfaith.com",
+  "model": "wan2.2-animate-move",
+  "declared_seconds": 1,
+  "paid_submissions": 1,
+  "temporary_api_key_id": 40,
+  "create_http_status": 200,
+  "create_response": {
+    "id": "task_YMtrowicxtxskEQHF5FuPPxWT5RnGV38",
+    "object": "video",
+    "model": "wan2.2-animate-move",
+    "status": "queued",
+    "progress": 0,
+    "created_at": 1791730913
+  },
+  "task_id": "task_YMtrowicxtxskEQHF5FuPPxWT5RnGV38",
+  "final_status": "completed",
+  "final": {
+    "progress": 100,
+    "results": [
+      {
+        "type": "video",
+        "url": "https://cg-comfyui-prod.tos-cn-beijing.volces.com/comfyui/outputs/2026/10/11/17230606-4e0a-42ea-b3a6-05ff8f45bdea/efb0d808-a45c-4e2d-b4fc-2e08ec1b272b.mp4?<redacted-signed-query>"
+      }
+    ],
+    "status": "completed",
+    "url": "https://cg-comfyui-prod.tos-cn-beijing.volces.com/comfyui/outputs/2026/10/11/17230606-4e0a-42ea-b3a6-05ff8f45bdea/efb0d808-a45c-4e2d-b4fc-2e08ec1b272b.mp4?<redacted-signed-query>"
+  },
+  "quota_used": "20000",
+  "billed_yuan": 0.0
+}

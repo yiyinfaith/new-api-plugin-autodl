@@ -20,7 +20,7 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.8');
+  assert.equal(p.meta.version, '1.0.11');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
@@ -464,8 +464,8 @@ const motionContext = ctx(motionModel);
 const motionState = p.parseSubmitResponse(motionContext, { statusCode: 200, body: envelope('QUEUED') }).state;
 fixture('motion declared fallback when settlement cannot re-read the output', 'extractUsageOnComplete', [{ upstreamModel: motionModel, state: motionState }, { status: 'SUCCESS' }, envelope('SUCCESS', [], { duration: 196 })], motionState.facts);
 for (const status of ['FAILURE', 'CANCELLED']) fixture('motion unsuccessful task refunds ' + status, 'extractUsageOnComplete', [{ state: motionState }, { status }], { ...motionState.facts, requests: 0, seconds: 0 });
-for (const seconds of [undefined, 0, -1, 3601, null, '', false, '1e1', 'NaN', [], {}]) reject('motion rejects invalid declaration ' + String(seconds), 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], 'seconds must be a number');
-for (const seconds of [0.25, 1, 3.25, 3600, '3.25']) fixture('motion accepts declared seconds ' + seconds, 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], { ...motionState.facts, seconds: Number(seconds) });
+for (const seconds of [undefined, 0, -1, 3601, null, '', false, '1e1', 'NaN', [], {}, 0.25, 0.0001, '0.999']) reject('motion rejects invalid declaration ' + String(seconds), 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], 'seconds must be a number');
+for (const seconds of [1, 3.25, 3600, '3.25']) fixture('motion accepts declared seconds ' + seconds, 'extractUsage', [ctx(motionModel, { ...examples[motionModel], seconds })], { ...motionState.facts, seconds: Number(seconds) });
 test('motion declares seconds schema without any custom host capability', () => assert.equal(p.meta.usageProfiles.find(profile => profile.models.includes(motionModel)).schema.seconds.unit, 'second'));
 const dataMedia = { image: 'data:image/png;base64,AA==', audio: 'data:audio/wav;base64,AA==', video: 'data:video/mp4;base64,AA==' };
 
@@ -678,22 +678,200 @@ test('motion settlement uses the upstream official usage block only as a last re
     // Official MiniMax shape: {"usage":{"total_seconds":...}} beside duration.
     const official = { usage: { total_seconds: 5, input_seconds: 0, output_seconds: 5 }, duration: 5 };
     assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, official).seconds, 5);
-    // output_seconds is honoured when total_seconds is missing.
-    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 7 } }).seconds, 7);
-    // A bare official duration field also works.
-    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { duration: 4 }).seconds, 4);
+    // output_seconds is honoured when total_seconds is missing, still capped by
+    // the declared ceiling (this state declares 5, so 7 settles as 5).
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 7 } }).seconds, motionState.facts.seconds);
+    assert.equal(p.extractUsageOnComplete({ state: { workflowId: motionModel, facts: { requests: 1, seconds: 9 } } }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 7 } }).seconds, 7);
+    // A duration mirror is honoured only when the authoritative usage block is
+    // present; on its own it is AutoDL's render wall time, not video length.
+    assert.equal(p.extractUsageOnComplete({ state: { workflowId: motionModel, facts: { requests: 1, seconds: 9 } } }, { status: 'SUCCESS', url: blocked }, { usage: { total_seconds: 4 }, duration: 4 }).seconds, 4);
     // Out-of-range or malformed upstream values are ignored, not billed.
     for (const bad of [0, -1, 3601, '5', null, {}, [], true]) {
       assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { total_seconds: bad } }).seconds, motionState.facts.seconds, 'rejected ' + JSON.stringify(bad));
     }
     // A locally measured value always beats the upstream declaration.
     assert.equal(p.extractUsageOnComplete({ state: settlementState(4) }, { status: 'SUCCESS' }, official).seconds, 4);
-    // AutoDL's processing wall time must never be billed as video seconds.
-    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { duration: 196 }).seconds, 196);
+    // AutoDL's processing wall time must never be billed as video seconds, with
+    // or without a usage block beside it.
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { duration: 196 }).seconds, motionState.facts.seconds);
     assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, envelope('SUCCESS', [], { duration: 196 })).seconds, motionState.facts.seconds, 'the AutoDL envelope wrapper is not an upstream usage block');
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { input_seconds: 9 }, duration: 196 }).seconds, motionState.facts.seconds, 'a usage block without output seconds does not make duration trustworthy');
+    // The declared value is the quoted pre-charge ceiling: a measurement may
+    // refund downwards but must never settle above it.
+    assert.equal(p.extractUsageOnComplete({ state: { workflowId: motionModel, facts: { requests: 1, seconds: 1 } } }, { status: 'SUCCESS', url: blocked }, { usage: { total_seconds: 300 } }).seconds, 1);
+    assert.equal(p.extractUsageOnComplete({ state: { workflowId: motionModel, facts: { requests: 1, seconds: 5 } } }, { status: 'SUCCESS', url: blocked }, { usage: { total_seconds: 2 } }).seconds, 2);
     // Failed tasks still refund and never read the block.
     assert.deepEqual(p.extractUsageOnComplete({ state: settlementState(4) }, { status: 'FAILURE' }, official), { ...motionState.facts, requests: 0, seconds: 0 });
   } finally { utils.fetch = previousFetch; }
+});
+// A 206 without Content-Range reports the partial body's size in
+// Content-Length, which equals the probe length and used to make the "is there
+// more to read?" test false, silently skipping the tail read for files whose
+// moov sits at the end.
+test('a partial response without Content-Range still probes the tail', () => {
+  const previousFetch = utils.fetch;
+  const calls = [];
+  try {
+    // moov sits past the probe window, so only a tail read can find it. The
+    // responses deliberately omit Content-Range: a legal server may do that, and
+    // Content-Length then describes only the partial body, which equals the probe
+    // window for the head request and used to look like "nothing more to read".
+    const media = mp4Fixture(3.25);
+    const file = concatBytes(mp4Box('free', new Uint8Array(2 * 1024 * 1024)), media);
+    const total = file.length;
+    utils.fetch = (request) => {
+      calls.push(request.method);
+      if (request.method === 'HEAD') return { status: 200, headers: { 'Content-Length': String(total) } };
+      const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      const start = Number(range[1]), end = Math.min(Number(range[2]), total - 1);
+      const body = file.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Length': String(body.length) }, body: body.buffer };
+    };
+    const facts = p.extractUsageOnComplete({ state: settlementState(undefined) }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/tail.mp4' });
+    assert.deepEqual(calls, ['GET', 'HEAD', 'GET'], 'probe, then size, then tail: ' + JSON.stringify(calls));
+    assert.equal(facts.seconds, 3.25, 'the tail read recovered the real duration');
+  } finally { utils.fetch = previousFetch; }
+});
+test('settlement reuses the full probe so a late moov still measures', () => {
+  const previousFetch = utils.fetch;
+  const calls = [];
+  try {
+    // moov past the first megabyte: the head Range read alone cannot see it, so
+    // settlement must issue the HEAD size probe and a tail read. Calling
+    // mediaRange directly would settle at the declared value instead.
+    const media = mp4Fixture(3.25);
+    const file = concatBytes(mp4Box('free', new Uint8Array(2 * 1024 * 1024)), media);
+    const total = file.length;
+    utils.fetch = (request) => {
+      calls.push(request.method);
+      if (request.method === 'HEAD') return { status: 200, headers: { 'Content-Length': String(total) } };
+      const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      const start = Number(range[1]), end = Math.min(Number(range[2]), total - 1);
+      const body = file.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Length': String(body.length) }, body: body.buffer };
+    };
+    const facts = p.extractUsageOnComplete({ state: settlementState(undefined) }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/tail.mp4' });
+    assert.deepEqual(calls, ['GET', 'HEAD', 'GET'], 'settlement performed the full probe: ' + JSON.stringify(calls));
+    assert.equal(facts.seconds, 3.25, 'settlement measured the delivered file');
+  } finally { utils.fetch = previousFetch; }
+});
+test('a cancelled upstream task terminates instead of polling to the deadline', () => {
+  const state = { workflowId: motionModel, facts: { requests: 1, seconds: 3 }, submittedAt: 1, timeoutSeconds: 1800 };
+  for (const token of ['CANCELLED', 'CANCELED', 'Canceled', 'cancelled', 'Cancelled', 'failed', 'Failed']) {
+    const result = p.parseTaskResult({ model: motionModel, upstreamModel: motionModel, taskId: 'up', state }, { code: 'Success', data: { task_id: 'up', status: token } }, { status: 200 });
+    assert.equal(result.status, 'FAILURE', token + ' is terminal');
+  }
+});
+test('every failure spelling the host can persist still refunds', () => {
+  // native.miniTask renders this plugin's own FAILURE/CANCELLED as lowercase
+  // "failed"/"cancelled", so matching only the internal enum left a failed task
+  // on the MiniMax surface charged in full.
+  for (const status of ['FAILURE', 'FAILED', 'CANCELLED', 'CANCELED', 'failed', 'cancelled', 'canceled', 'ERROR', 'TIMEOUT']) {
+    const facts = p.extractUsageOnComplete({ state: settlementState(undefined) }, { status }, {});
+    assert.deepEqual({ requests: facts.requests, seconds: facts.seconds }, { requests: 0, seconds: 0 }, 'refunded: ' + status);
+  }
+  // The statuses miniTask itself emits must round-trip into the refund.
+  for (const internal of ['FAILURE', 'CANCELLED']) {
+    const rendered = p.native.miniTask({}, { task_id: 'x', status: internal, data: {} }).task.status;
+    const facts = p.extractUsageOnComplete({ state: settlementState(undefined) }, { status: rendered }, {});
+    assert.deepEqual({ requests: facts.requests, seconds: facts.seconds }, { requests: 0, seconds: 0 }, internal + ' -> ' + rendered);
+  }
+  // A success must never be refunded.
+  assert.equal(p.extractUsageOnComplete({ state: settlementState(undefined) }, { status: 'SUCCESS' }, {}).requests, 1);
+});
+test('safeReason keeps a short key from shredding the diagnostic', () => {
+  const message = 'upstream error: node 27 execution failed at render step';
+  for (const key of ['k', 'error', 'failed', 'short']) {
+    const result = p.parseTaskResult({ ...motionContext, taskId: 't', apiKey: key, authHeader: key, state: motionState }, envelope('FAILED', [], { message, task_id: 't' }), { status: 200 });
+    assert.equal(result.reason, message, 'key ' + key + ' left the text intact');
+  }
+});
+test('the billed track is the one carrying the delivered picture', () => {
+  const previousFetch = utils.fetch;
+  const track = (seconds, handler, sampled) => {
+    const mdhd = new Uint8Array(20), view = new DataView(mdhd.buffer);
+    view.setUint32(12, 1000); view.setUint32(16, Math.round(seconds * 1000));
+    const hdlr = new Uint8Array(20);
+    for (let i = 0; i < 4; i++) hdlr[8 + i] = handler.charCodeAt(i);
+    const parts = [mp4Box('hdlr', hdlr), mp4Box('mdhd', mdhd)];
+    if (sampled) parts.push(mp4Box('minf', mp4Box('stbl', new Uint8Array(8))));
+    return mp4Box('trak', mp4Box('mdia', concatBytes(...parts)));
+  };
+  // A long auxiliary 'vide' track (sprite/poster) must not outrank the real
+  // picture track; ranking purely by length would over-bill past the ceiling.
+  const cases = [
+    ['sampled 6s then unsampled 120s', track(6, 'vide', true), track(120, 'vide', false), 6],
+    ['unsampled 120s then sampled 6s', track(120, 'vide', false), track(6, 'vide', true), 6],
+    ['sampled 6s then sampled 1s', track(6, 'vide', true), track(1, 'vide', true), 6],
+    ['sampled 1s then sampled 6s', track(1, 'vide', true), track(6, 'vide', true), 6],
+    ['sampled video 6s then audio 300s', track(6, 'vide', true), track(300, 'soun', true), 6],
+  ];
+  try {
+    for (const [label, first, second, want] of cases) {
+      const file = concatBytes(mp4Box('ftyp', new Uint8Array(8)), mp4Box('moov', concatBytes(first, second)));
+      const url = 'data:video/mp4;base64,' + Buffer.from(file).toString('base64');
+      const measured = p.parseSubmitResponse(
+        { ...motionContext, requestBody: { ...examples[motionModel], videos: [url] } },
+        { statusCode: 200, body: envelope('QUEUED') });
+      assert.equal(measured.state.inputSeconds, want, label);
+    }
+  } finally { utils.fetch = previousFetch; }
+});
+test('an inline reference larger than the probe window is still measured', () => {
+  // The network path reads the head then the tail; the inline path must match,
+  // or a big local reference silently falls back to an unverified declaration.
+  const track = (seconds) => {
+    const mdhd = new Uint8Array(20), view = new DataView(mdhd.buffer);
+    view.setUint32(12, 1000); view.setUint32(16, Math.round(seconds * 1000));
+    const hdlr = new Uint8Array(20);
+    for (let i = 0; i < 4; i++) hdlr[8 + i] = 'vide'.charCodeAt(i);
+    return mp4Box('trak', mp4Box('mdia', concatBytes(mp4Box('hdlr', hdlr), mp4Box('mdhd', mdhd), mp4Box('minf', mp4Box('stbl', new Uint8Array(8))))));
+  };
+  const media = concatBytes(mp4Box('ftyp', new Uint8Array(8)), mp4Box('moov', track(45)));
+  const file = concatBytes(mp4Box('free', new Uint8Array(2 * 1024 * 1024)), media);
+  const url = 'data:video/mp4;base64,' + Buffer.from(file).toString('base64');
+  const measured = p.parseSubmitResponse(
+    { ...motionContext, requestBody: { ...examples[motionModel], videos: [url] } },
+    { statusCode: 200, body: envelope('QUEUED') });
+  assert.equal(measured.state.inputSeconds, 45, 'the inline tail read recovered the real duration');
+});
+// The host hands the renderer a TaskView without `action`, so it cannot know the
+// modality. Filtering to video and then dereferencing [0] threw on every
+// audio-only task and wiped the results list.
+test('rendering an audio-only task returns its media instead of throwing', () => {
+  const view = (payload, action) => ({ task_id: 'x', platform: 'autodl', status: 'SUCCESS', progress: 100, fail_reason: '',
+    created_at: 1, updated_at: 2, data: payload, ...(action ? { action } : {}) });
+  const payloadFor = results => ({ code: 'Success', data: { task_id: 'upstream-123', status: 'SUCCESS', results } });
+  const video = payloadFor([{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4', type: 'video', file_type: 'mp4' }]);
+  const audio = payloadFor([{ url: 'https://cdn.example.com/a.mp3', type: 'audio', file_type: 'mp3' }]);
+
+  const renderedVideo = p.protocols.openai_video.render({}, view(video));
+  assert.equal(renderedVideo.url, 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4');
+  assert.deepEqual(renderedVideo.results, [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4', type: 'video' }]);
+
+  for (const action of [undefined, 'text_to_audio']) {
+    const rendered = p.protocols.openai_video.render({}, view(audio, action));
+    assert.equal(rendered.url, 'https://cdn.example.com/a.mp3', 'audio rendered with action=' + action);
+    assert.deepEqual(rendered.results, [{ url: 'https://cdn.example.com/a.mp3', type: 'audio' }]);
+  }
+});
+test('an upstream status never renders as a live task once it is terminal', () => {
+  const payload = { code: 'Success', data: { task_id: 'x', status: 'SUCCESS', results: [{ url: 'https://cdn.example.com/a.mp4', type: 'video', file_type: 'mp4' }] } };
+  const statuses = { CANCELLED: 'cancelled', CANCELED: 'cancelled', FAILURE: 'failed', FAILED: 'failed', SUCCESS: 'succeeded', IN_PROGRESS: 'running' };
+  for (const [token, want] of Object.entries(statuses)) {
+    const rendered = p.native.miniTask({}, { task_id: 'x', status: token, data: payload }).task.status;
+    assert.equal(rendered, want, token + ' rendered as ' + rendered);
+  }
+});
+test('safeReason redacts a credential split by intervening characters', () => {
+  const secret = 'super-secret-autodl-token';
+  const driving = { ...motionContext, taskId: 'upstream-1', state: motionState, apiKey: secret, authHeader: 'Bearer ' + secret };
+  const mangled = ['key="' + secret.slice(0, 10) + '" and ' + secret.slice(10), 'a' + secret.slice(0, 8) + '\n' + secret.slice(8)];
+  for (const message of mangled) {
+    const result = p.parseTaskResult(driving, envelope('FAILED', [], { message, task_id: 'upstream-1' }), { status: 200 });
+    assert.ok(!result.reason.includes(secret.slice(0, 12)), 'leaked head: ' + result.reason);
+    assert.ok(!result.reason.includes(secret.slice(-10)), 'leaked tail: ' + result.reason);
+  }
 });
 for (const [model, config] of Object.entries(catalog)) {
   const expected = p.buildSubmitRequest(ctx(model));

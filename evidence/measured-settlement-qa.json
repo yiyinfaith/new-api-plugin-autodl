@@ -1,11 +1,11 @@
 {
-  "plugin_version": "1.0.3",
+  "plugin_version": "1.0.11",
   "host_image": "sha256:da2f0f0676d1e803ea6d5e5b970d4c58526666a4a4dd46d9a239cc68c8cd7829",
   "uses_isolated_sqlite": true,
   "upstream": "mock",
   "paid_submissions": 0,
   "rate_cny_per_second": 0.04,
-  "source_sha256": "97be25c3c7b51db73bbb832509d83f08f36efdc349432d38218ca3c7f340766c",
+  "source_sha256": "0a2ef01471df494c28aaac52a6f62d4b603eb5a3628f5b5e9e4fd59ce938e551",
   "cases": [
     {
       "name": "openai_alias_measured_3s_declared_5s",

@@ -2492,7 +2492,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.8",
+  version: "1.0.11",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2524,9 +2524,14 @@ export const meta = {
 };
 
 function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
+// Smallest billable declaration. The host rounds measured seconds to whole
+// seconds, but a declared value is used verbatim for the pre-charge and, when
+// the output cannot be measured, for the final settlement. Without a floor a
+// caller could declare 0.0001s and pay essentially nothing for a real render.
+const MIN_BILLABLE_SECONDS = 1;
 function billedSeconds(value, field) {
   const seconds = typeof value === "number" ? value : (typeof value === "string" && /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value) ? Number(value) : NaN);
-  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600) throw new Error("AutoDL: " + field + " must be a number greater than 0 and at most 3600 seconds");
+  if (!Number.isFinite(seconds) || seconds < MIN_BILLABLE_SECONDS || seconds > 3600) throw new Error("AutoDL: " + field + " must be a number between " + MIN_BILLABLE_SECONDS + " and 3600 seconds");
   return seconds;
 }
 function object(value) { return value !== null && typeof value === "object" && !Array.isArray(value); }
@@ -2958,10 +2963,33 @@ function taskId(value) {
   return id;
 }
 
+// Shortest credential worth redacting from a diagnostic. Below this the value is
+// a misconfiguration and redacting it would corrupt unrelated text.
+const MIN_REDACTABLE_SECRET = 8;
+
 function safeReason(ctx, value) {
   let message = text(value) || "AutoDL: workflow generation failed";
   for (const secret of [ctx.apiKey, ctx.authHeader]) {
-    if (typeof secret === "string" && secret) message = message.split(secret).join("[redacted]");
+    if (typeof secret !== "string" || !secret) continue;
+    // Only redact a credential long enough that its occurrence is unambiguous. A
+    // short key (a misconfigured channel) would otherwise match ordinary words
+    // and shred the diagnostic an operator needs, e.g. "error" inside
+    // "upstream error: ...". Real AutoDL tokens are far longer than this.
+    if (secret.length < MIN_REDACTABLE_SECRET) continue;
+    message = message.split(secret).join("[redacted]");
+    // An upstream may echo the credential split across escapes, quotes or line
+    // breaks, which defeats a contiguous match, and the split can fall at any
+    // offset. Redact every window of the secret so no partial echo survives.
+    // Short windows for short secrets keep the guarantee that no window equals
+    // the whole secret, which would degenerate into a whole-key replace.
+    const size = Math.max(1, Math.min(8, secret.length - 1));
+    const escape = function (part) { return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); };
+    const windows = {};
+    for (let start = 0; start + size <= secret.length; start++) windows[secret.slice(start, start + size)] = true;
+    for (const fragment of Object.keys(windows)) {
+      if (fragment === secret) continue;
+      message = message.replace(new RegExp(escape(fragment), "g"), "[redacted]");
+    }
   }
   message = message.replace(/(?:Bearer\s+|\bsk-)[A-Za-z0-9_.\-]+/gi, "[redacted]");
   return message.replace(/[\x00-\x1f]/g, " ").slice(0, 300);
@@ -3030,6 +3058,7 @@ function mp4Boxes(bytes, start, end, visit) {
 
 function mp4Duration(bytes) {
   let videoDuration = null;
+  let videoSampled = false;
   let movieDuration = null;
   function inspectMovie(start, end) {
     mp4Boxes(bytes, start, end, function (type, data, boxEnd) {
@@ -3039,10 +3068,13 @@ function mp4Duration(bytes) {
         const durationOffset = version === 1 ? data + 24 : data + 16;
         const timescale = u32(bytes, timescaleOffset);
         const duration = version === 1 ? u64(bytes, durationOffset) : u32(bytes, durationOffset);
-        if (timescale > 0 && Number.isFinite(duration)) movieDuration = duration / timescale;
+        if (timescale > 0 && Number.isFinite(duration)) {
+          const value = duration / timescale;
+          if (movieDuration === null || value > movieDuration) movieDuration = value;
+        }
       }
       if (type !== "trak") return;
-      let handler = "", timescale = 0, duration = NaN;
+      let handler = "", timescale = 0, duration = NaN, hasSamples = false;
       mp4Boxes(bytes, data, boxEnd, function (trakType, trakData, trakEnd) {
         if (trakType !== "mdia") return;
         mp4Boxes(bytes, trakData, trakEnd, function (mediaType, mediaData, mediaEnd) {
@@ -3054,9 +3086,23 @@ function mp4Duration(bytes) {
             timescale = u32(bytes, scaleOffset);
             duration = version === 1 ? u64(bytes, durationOffset) : u32(bytes, durationOffset);
           }
+          // minf/stbl is where a track's samples live; a track without it
+          // carries no coded picture.
+          if (mediaType === "minf") {
+            hasSamples = true;
+          }
         });
       });
-      if (handler === "vide" && timescale > 0 && Number.isFinite(duration)) videoDuration = duration / timescale;
+      // A file can carry several 'vide' tracks, but only the one with a sample
+      // table carries the delivered picture; sprites, posters and timed
+      // metadata have none. Prefer that track and keep the longest only among
+      // equals, because ranking by length alone lets an auxiliary track over-bill
+      // past the real clip (and past the caller's declared ceiling).
+      if (handler === "vide" && timescale > 0 && Number.isFinite(duration)) {
+        const value = duration / timescale;
+        if (hasSamples && !videoSampled) { videoDuration = value; videoSampled = true; }
+        else if (hasSamples === videoSampled && (videoDuration === null || value > videoDuration)) videoDuration = value;
+      }
     });
   }
   mp4Boxes(bytes, 0, bytes.length, function (type, data, end) { if (type === "moov") inspectMovie(data, end); });
@@ -3124,7 +3170,14 @@ function mediaRange(url, start, end) {
   const contentRange = response.headers && response.headers["Content-Range"];
   const rangeMatch = typeof contentRange === "string" && contentRange.match(/\/(\d+)$/);
   const contentLength = response.headers && Number(response.headers["Content-Length"]);
-  return { bytes: bytes, total: rangeMatch ? Number(rangeMatch[1]) : (Number.isSafeInteger(contentLength) ? contentLength : undefined) };
+  // Content-Length only describes the whole resource on a 200. On a 206 it is
+  // the size of this partial body, which equals the probe length and would make
+  // the "is there more to read?" test below silently false, skipping the tail
+  // read for files whose moov sits at the end.
+  const total = rangeMatch
+    ? Number(rangeMatch[1])
+    : (response.status === 200 && Number.isSafeInteger(contentLength) ? contentLength : undefined);
+  return { bytes: bytes, total: total };
 }
 
 function measuredOutputDuration(url) {
@@ -3144,7 +3197,7 @@ function measuredOutputDuration(url) {
       const tail = mediaRange(url, start, total - 1);
       seconds = parseVideoDuration(tail.bytes);
     }
-    return seconds === null || !Number.isFinite(seconds) || seconds <= 0 || seconds > 3600 ? null : seconds;
+    return motionSecondsInRange(seconds);
   } catch (_) {
     return null;
   }
@@ -3159,12 +3212,19 @@ const MEASURED_INPUTS = {};
 const MEASURED_INPUT_LIMIT = 64;
 const DATA_VIDEO_HEADERS = ["data:video/mp4;base64", "data:video/webm;base64"];
 
-function base64Bytes(payload) {
+// Decode inline base64 into bytes, capped to at most `limit` decoded bytes taken
+// from the front, or from the end when `fromTail` is true. The cap bounds the
+// decoded work, not the caller's payload, so a large inline reference is still
+// measured instead of silently skipped. Base64 groups are four characters to
+// three bytes, so the window is always aligned to a group boundary.
+function base64Bytes(payload, limit, fromTail) {
   const table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const clean = payload.replace(/=+$/, "");
-  const bytes = new Uint8Array(Math.floor(clean.length * 3 / 4));
+  const groups = limit === undefined ? Math.ceil(clean.length / 4) : Math.min(Math.ceil(clean.length / 4), Math.ceil(limit / 3));
+  const start = fromTail ? (Math.ceil(clean.length / 4) - groups) * 4 : 0;
+  const bytes = new Uint8Array(groups * 3);
   let bits = 0, count = 0, index = 0;
-  for (let i = 0; i < clean.length; i++) {
+  for (let i = start; i < start + groups * 4 && i < clean.length; i++) {
     const value = table.indexOf(clean[i]);
     if (value < 0) return null;
     // Keep the accumulator below 2^31 so it stays an exact integer.
@@ -3185,8 +3245,14 @@ function measuredInputDuration(url) {
   const lower = url.toLowerCase();
   const header = DATA_VIDEO_HEADERS.find(function (candidate) { return lower.startsWith(candidate + ","); });
   if (header) {
-    // A local file arrives inline; nothing to fetch.
-    try { seconds = parseVideoDuration(base64Bytes(url.slice(header.length + 1))); } catch (_) { seconds = null; }
+    // A local file arrives inline; nothing to fetch. Read the head first, then
+    // the tail, mirroring the network path so an MP4 whose moov atom sits at the
+    // end is still measured instead of falling back to an unverified declaration.
+    const payload = url.slice(header.length + 1);
+    try {
+      seconds = parseVideoDuration(base64Bytes(payload, MEDIA_PROBE_BYTES, false));
+      if (seconds === null) seconds = parseVideoDuration(base64Bytes(payload, MEDIA_PROBE_BYTES, true));
+    } catch (_) { seconds = null; }
   } else if (/^https?:\/\//i.test(url) && typeof utils !== "undefined" && typeof utils.fetch === "function") {
     seconds = measuredOutputDuration(url);
   }
@@ -3236,7 +3302,29 @@ function results(body, fallbackType) {
   });
 }
 
-const STATUSES = { QUEUED: "QUEUED", RUNNING: "IN_PROGRESS", SUCCESS: "SUCCESS", FAILED: "FAILURE", completed: "SUCCESS" };
+// CANCELLED/CANCELED map to FAILURE so a cancelled upstream task terminates on
+// the next poll and refunds, instead of polling until the 30-minute deadline as
+// an unknown status. extractUsageOnComplete and miniTask already treat them as
+// terminal, so omitting them here was the odd one out.
+// Terminal-failure detection shared by polling and settlement. Both halves of
+// this file must agree: parseTaskResult maps upstream tokens to the internal
+// enum, native.miniTask re-renders that enum to lowercase for the host, and the
+// settlement hook is handed whichever spelling the host persisted. Enumerating
+// only one vocabulary left failures billed.
+const FAILURE_STATUSES = ["FAILURE", "FAILED", "CANCELLED", "CANCELED", "ERROR", "TIMEOUT", "EXPIRED"];
+function failureStatus(value) {
+  const status = text(value).toUpperCase();
+  return FAILURE_STATUSES.includes(status);
+}
+
+const STATUSES = { QUEUED: "QUEUED", RUNNING: "IN_PROGRESS", SUCCESS: "SUCCESS", FAILED: "FAILURE", CANCELLED: "FAILURE", CANCELED: "FAILURE", completed: "SUCCESS" };
+// Case-insensitive so 'Canceled', 'cancelled' and 'Failed' are terminal too;
+// an exact-match lookup sent them to UNKNOWN and polled to the deadline.
+function mappedStatus(value) {
+  const token = text(value).toLowerCase();
+  for (const key of Object.keys(STATUSES)) if (key.toLowerCase() === token) return STATUSES[key];
+  return "UNKNOWN";
+}
 
 function taskAction(config, input) {
   if (object(input) && has(input, "content")) {
@@ -3307,7 +3395,7 @@ export function parseTaskResult(ctx, body, response) {
   }
   const data = envelope(body).data;
   if (data.task_id !== undefined && taskId(data.task_id) !== ctx.taskId) throw new Error("AutoDL: query response task_id does not match");
-  const status = has(STATUSES, data.status) ? STATUSES[data.status] : "UNKNOWN";
+  const status = mappedStatus(data.status);
   if (status === "FAILURE") return { status: status, reason: safeReason(ctx, data.message || (object(data.error) ? data.error.message : data.error)) };
   if (status === "SUCCESS") {
     try {
@@ -3326,7 +3414,10 @@ export function parseTaskResult(ctx, body, response) {
     } catch (error) { return { status: "FAILURE", reason: error.message }; }
   }
   const state = ctx.state;
-  if (state && Number.isFinite(state.submittedAt) && Number.isFinite(state.timeoutSeconds) && utils.unixNow() - state.submittedAt >= state.timeoutSeconds) {
+  // Strict typeof, matching the rule this file states for the plugin runtime: if
+  // this test silently failed, a stuck task would poll forever instead of
+  // hitting the deadline.
+  if (state && typeof state.submittedAt === "number" && typeof state.timeoutSeconds === "number" && utils.unixNow() - state.submittedAt >= state.timeoutSeconds) {
     return { status: "FAILURE", reason: "AutoDL: generation exceeded the 30-minute plugin deadline; the upstream task may still be running" };
   }
   if (status === "UNKNOWN") return { status: "UNKNOWN", reason: "AutoDL: unknown upstream task status" };
@@ -3355,24 +3446,21 @@ function motionSecondsInRange(value) {
 
 // MiniMax's official query response carries an authoritative usage block:
 //   "usage": {"total_seconds": 5, "input_seconds": 0, "output_seconds": 5, ...}
-// AutoDL exposes nothing equivalent (its top-level `duration` is render wall
-// time, NOT video length), so this reads the official field only when an
-// upstream actually provides it. It is a fallback, never an override of a
-// locally measured value: a real measurement is always closer to what shipped.
+// AutoDL exposes nothing equivalent and its top-level `duration` is render wall
+// time, NOT video length, so only the official usage block is read and only as
+// a last resort. AutoDL therefore never reaches this, and reading `duration`
+// unconditionally would bill a 3-minute render as 196 seconds.
 function upstreamDeclaredSeconds(body) {
   if (!object(body)) return null;
-  const candidates = [];
   const usage = object(body.usage) ? body.usage : null;
-  if (usage) {
-    candidates.push(usage.total_seconds, usage.output_seconds);
-  }
-  // The official example also mirrors duration next to the usage block.
-  candidates.push(body.duration);
-  for (const candidate of candidates) {
+  if (!usage) return null;
+  for (const candidate of [usage.total_seconds, usage.output_seconds]) {
     const seconds = motionSecondsInRange(candidate);
     if (seconds !== null) return seconds;
   }
-  return null;
+  // The official example mirrors the duration beside its usage block, so it is
+  // trustworthy only when that authoritative block is present.
+  return motionSecondsInRange(body.duration);
 }
 
 export function extractUsage(ctx) {
@@ -3388,12 +3476,11 @@ export function extractUsageOnComplete(task, result, body) {
   const facts = Object.assign({}, state.facts);
   if (status === "SUCCESS" && state.workflowId === MOTION_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
-    let seconds = null;
-    if (url) {
-      try {
-        seconds = parseVideoDuration(mediaRange(url, 0, MEDIA_PROBE_END).bytes);
-      } catch (_) { seconds = null; }
-    }
+    // Reuse the full probe: the head Range read alone cannot see an MP4 whose
+    // moov atom sits after the first megabyte, which is common for anything but
+    // short clips. Calling mediaRange directly here would silently settle such a
+    // file at the declared value instead of the measured one.
+    const seconds = url ? measuredOutputDuration(url) : null;
     // Priority: freshest real measurement, then the value measured while
     // polling, then the reference clip the caller submitted, and only last the
     // upstream's own usage block. A measurement always wins because it
@@ -3402,9 +3489,20 @@ export function extractUsageOnComplete(task, result, body) {
       || motionSecondsInRange(state.measuredSeconds)
       || motionSecondsInRange(state.inputSeconds)
       || upstreamDeclaredSeconds(body);
-    if (settled !== null) facts.seconds = settled;
+    // The declared seconds are the pre-charge ceiling the caller was quoted, so
+    // a measurement may refund downwards but must never bill above it. When no
+    // candidate measured anything, keep the declaration rather than letting an
+    // upstream usage block (or a missing value) settle above the quoted ceiling.
+    const cap = motionSecondsInRange(facts.seconds);
+    const ceiling = settled === null ? null : (cap === null ? settled : Math.min(settled, cap));
+    if (ceiling !== null) facts.seconds = ceiling;
+    else if (cap !== null) facts.seconds = cap;
   }
-  if (status === "FAILURE" || status === "CANCELLED") {
+  // Compare the status by meaning, not by exact spelling. native.miniTask
+  // renders this plugin's own FAILURE/CANCELLED as the lowercase strings
+  // "failed"/"cancelled", so matching only the internal enum left a failed task
+  // on the MiniMax surface charged in full.
+  if (failureStatus(status)) {
     facts.requests = 0;
     if (facts.seconds !== undefined) facts.seconds = 0;
   }
@@ -3506,8 +3604,11 @@ export const native = {
   },
   miniCreated: function (_ctx, task) { return { task_id: task.task_id }; },
   miniTask: function (_ctx, task) {
-    const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", CANCELLED: "cancelled" };
-    const result = { id: task.task_id, status: statuses[task.status] || "running", task_type: "generation", modality: "video" };
+    // CANCELLED/CANCELED are both terminal upstream tokens; omitting CANCELED
+    // made it render as "running" so the host kept polling a dead task.
+    const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed" };
+    const key = text(task.status).toUpperCase();
+    const result = { id: task.task_id, status: statuses[key] || "running", task_type: "generation", modality: "video" };
     if (Number.isFinite(task.created_at)) result.created_at = task.created_at;
     if (Number.isFinite(task.updated_at)) result.updated_at = task.updated_at;
     if (task.status === "SUCCESS") {
@@ -3533,9 +3634,19 @@ export const protocols = {
       // The host supplies standard public ID/model/status/progress/timestamps.
       const result = {};
       if (task.status === "SUCCESS") {
-        const outputs = artifacts(task).filter(function (item) { return item.type === "video"; });
-        result.url = outputs[0].url;
-        result.results = outputs.map(function (item) { return { url: item.url, type: item.type }; });
+        // The render view carries no `action`, so it cannot know the modality.
+        // Prefer a video artifact, but fall back to whatever the task actually
+        // produced: filtering to video alone and then dereferencing [0] threw on
+        // every audio-only task and wiped the results list.
+        const items = artifacts(task);
+        const videos = items.filter(function (item) { return item.type === "video"; });
+        const outputs = videos.length ? videos : items;
+        if (outputs.length) {
+          result.url = outputs[0].url;
+          result.results = outputs.map(function (item) { return { url: item.url, type: item.type }; });
+        } else {
+          result.error = { code: "video_generation_failed", message: "AutoDL: task produced no media output" };
+        }
       }
       if (task.status === "FAILURE") result.error = { code: "video_generation_failed", message: task.fail_reason || "AutoDL: video generation failed" };
       return result;
