@@ -2489,7 +2489,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.5",
+  version: "1.0.6",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2578,6 +2578,9 @@ function referenceURLs(value) {
   if (value === undefined) return [];
   const values = Array.isArray(value) ? value : [value];
   return values.map(function (item) {
+    // Bare URL strings are the New API Sora spelling of `images`; accept them so a
+    // compatibility client cannot lose its picture to a type mismatch.
+    if (typeof item === "string") return inputMedia(item, "image");
     if (!object(item)) throw new Error("AutoDL: input_reference must be an image_url object or an array of image_url objects; URL strings are not supported");
     if (has(item, "file_id")) throw new Error("AutoDL: this adapter only supports image_url with public HTTP(S) URLs or standard image Data URLs; file_id is not supported");
     if (!has(item, "image_url") || Object.keys(item).length !== 1) throw new Error("AutoDL: input_reference entries must contain only image_url");
@@ -2585,12 +2588,30 @@ function referenceURLs(value) {
   });
 }
 
+// OpenAI's Videos Create has no `images` field; it is the New API Sora
+// compatibility spelling ([]string of URLs). Map it onto the same reference
+// slots as input_reference instead of dropping it, because it carries real
+// pictures that would otherwise silently become a text-only generation.
+function referenceInput(input) {
+  const hasNew = has(input, "input_reference"), hasLegacy = has(input, "images");
+  if (hasNew && hasLegacy) throw new Error("AutoDL: use either input_reference or images, not both");
+  if (hasLegacy) {
+    const legacy = input.images;
+    if (legacy === undefined || legacy === null) return undefined;
+    if (typeof legacy === "string" || object(legacy)) return legacy;
+    if (Array.isArray(legacy) && legacy.every(function (item) { return typeof item === "string" || object(item); })) return legacy;
+    throw new Error("AutoDL: images must be a public HTTP(S) URL, a Data URL, an image_url object or an array of them");
+  }
+  return input.input_reference;
+}
+
 function mapMedia(config, input, body, kind) {
-  const values = kind === "input_reference" ? referenceURLs(input[kind]) : (input[kind] === undefined ? [] : input[kind]);
+  const source = kind === "input_reference" ? referenceInput(input) : input[kind];
+  const values = kind === "input_reference" ? referenceURLs(source) : (source === undefined ? [] : source);
   if (!Array.isArray(values)) throw new Error("AutoDL: " + kind + " must be an array of public HTTP(S) URLs or standard Data URLs");
   const fields = config[kind];
   if (kind === "input_reference") {
-    if (fields.length === 0 && has(input, kind)) throw new Error("AutoDL: this workflow does not accept input_reference");
+    if (fields.length === 0 && source !== undefined) throw new Error("AutoDL: this workflow does not accept input_reference");
     const minimum = fields.reduce(function (count, field, index) { return config.rules[field].required ? index + 1 : count; }, 0);
     if (values.length < minimum) throw new Error("AutoDL: input_reference requires at least " + minimum + " image(s) for this workflow");
   }
@@ -2633,12 +2654,24 @@ function mapEmotion(config, input, body) {
   }
 }
 
+// Fields the OpenAI surface documents for itself plus the parameters this
+// adapter adds for AutoDL capabilities OpenAI has no equivalent for.
+const OPENAI_FIELDS = ["model", "prompt", "seconds", "duration", "size", "input_reference", "images", "resolution", "orientation", "audios", "videos", "seed", "emotion"];
+// Accepted only so an official OpenAI client is not rejected; AutoDL has no
+// counterpart for either, and neither carries media, so they are ignored.
+const OPENAI_IGNORED = ["metadata", "mode", "callback_url", "extra", "user", "n", "response_format", "fps", "width", "height"];
+
 function normalizeInput(config, input) {
   if (!object(input)) throw new Error("AutoDL: request body must be an object");
-  if (has(input, "images")) throw new Error("AutoDL: images is no longer supported; use input_reference as an image_url object or object array");
-  const allowed = ["model", "prompt", "seconds", "resolution", "orientation", "size", "input_reference", "audios", "videos", "seed", "emotion"];
-  if (config.workflowId === "minimax_h3_lightx2v_no_pic") allowed.push("duration");
-  for (const key of Object.keys(input)) if (!allowed.includes(key)) throw new Error("AutoDL: unsupported request field; use unified parameters only");
+  for (const key of Object.keys(input)) {
+    if (OPENAI_FIELDS.includes(key) || OPENAI_IGNORED.includes(key)) continue;
+    // A prototype key is never a legitimate parameter and must not be tolerated
+    // into the upstream body, even though unknown scalars now are.
+    if (key === "__proto__" || key === "constructor" || key === "prototype") throw new Error("AutoDL: unsupported request field " + key);
+    // A media-shaped field this adapter cannot place is refused rather than
+    // dropped, so a caller never pays for a generation that lost its input.
+    if (/^(image|images|input_ref|audio|video|ref_|file)/i.test(key) || object(input[key])) throw new Error("AutoDL: unsupported request field " + key + "; use input_reference, audios and videos for media");
+  }
   const body = {}, facts = { requests: 1 };
   if (config.promptField) {
     const rule = config.rules[config.promptField];
@@ -2647,13 +2680,15 @@ function normalizeInput(config, input) {
   } else if (input.prompt !== undefined) throw new Error("AutoDL: this workflow does not accept a text prompt");
   if (config.secondsField) {
     const rule = config.rules[config.secondsField];
+    // `duration` is the New API spelling of `seconds`; both name the same
+    // upstream control, so accept either and still reject a real conflict.
     let seconds = input.seconds === undefined ? (input.duration === undefined ? rule.default : input.duration) : input.seconds;
     seconds = numberValue(seconds, rule, "seconds");
-    if (input.duration !== undefined && numberValue(input.duration, rule, "seconds") !== seconds) throw new Error("AutoDL: seconds and duration conflict");
+    if (input.seconds !== undefined && input.duration !== undefined && numberValue(input.duration, rule, "seconds") !== seconds) throw new Error("AutoDL: seconds and duration conflict");
     body[config.secondsField] = seconds; facts.seconds = seconds;
   } else if (config.workflowId === MOTION_WORKFLOW) {
-    facts.seconds = billedSeconds(input.seconds, "seconds");
-  } else if (input.seconds !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
+    facts.seconds = billedSeconds(input.seconds === undefined ? input.duration : input.seconds, "seconds");
+  } else if (input.seconds !== undefined || input.duration !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
   const selected = mapResolution(config, input);
   if (selected) { body.resolution = selected.upstream; facts.resolution = selected.resolution; facts.orientation = selected.orientation; }
   for (const kind of ["input_reference", "audios", "videos"]) mapMedia(config, input, body, kind);
@@ -2761,12 +2796,19 @@ function normalizeMiniMax(config, input) {
   const scenario = miniScenario(input);
   if (scenario.reference_video && !config.videos.length) throw new Error("AutoDL: 当前 AutoDL 适配器没有对应的 reference_video workflow");
   const reserved = ["model", "content", "resolution", "duration", "audio_duration", "ratio", "seed"];
+  // Documented by MiniMax but with no AutoDL counterpart. They are control
+  // metadata only (no media), so accepting and ignoring them keeps an official
+  // client working instead of failing its request outright.
+  const ignored = ["callback_url", "extra"];
   const mediaFields = config.input_reference.concat(config.audios, config.videos);
   const body = {};
   for (const key of Object.keys(input)) {
-    if (reserved.includes(key)) continue;
+    if (reserved.includes(key) || ignored.includes(key)) continue;
     // Preserve AutoDL-specific controls, but never mix competing media/prompt inputs.
-    if (!has(config.rules, key) || key === config.promptField || mediaFields.includes(key)) throw new Error("AutoDL: unsupported or mixed MiniMax field " + key);
+    if (!has(config.rules, key) || key === config.promptField || mediaFields.includes(key)) {
+      // Refuse anything shaped like media instead of dropping the caller's picture.
+      throw new Error("AutoDL: unsupported or mixed MiniMax field " + key);
+    }
     body[key] = input[key];
   }
   let motionSeconds;
@@ -3193,7 +3235,9 @@ function taskAction(config, input) {
     const body = normalizeRequest(config, input).body;
     return config.type === "audio" ? "text_to_audio" : config.videos.some(function (key) { return has(body, key); }) ? "video_to_video" : config.input_reference.some(function (key) { return has(body, key); }) ? "image_to_video" : "text_to_video";
   }
-  return config.type === "audio" ? "text_to_audio" : (input.videos || []).length ? "video_to_video" : referenceURLs(input.input_reference).length ? "image_to_video" : "text_to_video";
+  // Read references through the same alias resolution the mapping uses, so an
+  // `images` request is classified as image_to_video rather than text_to_video.
+  return config.type === "audio" ? "text_to_audio" : (input.videos || []).length ? "video_to_video" : referenceURLs(referenceInput(input)).length ? "image_to_video" : "text_to_video";
 }
 
 export function buildSubmitRequest(ctx) {
@@ -3360,10 +3404,16 @@ function decode(ctx, pinnedModel) {
     request = {};
     for (const key of Object.keys(body.fields || {})) {
       const values = body.fields[key];
-      if (key === "input_reference") {
-        if (!Array.isArray(values) || values.length === 0) throw new Error("AutoDL: input_reference form field must have at least one value");
-        try { request[key] = values.length === 1 ? JSON.parse(values[0]) : values.map(function (value) { return JSON.parse(value); }); }
-        catch (_) { throw new Error("AutoDL: input_reference in forms must be a JSON image_url object or object array"); }
+      if (key === "input_reference" || key === "images") {
+        if (!Array.isArray(values) || values.length === 0) throw new Error("AutoDL: " + key + " form field must have at least one value");
+        const parse = function (value) { return JSON.parse(value); };
+        try {
+          // A single JSON array or a repeated field both describe the reference
+          // list; a JSON string is one reference, and a bare URL is not JSON.
+          request[key] = values.length === 1 ? parse(values[0]) : values.map(parse);
+        } catch (_) {
+          request[key] = values.length === 1 ? values[0] : values.slice();
+        }
         continue;
       }
       if (!Array.isArray(values) || values.length !== 1) throw new Error("AutoDL: each form field must be provided exactly once");

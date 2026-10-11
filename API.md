@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.5**。两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.6**。两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -123,7 +123,7 @@ OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。�
 | `model_price_error` | 请求 model 未配置价格或计费规则无效；管理员补齐该 model 的价格。渠道映射的 `wan2.2-animate-move` 别名也需单独配置。 |
 | `no_eligible_channel` | 渠道未启用、未包含请求 model，或 Key/用户组无可用渠道；检查 Task Plugin→AutoDL、模型列表及分组权限。 |
 | `invalid media URL` | 输入不是有效 HTTP(S) URL/标准 Data URL，MIME 不匹配或 Base64 格式错误；不用裸 Base64，按对应字段类型编码。 |
-| `intersects reserved namespace /api` | 安装了直接声明宿主保留路径的旧插件；更新为 **1.0.5** 即可，本版本只使用 `/v1/videos` 与 `/v2/...` 路径，不需要任何代理配置，也无需改宿主源码。 |
+| `intersects reserved namespace /api` | 安装了直接声明宿主保留路径的旧插件；更新为 **1.0.6** 即可，本版本只使用 `/v1/videos` 与 `/v2/...` 路径，不需要任何代理配置，也无需改宿主源码。 |
 | `502 / 5xx` | 根据响应错误与宿主日志定位上游/宿主异常；暂时错误退避重试，若已取得 task ID，先查询该任务，避免重复付费提交。 |
 
 以下保留完整字段、响应、工作流能力、计费和技术说明，可在本文件内继续查阅。
@@ -137,9 +137,9 @@ OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。�
 
 渠道选择 **Task Plugin（61）→ AutoDL**；Base URL `https://autodl.art`，不加 API 路径；密钥为 **AutoDL ComfyUI 分组 Token 原文，不加 Bearer**。加入要调用的模型，配置价格、分组权限并启用；安装不自动配置这些项。
 
-使用官方 **New API v1.0.0-rc.43**，要求 Plugin API v1、usageProfiles、openai_video、credentialless 下载；**无需修改源码、重建镜像或安装 FFmpeg**。1.0.5 只使用宿主自带的 `POST /v1/videos`（及其查询、内容下载路径）和插件自己注册的 `POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`：这些路径都不与宿主保留命名空间冲突，因此**本版本不需要任何反向代理、路径重写或额外服务器配置**，插件也不注册 `/api` 或内部桥接前缀，单文件安装即可运行。更新插件后检查插件 registered、价格 schema 及入口可用性即可。
+使用官方 **New API v1.0.0-rc.43**，要求 Plugin API v1、usageProfiles、openai_video、credentialless 下载；**无需修改源码、重建镜像或安装 FFmpeg**。1.0.6 只使用宿主自带的 `POST /v1/videos`（及其查询、内容下载路径）和插件自己注册的 `POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`：这些路径都不与宿主保留命名空间冲突，因此**本版本不需要任何反向代理、路径重写或额外服务器配置**，插件也不注册 `/api` 或内部桥接前缀，单文件安装即可运行。更新插件后检查插件 registered、价格 schema 及入口可用性即可。
 
-rc.43 用 Root 安装，浏览器需可访问 Raw URL。同 key/版本、不同源码报 `plugin key and version already exist with different source`；1.0.0 升级 1.0.5 直接导入新版本并启用，保留旧任务记录；同版本不同源码的开发调试应按后台版本冲突提示处理。
+rc.43 用 Root 安装，浏览器需可访问 Raw URL。同 key/版本、不同源码报 `plugin key and version already exist with different source`；1.0.0 升级 1.0.6 直接导入新版本并启用，保留旧任务记录；同版本不同源码的开发调试应按后台版本冲突提示处理。
 
 客户端用 **New API 根地址与 Key**，不传 AutoDL Token。curl 共用以下变量；request.json 保存所选接口的 body，其他 POST 替换路径，GET 仅保留 Authorization：
 
@@ -153,7 +153,7 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 
 ### 请求时长与结算
 
-**计费秒数（v1.0.5，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（仅 `minimax_h3_lightx2v_no_pic` 另兼容旧名 `duration`），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1` 没有视频秒数字段，仍按请求次数计费。
+**计费秒数（v1.0.6，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（`duration` 是所有工作流的等价别名），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1` 没有视频秒数字段，仍按请求次数计费。
 
 动作迁移（`wan2.2animate-v4-motion_retargeting`）没有官方固定时长或默认秒数，成片时长跟随参考视频，因此必须声明计费秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`。声明支持数值或普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；它只用于计费，不裁剪视频、不写入 AutoDL body。
 
@@ -211,17 +211,20 @@ video = data_url("motion.mp4", "video/mp4")
 | `resolution` | string | 可选，用工作流默认档位 | 全部统一档位为 480p/464p/736p/768p/832p/1080p/1088p/1440p；具体允许项见工作流分辨率组，不是每个模型都支持全部值。 |
 | `orientation` | string | 可选，用默认方向 | portrait/landscape/square；档位与方向必须存在对应组合。 |
 | `size` | string | 可选，无独立默认 | 精确 `宽x高`（小写 x），只接受尺寸表中该工作流已确认的值；与显式 resolution/orientation 冲突报错。 |
-| `input_reference` | object 或 object[] | 按工作流必需数量；无自动补图 | 单对象或对象数组，每个对象恰好一个 image_url 字符串（图片 URL/Data URL）；1 图、成对首尾帧或多图规则见下文。 |
+| `input_reference` | object / object[] / string / string[] | 按工作流必需数量；无自动补图 | **推荐字段**。每个引用为 `{"image_url":"…"}` 对象（OpenAI 官方形态），或多个对象的数组（本插件扩展，用于首尾帧与多图工作流）。也接受裸 URL 字符串或字符串数组。数量规则见下文。 |
 | `audios` | string[] | 按工作流最少数量，省略视为空数组 | 每项音频 URL/Data URL，按顺序映射 ref_audio_*；不支持音频的工作流只能没有音频输入。 |
 | `videos` | string[] | 动作迁移必填 1 项；省略视为空数组 | 每项视频 URL/Data URL；当前只有动作迁移支持，videos[0]→ref_video。 |
 | `seed` | integer 或数字字符串 | 可选，省略不写入 body | 1–999999999999999，zm_u24/zm_u08 允许 0；默认值与无 seed 能力的工作流见能力表。 |
-| `duration` | integer 或数字字符串 | 仅旧 no_pic 模型可选 | 仅 minimax_h3_lightx2v_no_pic 的 seconds 兼容别名；两者同时传必须一致，其他 OpenAI 模型拒绝。 |
+| `duration` | integer 或数字字符串 | 可选，全部工作流 | `seconds` 的兼容别名（New API 字段名）；两者同时传必须一致，否则报错。 |
+| `images` | string[] | 可选，兼容别名 | **已废弃，请改用 `input_reference`。** New API Sora 风格的参考图数组，与 `input_reference` 等价并映射到同一批 ref_image_* 槽位；与 `input_reference` 同时出现报错。 |
 
-H3 秒数及种子的数字字符串会转换为数值，仍须满足安全整数及工作流上下限；boolean、空字符串和科学计数法字符串不是有效秒数/种子。省略媒体不表示可绕过必需数量。OpenAI 的统一参数只接受本表字段（内部 emotion 另见 TTS 说明）。
+`input_reference` 与 `images` 等价，二者只能选一个；`input_reference` 是推荐写法。OpenAI 官方 `/videos` 只定义单张 `input_reference` 对象，对象数组是 AutoDL 多图/首尾帧工作流所需的扩展。`metadata`、`mode`、`user`、`n`、`response_format` 等非媒体字段会被接受并忽略（上游没有对应能力）。未知的媒体型字段名（如 `ref_image_0`、`file`）或任何未知对象字段会明确报错，不会被静默丢弃，以免用户以为传了图却发出纯文生视频请求。`__proto__`、`constructor`、`prototype` 一律拒绝。
 
-参考图：文生不传；单图恰好 1 张；首尾帧 2 张、依序 first_frame/last_frame；多图依序 ref_image_*。数量不符报错，不补齐/截断/忽略。对象数组是扩展；拒绝旧 images、引用字符串/字符串数组、额外对象属性和未知字段。emotion 仅属内部 TTS 控制，视频工作流拒绝。
+H3 秒数及种子的数字字符串会转换为数值，仍须满足安全整数及工作流上下限；boolean、空字符串和科学计数法字符串不是有效秒数/种子。省略媒体不表示可绕过必需数量。
 
-文本表单：input_reference 用 JSON 对象/数组，或重复同名字段、每项 JSON 对象；audios/videos/emotion 用 JSON 编码。仅 minimax_h3_lightx2v_no_pic 保留旧 duration 和官网 resolution 标签；与 seconds/orientation 冲突报错。
+参考图：文生不传；单图恰好 1 张；首尾帧 2 张、依序 first_frame/last_frame；多图依序 ref_image_*。数量不符报错，不补齐/截断/忽略。`file_id` 明确拒绝（宿主文件引用在本协议不可用），额外对象属性同样拒绝。emotion 仅属内部 TTS 控制，视频工作流拒绝。
+
+文本表单：input_reference 用 JSON 对象/数组、裸 URL，或重复同名字段、每项 JSON 对象；images 同样可用；audios/videos/emotion 用 JSON 编码。仅 minimax_h3_lightx2v_no_pic 保留官网 resolution 标签；与 seconds/orientation 冲突报错。
 
 ### 请求示例
 
@@ -281,7 +284,10 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 | `seed` | integer 或数字字符串 | 有 seed 能力时可选，不补写默认 | 按目标 workflow 的种子范围；没有 seed 能力则拒绝。 |
 | 工作流扩展字段 | 对应 input_rules 类型 | 依工作流，如 TTS 控制方法可省略用默认 | 仅接受该 workflow 的非文本、非媒体控制，如 emo_*；不能混入 prompt/ref_image_*/ref_audio_* 等竞争字段。 |
 
-文本上限按工作流（TTS 按 prompt_text 的 1–2048 字符）；duration 另可写十进制字符串。无 duration 控制的工作流拒绝 duration，TTS 也拒绝 resolution/ratio；未知字段（callback_url/extra 等）拒绝。
+| `callback_url` | string | 可选，接受后忽略 | MiniMax 官方回调字段；宿主的后台轮询已负责任务状态，本适配器不转发回调，传了也不会失败。 |
+| `extra` | object | 可选，接受后忽略 | MiniMax H3-Max 的 `prompt_expansion_mode` 等选项；AutoDL 上游没有对应控制，忽略。 |
+
+文本上限按工作流（TTS 按 prompt_text 的 1–2048 字符）；duration 另可写十进制字符串。无 duration 控制的工作流拒绝 duration，TTS 也拒绝 resolution/ratio；`callback_url`、`extra` 等官方控制字段接受并忽略，但未知的媒体型字段或未知对象字段仍报错，避免静默丢失素材。
 
 | `content[].type`（必填 string） | 必需内容字段 / 类型 | `role` / 默认 | 校验与映射 |
 |---|---|---|---|

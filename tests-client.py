@@ -161,6 +161,22 @@ with tempfile.TemporaryDirectory(prefix='autodl-inline-client-') as directory:
             try: client.main()
             except Captured: checks += 1
             else: raise AssertionError('Expected inline input capture')
+# 6b. The New API Sora `images` spelling must survive client serialization so the
+# plugin can map it; nothing may rewrite or drop it client-side.
+with tempfile.TemporaryDirectory(prefix='autodl-images-client-') as directory:
+    folder = pathlib.Path(directory)
+    legacy = {'model': 'minimax_h3_lightx2v', 'prompt': 'p', 'seconds': 5,
+              'images': ['https://cdn.example.com/first.png', 'https://cdn.example.com/last.png']}
+    request_file = folder/'images.json'
+    request_file.write_text(json.dumps(legacy), encoding='utf-8')
+    argv = ['test-task.py', '--format', 'openai', '--request', str(request_file), '--out', str(folder/'images.mp4')]
+    def capture_images(request, **kwargs):
+        assert json.loads(request.data) == legacy, 'images must pass through unchanged'
+        raise Captured()
+    with patch.dict(os.environ, {'NEW_API_BASE_URL': 'https://newapi.example', 'NEW_API_KEY': 'fake-newapi-key'}), patch.object(sys, 'argv', argv), patch.object(client.urllib.request, 'urlopen', capture_images):
+        try: client.main()
+        except Captured: checks += 1
+        else: raise AssertionError('Expected images capture')
 # 7. Motion transfer declares its billed seconds in the request body, never a query.
 with tempfile.TemporaryDirectory(prefix='autodl-billing-client-') as directory:
     folder = pathlib.Path(directory)

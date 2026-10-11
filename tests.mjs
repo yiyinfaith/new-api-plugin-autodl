@@ -20,7 +20,7 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.5');
+  assert.equal(p.meta.version, '1.0.6');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
@@ -31,7 +31,12 @@ test('exact official catalog coverage', () => {
 for (const [model, config] of Object.entries(catalog)) {
   const source = official.find(row => row.uuid === config.workflowId);
   const input = examples[model];
-  for (const value of [[], ['https://cdn.example.com/old.png']]) reject(model + ': removed reference field ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(model, { ...input, images: value })], 'images is no longer supported');
+  // `images` is the New API Sora spelling. It must reach the same reference
+  // slots as input_reference, never be dropped, and never be silently mixed.
+  reject(model + ': images and input_reference together conflict', 'buildSubmitRequest', [ctx(model, { ...input, images: ['https://cdn.example.com/a.png'], input_reference: [{ image_url: 'https://cdn.example.com/b.png' }] })], 'not both');
+  for (const bad of [1, true, [[{}]], [1], {}]) {
+    reject(model + ': malformed images ' + JSON.stringify(bad), 'buildSubmitRequest', [ctx(model, { ...input, images: bad })], 'AutoDL:');
+  }
   const expectedBody = {};
   const expectedFacts = { requests: 1 };
   const promptField = ['prompt', 'prompt_text'].find(k => source.input_rules[k]);
@@ -91,6 +96,35 @@ for (const [model, config] of Object.entries(catalog)) {
         const result = p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs }));
         config[kind].forEach((field, i) => assert.equal(result.body[field], refs[i].image_url));
       });
+      // `images` must be a real alias whose pictures reach the same slots; a
+      // drop would turn an image request into a silent text-only generation.
+      const withoutRefs = { ...input };
+      delete withoutRefs.input_reference;
+      test(model + ': images strings map to the same slots as input_reference', () => {
+        const urls = config[kind].map((_, i) => 'https://cdn.example.com/legacy-' + i + '.png');
+        const result = p.buildSubmitRequest(ctx(model, { ...withoutRefs, images: urls }));
+        config[kind].forEach((field, i) => assert.equal(result.body[field], urls[i]));
+      });
+      test(model + ': images objects map like input_reference objects', () => {
+        const refs2 = config[kind].map((_, i) => ({ image_url: 'https://cdn.example.com/legacy-obj-' + i + '.png' }));
+        assert.deepEqual(p.buildSubmitRequest(ctx(model, { ...withoutRefs, images: refs2 })).body, p.buildSubmitRequest(ctx(model, { ...input, input_reference: refs2 })).body);
+      });
+      test(model + ': images produces the same action as input_reference', () => {
+        const urls = config[kind].map((_, i) => 'https://cdn.example.com/action-' + i + '.png');
+        assert.equal(p.buildSubmitRequest(ctx(model, { ...withoutRefs, images: urls })).action, p.buildSubmitRequest(ctx(model, { ...input, input_reference: urls.map(u => ({ image_url: u })) })).action);
+      });
+      test(model + ': images is classified as image_to_video', () => {
+        const urls = config[kind].map((_, i) => 'https://cdn.example.com/kind-' + i + '.png');
+        // A video reference outranks an image reference, exactly as it does for input_reference.
+        const expected = (input.videos || []).length ? 'video_to_video' : 'image_to_video';
+        assert.equal(p.buildSubmitRequest(ctx(model, { ...withoutRefs, images: urls })).action, expected);
+      });
+      test(model + ': single images string follows the same minimum-count rule as input_reference', () => {
+        const one = 'https://cdn.example.com/single.png';
+        const minimum = config[kind].reduce((count, field, i) => official.find(row => row.uuid === config.workflowId).input_rules[field]?.required ? i + 1 : count, 0);
+        if (minimum <= 1) assert.deepEqual(p.buildSubmitRequest(ctx(model, { ...withoutRefs, images: [one] })).body, p.buildSubmitRequest(ctx(model, { ...input, input_reference: [{ image_url: one }] })).body);
+        else assert.throws(() => p.buildSubmitRequest(ctx(model, { ...withoutRefs, images: [one] })), /requires at least/);
+      });
     }
   }
   if (source.input_rules.seed) {
@@ -126,7 +160,13 @@ reject('legacy duration conflict', 'extractUsage', [ctx(model, { prompt: 'x', se
 reject('unsupported 720p size', 'extractUsage', [ctx(model, { prompt: 'x', size: '1280x720' })], 'unsupported size');
 reject('size resolution conflict', 'extractUsage', [ctx(model, { prompt: 'x', size: '864x480', resolution: '768p' })], 'size, resolution and orientation conflict');
 reject('reject blank prompt', 'buildSubmitRequest', [ctx(model, { prompt: ' ' })], 'prompt must');
-reject('reject vendor fields', 'buildSubmitRequest', [ctx(model, { prompt: 'x', ref_image_0: 'anything' })], 'unsupported request field');
+// Unknown junk is ignored, but a media-shaped or object field is refused rather
+// than dropped so a caller cannot lose an input silently.
+for (const field of ['seedx', 'prompt_weight']) fixture('tolerated scalar field ' + field, 'extractUsage', [ctx(model, { prompt: 'x', [field]: 3 })], { requests: 1, seconds: 5, resolution: '768p', orientation: 'portrait' });
+for (const field of ['metadata', 'mode', 'user', 'n', 'response_format']) fixture('official OpenAI field ' + field + ' is ignored, not fatal', 'extractUsage', [ctx(model, { prompt: 'x', [field]: field === 'n' ? 1 : 'value' })], { requests: 1, seconds: 5, resolution: '768p', orientation: 'portrait' });
+for (const field of ['ref_image_0', 'ref_video_0', 'audio_url', 'file', 'image_settings', 'video_settings']) reject('media-shaped field ' + field + ' is refused', 'buildSubmitRequest', [ctx(model, { prompt: 'x', [field]: 'anything' })], 'unsupported request field');
+// An unrecognized object could hide media, so it is refused rather than dropped.
+for (const field of ['custom_object', 'options', 'settings']) reject('object-valued unknown field ' + field + ' is refused', 'buildSubmitRequest', [ctx(model, { prompt: 'x', [field]: { nested: 'https://cdn.example.com/a.png' } })], 'unsupported request field');
 reject('reject unknown model', 'buildSubmitRequest', [{ ...context, upstreamModel: 'unknown' }], 'unsupported model');
 reject('reject bearer vendor key', 'buildSubmitRequest', [{ ...context, apiKey: 'Bearer fake-token' }], 'without Bearer');
 reject('reject placeholder key', 'buildSubmitRequest', [{ ...context, apiKey: '__CONFIGURE_AUTODL_COMFYUI_TOKEN__' }], 'configure the channel');
@@ -172,7 +212,10 @@ fixture('single image_url object maps to first upstream slot', 'buildSubmitReque
   headers: { Authorization: base.apiKey, 'Content-Type': 'application/json' },
   body: { prompt: referenceContext.requestBody.prompt, duration: referenceContext.requestBody.seconds, resolution: '768p竖', ref_image_0: singleReference.image_url },
 });
-for (const value of [false, null, 1, [[singleReference]], [null], [singleReference, 123], singleReference.image_url, [singleReference.image_url], [singleReference.image_url, secondReference.image_url], [singleReference, secondReference.image_url]]) reject('invalid reference shape ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'image_url object');
+// Bare URL strings and one-element string arrays are now valid reference inputs
+// (the New API Sora spelling); malformed shapes must still fail loudly.
+for (const value of [false, null, 1, [[singleReference]], [null], [singleReference, 123]]) reject('invalid reference shape ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'image_url object');
+for (const value of [singleReference.image_url, [singleReference.image_url], [singleReference.image_url, secondReference.image_url]]) fixture('bare URL reference ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], p.buildSubmitRequest(ctx(referenceModel, { ...referenceContext.requestBody, input_reference: Array.isArray(value) ? value.map(u => ({ image_url: u })) : { image_url: value } })));
 for (const value of [{ file_id: 'file-123' }, [{ file_id: 'file-123' }], { ...singleReference, file_id: 'file-123' }, [singleReference, { file_id: 'file-123' }]]) reject('unsupported file_id ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'this adapter only supports image_url');
 for (const value of [{}, { url: singleReference.image_url }, { ...singleReference, extra: true }]) reject('unsupported reference keys ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: value })], 'only image_url');
 for (const value of ['data:image/png;base64,abc', 'file:///image.png', 'C:/image.png', '', null, 1, [], {}]) reject('unsupported reference URL ' + JSON.stringify(value), 'buildSubmitRequest', [ctx(referenceModel, { ...referenceContext.requestBody, input_reference: { image_url: value } })], 'public HTTP(S)');
@@ -187,9 +230,19 @@ for (const kind of ['form', 'multipart']) {
       if (values.length > 1 || values[0].startsWith('[')) assert.equal(body.ref_image_1, secondReference.image_url);
     });
   }
-  test(kind + ': removed reference field is rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, images: ['[]'], input_reference: [JSON.stringify(singleReference)] }, files: [] } }), /images is no longer supported/));
-  test(kind + ': malformed reference array rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: ['[broken'] }, files: [] } }), /forms must be a JSON image_url object or object array/));
-  for (const value of [singleReference.image_url, JSON.stringify(singleReference.image_url), JSON.stringify([singleReference.image_url, secondReference.image_url]), JSON.stringify({file_id: 'file-123'})]) test(kind + ': unsupported reference input ' + value, () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: [value] }, files: [] } }), /image_url/));
+  test(kind + ': images and input_reference in one form are rejected as conflicting', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, images: ['[]'], input_reference: [JSON.stringify(singleReference)] }, files: [] } }), /not both/));
+  test(kind + ': images alone in a form reaches the upstream body', () => {
+    const urls = ['https://cdn.example.com/legacy-form.png', 'https://cdn.example.com/legacy-form-2.png'];
+    const decoded = p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, images: [JSON.stringify(urls)] }, files: [] } });
+    assert.deepEqual(decoded.requestBody.images, urls);
+    const viaReference = p.buildSubmitRequest(ctx(referenceModel, { ...referenceContext.requestBody, input_reference: urls.map(u => ({ image_url: u })) }));
+    assert.equal(decoded.action, viaReference.action);
+  });
+  // Unparseable JSON is treated as a bare URL, so it must fail URL validation
+  // rather than silently becoming a reference.
+  test(kind + ': malformed reference JSON is rejected as an invalid URL', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: ['[broken'] }, files: [] } }), /public HTTP\(S\) URL|invalid media URL|image_url/));
+  test(kind + ': file_id reference rejected', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: [JSON.stringify({file_id: 'file-123'})] }, files: [] } }), /image_url/));
+  for (const value of [JSON.stringify({file_id: 'file-123'})]) test(kind + ': unsupported reference input ' + value, () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind, fields: { ...referenceFields, input_reference: [value] }, files: [] } }), /image_url/));
 }
 test('same-field multipart image files fail explicitly for URL-only adapter', () => assert.throws(() => p.protocols.openai_video.decodeRequest({ model: referenceModel, body: { kind: 'multipart', fields: referenceFields, files: [{ field: 'input_reference', ref: 'request_file:input_reference' }, { field: 'input_reference', ref: 'request_file:input_reference#1' }] } }), /binary uploads.*input_reference/));
 for (const [id, config] of Object.entries(catalog)) {
@@ -226,7 +279,14 @@ reject('normalized request rejects invalid media before billing', 'extractUsage'
 for (const content of [null, {}, 'text', [null], [{ type: 'reference_image' }], [{ type: 'image_url', image_url: { file_id: 'f' }, role: 'reference_image' }], [{ type: 'text', text: 'a', extra: true }]]) reject('MiniMax malformed content ' + JSON.stringify(content), 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, content })], 'AutoDL:');
 reject('MiniMax duplicate text', 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, content: [...miniBase.content, { type: 'text', text: 'duplicate' }] })], 'only one text');
 reject('MiniMax URL must be public', 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, content: [{ type: 'text', text: 'a' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' }, role: 'reference_image' }] })], 'invalid media URL');
-for (const field of ['prompt', 'input_reference', 'images', 'audios', 'videos', 'size', 'orientation', 'callback_url', 'extra']) reject('MiniMax mixed/unsupported top-level ' + field, 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, [field]: 'unsupported' })], 'mixed MiniMax field');
+for (const field of ['prompt', 'input_reference', 'images', 'audios', 'videos', 'size', 'orientation']) reject('MiniMax mixed/unsupported top-level ' + field, 'buildSubmitRequest', [ctx(referenceModel, { ...miniBase, [field]: 'unsupported' })], 'mixed MiniMax field');
+// Documented MiniMax control metadata with no AutoDL counterpart: accepted and
+// ignored (it carries no media), so an official client is not failed outright.
+for (const [field, value] of [['callback_url', 'https://example.com/hook'], ['extra', { prompt_expansion_mode: 'quality' }]]) {
+  test('MiniMax ' + field + ' is tolerated and ignored', () => {
+    assert.deepEqual(p.buildSubmitRequest(ctx(referenceModel, { ...miniBase, [field]: value })).body, p.buildSubmitRequest(ctx(referenceModel, miniBase)).body);
+  });
+}
 test('MiniMax source model remains workflow ID with channel mapping', () => {
   const decoded = p.protocols.openai_video.decodeRequest({ model: 'client-alias', upstreamModel: referenceModel, body: { kind: 'json', value: { ...miniBase, model: 'ignored-body-model' } } });
   assert.equal(decoded.model, 'client-alias');

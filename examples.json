@@ -572,6 +572,52 @@
       "motion_minimax": "duration",
       "note": "Motion transfer has no fixed AutoDL default. Declare the real reference-video seconds; the plugin also measures the reference at submission and falls back to this declaration. It never trims the upstream output."
     },
+    "compatibility": {
+      "openai_images_alias": {
+        "model": "minimax_h3_lightx2v",
+        "prompt": "镜头平稳推进",
+        "seconds": 5,
+        "images": [
+          "https://your-public-file-host.example/first.png",
+          "https://your-public-file-host.example/last.png"
+        ]
+      },
+      "openai_duration_alias": {
+        "model": "minimax_h3_z0901",
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "size": "864x480"
+      },
+      "openai_ignored_official_fields": {
+        "model": "minimax_h3_z0901",
+        "prompt": "一只猫在雪地中奔跑",
+        "seconds": 5,
+        "metadata": {
+          "trace": "ignored"
+        },
+        "mode": "standard",
+        "user": "ignored",
+        "n": 1,
+        "response_format": "url"
+      },
+      "minimax_ignored_official_fields": {
+        "model": "minimax_h3_z0901",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          }
+        ],
+        "resolution": "768P",
+        "duration": 5,
+        "ratio": "16:9",
+        "callback_url": "https://client.example/hook",
+        "extra": {
+          "prompt_expansion_mode": "quality"
+        }
+      },
+      "note": "input_reference is the recommended reference field; images is an equivalent New API Sora compatibility alias mapped to the same ref_image_* slots. metadata/mode/user/n/response_format and MiniMax callback_url/extra are accepted and ignored because AutoDL has no counterpart. Media-shaped or unknown object fields still fail loudly so a picture is never dropped silently."
+    },
     "_note": "Only the OpenAI Videos and MiniMax V2 request formats remain. Every entry is an AutoDL workflow id; the official MiniMax model-name aliases and the AutoDL native / DashScope surfaces were removed in 1.0.5."
   }
 }

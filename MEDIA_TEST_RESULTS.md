@@ -1,6 +1,6 @@
 # 输入媒体真实测试记录
 
-> **版本说明：**1.0.5 起插件只保留 **OpenAI Videos**（`POST /v1/videos`）与 **MiniMax 官方 V2**（`POST /v2/video_generation`）两种请求格式，并移除了官方模型名（`MiniMax-H3` / `MiniMax-H3-Max`）自动路由，调用时请直接使用 AutoDL 工作流 ID。本文件 1.0.0–1.0.4 章节中的 AutoDL 原生、DashScope Wan 以及官方别名记录是**当时的历史证据**，对应的能力已按要求删除；保留原文是为了不篡改历史测试结论。
+> **版本说明：**1.0.5 起插件只保留 **OpenAI Videos**（`POST /v1/videos`）与 **MiniMax 官方 V2**（`POST /v2/video_generation`）两种请求格式，并移除了官方模型名（`MiniMax-H3` / `MiniMax-H3-Max`）自动路由，调用时请直接使用 AutoDL 工作流 ID。1.0.6 在不放松真实校验的前提下提升了官方格式容错（`images` 恢复为等价兼容别名、`duration` 全工作流开放、官方非媒体字段接受并忽略）。本文件 1.0.0–1.0.4 章节中的 AutoDL 原生、DashScope Wan 以及官方别名记录是**当时的历史证据**，对应的能力已按要求删除；保留原文是为了不篡改历史测试结论。
 
 2026-10-09；插件 `1.0.0`。全部创建与查询请求通过 `https://api.example.com`，不是 mock。15 个任务轮询至成功，下载 MP4 并以 ffprobe 确认视频轨道，覆盖 22 个协议/媒体/输入类型组合及纯文本回归。New API 实扣合计 **¥0.541**；9 个失败任务结算额度为 0。该金额是 New API 任务账目，不代表独立核验的 AutoDL 账单。
 
@@ -210,3 +210,34 @@ URL 缓存复用，以及结算时成片不可读而改用输入测量值的分�
 | 结果主机 | `cg-comfyui-prod.tos-cn-beijing.volces.com` | 同 |
 
 OpenAI 那笔再次证明按实测结算：声明 3 秒预扣 ¥0.12，实测成片 0.9667 秒，最终实扣 ¥0.04。两笔测试用的临时 New API Key 与管理 token 均已删除（数据库核对 0 行）。
+
+## 1.0.6 官方格式容错提升（2026-10-11）
+
+在不放弃真实校验的前提下，让官方 OpenAI / MiniMax 客户端不再因为一个无害字段被整体拒绝。核对基准：**OpenAI 官方 OpenAPI 规范**（`openai/openai-openapi`，`CreateVideoJsonBody`）与 **MiniMax V2 Create 的 OpenAPI 3.1 schema**。
+
+**先修正一个此前的误判：**`images` **不是** OpenAI 官方字段。OpenAI `/videos` 的 JSON body 只有 `model`、`prompt`、`input_reference`、`seconds`、`size` 五个字段，`input_reference` 是唯一的参考图字段且只支持单张（`ImageRefParam-2`：`image_url` 或 `file_id` 二选一）。`images` 是 **New API 自有的 Sora 兼容扩展**（`relay_info.go` 的 `TaskSubmitReq.Images []string`）。
+
+**1.0.6 变更**
+
+| 变更 | 行为 |
+|---|---|
+| `input_reference` 仍是推荐字段 | 官方形态 `{"image_url":"…"}`；对象数组是 AutoDL 多图/首尾帧所需的扩展 |
+| `images` 恢复为等价兼容别名 | 与 `input_reference` 映射到**同一批** `ref_image_*` 槽位，**绝不静默丢弃**；两者同时出现报错 |
+| 裸 URL 字符串 / 字符串数组 | `input_reference` 与 `images` 都接受，兼容 New API 客户端的写法 |
+| `duration` 全工作流开放 | 成为 `seconds` 的等价别名（此前仅 `minimax_h3_lightx2v_no_pic`），保留冲突检测 |
+| 官方非媒体字段容忍 | OpenAI `metadata`、`mode`、`user`、`n`、`response_format` 接受并忽略 |
+| MiniMax `callback_url` / `extra` | 接受并忽略（上游无对应能力，宿主自己轮询） |
+| 未知字段策略 | 媒体型字段名（`ref_image_0`、`file`…）或任何未知**对象**字段仍明确报错 |
+
+**为什么不能对未知字段一律"接受即丢弃"：**未知对象字段可能藏着图片。若静默丢弃，用户以为传了图，插件却发出**纯文生视频**请求——上游会正常出片、正常扣费，产出的视频却不是用户要的，要等成片才发现，钱已经花了。因此媒体型/对象型未知字段一律报错。
+
+**修复的两个真实缺陷（由新增测试发现）**
+
+1. `taskAction` 只读 `input.input_reference`，导致仅传 `images` 的请求被误判为 `text_to_video` 而非 `image_to_video`；现改为经过同一别名解析。
+2. 表单/multipart 路径未对 `images` 做 JSON 解码，会把 `["https://…"]` 整串当作 URL 交给校验；现已与 `input_reference` 统一处理。
+
+**顺带堵住一个回归：**放宽未知字段容忍后，`__proto__` 在表单路径会被放进上游 body（测试 `audit OpenAI rejects own prototype field in form/multipart` 捕获）。现已显式拒绝 `__proto__` / `constructor` / `prototype`。
+
+**离线验证：**`node tests.mjs` **1,242 项检查**（较 1.0.5 的 1,097 增加 145 项），952 个宿主 fixture；`tests-client.py` **24 项**；`py_compile` 通过。新增用例覆盖：`images` 字符串/对象两种形态映射到相同槽位、`images` 与 `input_reference` 冲突拒绝、`images` 的多图数量下限与 `input_reference` 一致、`images` 的 action 分类（含参考视频优先于参考图）、表单路径 `images` 解码、官方字段容忍、媒体型/对象型未知字段拒绝、`__proto__` 拒绝。
+
+**文档中记录的可运行示例：**`examples.json` 新增 `_formats.compatibility` 四组示例（`images` 别名、`duration` 别名、OpenAI 可忽略字段、MiniMax 可忽略字段），已逐条对插件实测通过。

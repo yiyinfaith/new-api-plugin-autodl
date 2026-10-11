@@ -2,7 +2,7 @@
 
 为 New API 提供 AutoDL.Art Task Plugin 适配，将 AutoDL ComfyUI 工作流接入 New API。
 
-插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.5**（插件元数据为 `1.0.5`）。
+插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.6**（插件元数据为 `1.0.6`）。
 
 **调用方从这里开始：[5 分钟快速开始与完整 API 参考](API.md#5-分钟快速开始)。** 一份文档介绍 OpenAI 与 MiniMax 官方 V2 两种接口；每种都有完整 curl、创建响应、任务查询和成功结果字段。覆盖文生视频、图片 URL/Data URL、图+音频、图+视频，并提供常用模型与错误速查；后半部分保留完整字段类型、必填/默认值、工作流范围、计费及技术限制，无需跳到其他说明文档。
 
@@ -81,7 +81,7 @@ URL 导入在浏览器中下载源码，因此使用管理后台的浏览器需�
 
 仓库只维护根目录的一个 `plugin.js` 和一个当前版本，更新后仍使用同一个 `main` Raw URL。`workflows.json`、`official-workflows.json`、`examples.json` 和 `prices.json` 用于查阅、示例及开发验证，插件运行时不会读取它们；测试脚本、校验文件、许可证和 `.github/` 也不是安装依赖。
 
-从 1.0.4 更新：从上方唯一 Raw URL 导入并启用 AutoDL 1.0.5。保留任务记录、渠道、价格表达式和分组倍率；如果之前为旧版本做过路径转发配置，可以删掉，插件不再需要它。1.0.5 删除了 `MiniMax-H3` / `MiniMax-H3-Max` 官方模型名自动路由，`model` 一律填写 AutoDL 工作流 ID。只维护一个当前版本和安装地址。
+从 1.0.5 更新：从上方唯一 Raw URL 导入并启用 AutoDL 1.0.6。保留任务记录、渠道、价格表达式和分组倍率；插件不需要任何路径转发配置。1.0.6 提升了官方格式容错：`input_reference` 仍是推荐字段，旧 `images` 恢复为等价兼容别名（映射到同一批图片槽位，不会丢图），`duration` 成为全部工作流的 `seconds` 别名，官方非媒体字段接受并忽略，MiniMax 的 `callback_url` / `extra` 接受并忽略。只维护一个当前版本和安装地址。
 
 **宿主升级：**继续使用官方 `calciumion/new-api:latest`，不维护源码修改。升级后检查插件 registered、模型价格 schema 及两种请求入口；未来若官方 Plugin API 发生不兼容变更，仍需正常回归验证。
 
@@ -191,7 +191,7 @@ OpenAI 入口服务 16 个视频工作流（外加 `wan2.2-animate-move` 别名�
 
 MiniMax V2 请求的 `model` 就是 AutoDL 工作流 ID，插件按该工作流的规则校验 `content`、`resolution`、`duration` 与 `ratio`；不存在根据模型名自动选择工作流的行为，可用能力与上文 [支持模型](#支持模型) 表一致。TTS 音频工作流同样使用这两条 V2 路径，成功时 `task.modality` 为 `audio`。
 
-为保留 AutoDL 能力，官网额外的非媒体控制可直接作为顶层扩展字段，例如 indexTTS2 的 `emo_control_method / emo_random / emo_calm ...`。不接受文本的图音频同步和动作迁移工作流不应加入 text 项；音频工作流也可用相同 content 结构，这是本插件的 AutoDL 扩展。`prompt / seconds / size / input_reference / audios / videos / orientation` 不与 content 混用，`callback_url`、`extra` 等没有对应 AutoDL 定义的字段也明确拒绝。
+为保留 AutoDL 能力，官网额外的非媒体控制可直接作为顶层扩展字段，例如 indexTTS2 的 `emo_control_method / emo_random / emo_calm ...`。不接受文本的图音频同步和动作迁移工作流不应加入 text 项；音频工作流也可用相同 content 结构，这是本插件的 AutoDL 扩展。`prompt / seconds / size / input_reference / audios / videos / orientation` 不与 content 混用；MiniMax 官方 `callback_url`、`extra` 等非媒体控制字段接受并忽略（上游没有对应能力），未知的媒体型字段仍报错。
 
 indexTTS2 的情感控制就用这些顶层扩展字段：`emo_control_method` 取 `与音色参考音频相同`（默认）、`使用情感参考音频`（此时需要第二段参考音频 `emo_ref_audio`）、`使用情感向量控制`；向量字段为 `emo_afraid`、`emo_angry`、`emo_calm`、`emo_disgusted`、`emo_happy`、`emo_melancholic`、`emo_sad`、`emo_surprised`，范围见 catalog；`emo_random` 是 boolean。官网当前 `emo_surprised` 枚举只有字符串 `"0"`，本插件也接受数值 `0` 并原样交给上游。
 
@@ -222,7 +222,7 @@ curl -sS "$NEW_API_BASE_URL/v2/query/video_generation/$TASK_ID" \
 
 状态转换仅发生在 V2 响应层：等待中为 `queued`，处理中和未识别的非终态为 `running`，成功为 `succeeded`，失败为 `failed`。失败任务包含 `task.error.code` 和 `task.error.message`；成功时 `task.content.url` 是公开产物 URL，可直接下载，无需向产物站点发送 New API 密钥。任务 ID 始终使用 New API 的公开 ID；宿主继续执行鉴权和任务归属检查。
 
-**V2 兼容范围：**路径、请求解码、创建响应、查询包装、状态和视频产物 URL 对齐官方。V2 查询优先选择视频，音频工作流则选择音频，不将辅助预览图作为生成结果。rc.41 的公开 `TaskView` 不包含原请求、模型身份、计费事实或私有插件状态，AutoDL 查询的 `duration` 又是处理耗时，因此查询省略无法确认的 `model / resolution / duration / ratio / usage`，不伪造实际视频时长、比例或 token 用量。需要这些元数据的客户端尚不能做到完全替代官方服务。普通的创建—轮询—下载客户端只需替换 Base URL 和 API Key；`callback_url / extra / file_id` 等未实现能力仍明确拒绝。HTTP 参数错误沿用宿主错误结构，不保证与 MiniMax 的错误包装完全相同。音频工作流是 AutoDL 扩展，成功时 `modality` 为 `audio`。
+**V2 兼容范围：**路径、请求解码、创建响应、查询包装、状态和视频产物 URL 对齐官方。V2 查询优先选择视频，音频工作流则选择音频，不将辅助预览图作为生成结果。rc.41 的公开 `TaskView` 不包含原请求、模型身份、计费事实或私有插件状态，AutoDL 查询的 `duration` 又是处理耗时，因此查询省略无法确认的 `model / resolution / duration / ratio / usage`，不伪造实际视频时长、比例或 token 用量。需要这些元数据的客户端尚不能做到完全替代官方服务。普通的创建—轮询—下载客户端只需替换 Base URL 和 API Key；`callback_url / extra` 接受并忽略，`file_id` 等确实无法实现的能力仍明确拒绝。HTTP 参数错误沿用宿主错误结构，不保证与 MiniMax 的错误包装完全相同。音频工作流是 AutoDL 扩展，成功时 `modality` 为 `audio`。
 
 ## 同一首尾帧任务的两种等价请求
 
@@ -275,8 +275,9 @@ JSON 和文本表单均可使用统一参数。表单里的 `input_reference` �
 - **单图工作流：** 必须恰好 1 张。
 - **首尾帧工作流：** 必须恰好 2 张，第 1 张映射 `first_frame`，第 2 张映射 `last_frame`。
 - **多图参考工作流：** 按数组顺序映射对应的 `ref_image_*`，数量以模型表为准（1–6、1–9，或官网允许图片全部可选的 0–9）。支持 0 张的工作流可省略字段或传 `[]`。
-- **数量或类型不合法直接报错：** 不自动补齐、截断或跳过，不接受 URL 字符串、字符串数组、`null` 占位、嵌套数组或混合类型数组。每个引用对象只能包含 `image_url`，其值必须为公开 HTTP(S) URL 或标准图片 Data URL 字符串；额外字段也会报错。
-- 旧 `images` 字段彻底移除：字段一旦出现就报错，空数组也不兼容。所有参考图只通过 `input_reference` 输入。
+- **数量或类型不合法直接报错：** 不自动补齐、截断或跳过，不接受 `null` 占位、嵌套数组或混合类型数组。每个引用对象只能包含 `image_url`，其值必须为公开 HTTP(S) URL 或标准图片 Data URL 字符串；额外字段也会报错。裸 URL 字符串与字符串数组作为便捷写法被接受。
+- `input_reference` 是**推荐**字段。旧 `images`（New API Sora 风格的 URL 数组）作为**兼容别名**保留，与 `input_reference` 等价并映射到同一批图片槽位；两者同时出现会报错。
+- 官方非媒体字段（`metadata`、`mode`、`user`、`n`、`response_format`）接受并忽略。未知的媒体型字段名（如 `ref_image_0`、`file`）或未知对象字段仍明确报错——不会静默丢图，避免用户以为传了图却发出纯文生视频请求。
 
 参考图接受公开 HTTP(S) URL 或标准图片 Data URL；不支持二进制文件上传和 `file_id`。包含 `file_id` 的引用对象会明确报错，即使同时提供 `image_url` 也不接受。本地文件可先编码成标准 Data URL，或上传到公开存储后填 URL；对象结构与数量规则不变。
 
@@ -370,7 +371,7 @@ curl -sS "$NEW_API_BASE_URL/v2/query/video_generation/$TASK_ID" -H "Authorizatio
 
 当前指定实例使用 CNY 展示、`USDExchangeRate=1`，表达式直接填写上述数值，未做外汇换算或加价。其他实例如使用不同展示汇率，应由管理员按站点币种设置换算，不能盲目复制；既有分组倍率仍由 New API 应用。官网价格后续变化不会自动同步，本文件是已核实日期的快照。
 
-**计费秒数（v1.0.5，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`）。TTS 仍按请求次数计费。
+**计费秒数（v1.0.6，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`）。TTS 仍按请求次数计费。
 
 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此必须声明参考视频秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`。声明支持数值/普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；该值决定提交时的预扣上限，不裁剪视频、不写入 AutoDL body。提交成功后插件立即对参考视频做一次测量：公网 MP4/WebM 用 `bytes=0-1048575` 受限 Range 读取，`data:video/...;base64` 内联解码。结算按「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 声明秒数」取值；远程服务器不支持 Range、URL 不在管理员允许主机或媒体格式无法解析时沿用声明值。请由可信客户端如实提供参考视频时长。
 
