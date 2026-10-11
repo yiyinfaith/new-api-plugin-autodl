@@ -21,5 +21,8 @@
   "content_http_status": 200,
   "content_bytes": 746488,
   "content_has_ftyp": true,
-  "passed": true
+  "passed": true,
+  "temporary_api_key_removed": true,
+  "temporary_management_token_removed": true,
+  "credential_cleanup_verified_in_database": "public.tokens and public.user_access_tokens contain no AutoDL verification rows"
 }

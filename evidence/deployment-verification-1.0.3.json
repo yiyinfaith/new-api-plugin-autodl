@@ -17,5 +17,6 @@
     "tasks": "3371",
     "abilities": "414",
     "models": "181"
-  }
+  },
+  "note": "Plugin-only deployment through /api/plugin/task: the official New API image, Nginx, channels, prices and task records were not changed."
 }
