@@ -1,0 +1,36 @@
+{
+  "provider": "https://autodl.art",
+  "workflow": "wan2.2animate-v4-motion_retargeting",
+  "official_workflow_usable": true,
+  "submissions": [
+    {
+      "task_id": "9738c2ae-5d4d-43bd-bd7c-06b4ece16699",
+      "input_form": "data_url",
+      "note": "ref_image and ref_video sent as data:image/jpeg;base64 and data:video/mp4;base64",
+      "create_http": 200,
+      "status": "SUCCESS",
+      "processing_duration_seconds": 139,
+      "output_video_track_seconds": 0.9666666666666667,
+      "output": {
+        "bytes": 738724,
+        "ftyp": true,
+        "sha256": "529c93e9084abe2200648ba30244f9125de28391451dd0839f04bc48711d0261"
+      }
+    },
+    {
+      "task_id": "7d120939-e1aa-4339-9c2e-4d004306b5a6",
+      "input_form": "public_url",
+      "note": "blank.png plus a public 5s sample MP4",
+      "create_http": 200,
+      "status": "SUCCESS",
+      "processing_duration_seconds": 290,
+      "output_video_track_seconds": 5.712108843537415,
+      "output": {
+        "bytes": 4122834,
+        "ftyp": true,
+        "sha256": "e5fccffb7c37398acab653f71fe33d7706906a48d7b8d55fe859778ff193ba45"
+      }
+    }
+  ],
+  "conclusion": "The official AutoDL motion-transfer workflow is available and produces real MP4 output for both Data URL and public URL inputs; the earlier failure was caused by unreachable placeholder media URLs, not by the workflow or the key."
+}

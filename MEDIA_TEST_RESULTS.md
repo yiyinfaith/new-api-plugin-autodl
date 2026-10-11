@@ -112,3 +112,32 @@ untime_status=registered，plugin_errors={} |
 
 离线覆盖：`node tests.mjs` 的 2,659 项检查覆盖公网测量、内联解码、不可读回退、
 URL 缓存复用，以及结算时成片不可读而改用输入测量值的分支。
+
+## 1.0.4 生产实时验证与 AutoDL 官方可用性（2026-10-11）
+
+**AutoDL 官方动作迁移可用。** 用项目提供的官方 key 直连 `https://autodl.art`，两次提交都创建成功并产出真实 MP4：
+
+| 输入形式 | 官方任务 | 终态 | 输出视频轨 | 输出文件 |
+|---|---|---|---|---|
+| Data URL（`data:image/jpeg;base64` + `data:video/mp4;base64`） | `9738c2ae-…c16699` | SUCCESS | 0.9667 秒 | 738,724 字节，含 `ftyp`/`moov`/`vide`+`soun` |
+| 公网 URL | `7d120939-…b5a6` | SUCCESS | 5.712 秒 | 4,122,834 字节，含 `ftyp`/`moov`/`vide`+`soun` |
+
+之前的失败是**占位 URL 不可达**导致的 `参数 ref_image URL地址不合法/不存在`，不是工作流或 key 的问题。空 body 会返回 `缺少必填参数：ref_image`，错误 token 返回 401，说明鉴权与参数校验都正常。
+
+**New API 侧真实扣费验证（1.0.4）**，`POST /v1/videos`，`wan2.2-animate-move`，Data URL 输入：
+
+| 项目 | 值 |
+|---|---|
+| 调用方声明秒数 | 3 |
+| 提交阶段实测输入视频 | **1.000 秒**（`plugin_state.inputSeconds`，内联解码，0 次网络读取） |
+| 提交预扣 | ¥0.12（3 秒 × ¥0.04） |
+| 查询终态 | `completed`，任务 `SUCCESS` |
+| 实测成片时长 | **0.9666666666666667 秒**（`plugin_state.measuredSeconds`） |
+| 最终实扣 | **¥0.04** |
+| 宿主结算日志 | `settles the difference: delta=¥-0.080000 quota (actual ¥0.040000 quota, pre-consumed ¥0.120000 quota)` |
+| 产物 | `GET /v1/videos/{id}/content` 返回 200、746,488 字节、文件头含 `ftyp` |
+| 临时凭据 | 测试用 New API Key 与管理 token 均已删除 |
+
+这条日志证明结算确实按实测时长走：预扣按声明的 3 秒，最终按实测的 1 秒退回差额。宿主把实测秒数取整到整数秒后再乘单价（0.9667 → 1 秒 → ¥0.04）。
+
+**部署状态：** `autodl` **1.0.4** `active=true`、`runtime_status=registered`、`plugin_errors={}`，源码哈希 `816bff7bbfd04973266e19dc6a7a64430da74c8c94a4cf7cec59e9886ac7f91a`，13 个模型价格表达式与 channels/tasks/abilities/models 行数部署前后一致。
