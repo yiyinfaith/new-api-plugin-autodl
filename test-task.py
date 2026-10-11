@@ -1,7 +1,9 @@
-"""Unified Task API client: submit once, poll with a deadline, download an artifact."""
+"""Unified Task API client: submit once, poll with a deadline, download an artifact.
+
+Supports the two remaining request surfaces: OpenAI Videos and MiniMax V2.
+"""
 import argparse
 import json
-import math
 import os
 import pathlib
 import sys
@@ -14,11 +16,9 @@ import urllib.request
 def main():
     parser = argparse.ArgumentParser(description='通过 New API AutoDL 插件调用任意工作流并下载产物')
     choice = parser.add_mutually_exclusive_group(required=True)
-    choice.add_argument('--request', help='所选格式的请求 JSON 文件；原生模式只放 AutoDL body')
+    choice.add_argument('--request', help='所选格式的请求 JSON 文件')
     choice.add_argument('--example', help='examples.json 中的官网工作流 ID；必需媒体要先替换为真实 URL')
-    parser.add_argument('--format', choices=['openai', 'minimax', 'autodl', 'dashscope'], default='openai', help='请求格式；默认保持现有 OpenAI 格式')
-    parser.add_argument('--model', help='AutoDL 原生 --request 请求的官网工作流 ID，放在 URL 中，不加入 body')
-    parser.add_argument('--billing-seconds', type=float, help='Native Wan / DashScope 必填的参考视频秒数声明，仅用于计费')
+    parser.add_argument('--format', choices=['openai', 'minimax'], default='openai', help='请求格式；默认 OpenAI Videos')
     parser.add_argument('--out', required=True, help='输出文件，禁止覆盖已有文件')
     parser.add_argument('--artifact', help='产物类型，如 video 或 audio；默认下载首个适用产物')
     parser.add_argument('--timeout', type=int, default=1800)
@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
     if args.timeout <= 0 or args.interval <= 0:
         raise ValueError('timeout 和 interval 必须大于零')
-    supported_artifacts = {'openai': ['video'], 'minimax': ['video', 'audio'], 'autodl': ['video', 'audio', 'image', 'file'], 'dashscope': ['video']}
+    supported_artifacts = {'openai': ['video'], 'minimax': ['video', 'audio']}
     if args.artifact and args.artifact not in supported_artifacts[args.format]:
         raise ValueError('所选格式不支持 --artifact ' + args.artifact)
     base = os.environ.get('NEW_API_BASE_URL', 'http://127.0.0.1:3000').rstrip('/')
@@ -40,31 +40,12 @@ def main():
         selected_examples = examples if args.format == 'openai' else examples['_formats'][args.format]
         if args.example not in selected_examples:
             raise ValueError('模型未列入 examples.json 的所选格式')
-        if args.format == 'openai':
-            body = examples[args.example]
-        else:
-            body = examples['_formats'][args.format][args.example]
-            if args.format == 'autodl':
-                body = body['body']
+        body = selected_examples[args.example]
     if not isinstance(body, dict):
         raise ValueError('JSON 请求必须是对象')
-    submit_path = '/v2/video_generation' if args.format == 'minimax' else '/v1/videos'
-    if args.format == 'dashscope':
-        submit_path = '/api/v1/services/aigc/image2video/video-synthesis'
-    if args.format == 'autodl':
-        model = args.model or args.example
-        if not model:
-            raise ValueError('AutoDL 原生 --request 必须同时提供 --model 工作流 ID')
-        submit_path = '/api/v1/comfyui/comfyui_workflow/' + urllib.parse.quote(model, safe='')
-    elif not body.get('model'):
+    if not body.get('model'):
         raise ValueError('JSON 请求必须包含 model')
-    needs_declaration = args.format == 'dashscope' or (args.format == 'autodl' and model == 'wan2.2animate-v4-motion_retargeting')
-    if needs_declaration:
-        if args.billing_seconds is None or not math.isfinite(args.billing_seconds) or not 0 < args.billing_seconds <= 3600:
-            raise ValueError('该工作流没有固定默认时长；请用 --billing-seconds 声明参考视频秒数（0 < 秒数 <= 3600）')
-        submit_path += '?billing_seconds=' + format(args.billing_seconds, '.15g')
-    elif args.billing_seconds is not None:
-        raise ValueError('--billing-seconds 仅适用于 Native Wan / DashScope；其他格式使用请求体时长字段')
+    submit_path = '/v2/video_generation' if args.format == 'minimax' else '/v1/videos'
     if 'your-public-file-host.example' in json.dumps(body):
         raise ValueError('请将媒体占位 URL 替换为公开可下载的真实图片、音频或视频 URL / 标准 Data URL，再通过 --request 提交')
     output = pathlib.Path(args.out).expanduser().resolve()
@@ -72,8 +53,6 @@ def main():
     if output.exists() or temporary.exists():
         raise ValueError('输出文件或 .part 文件已存在，请选择其他 --out 路径')
     headers = {'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'}
-    if args.format == 'dashscope':
-        headers['X-DashScope-Async'] = 'enable'
     deadline = time.monotonic() + args.timeout
 
     def call(method, path, payload=None):
@@ -89,11 +68,11 @@ def main():
             raise RuntimeError('New API HTTP ' + str(error.code) + '；请检查渠道 Token、价格、分组和工作流参数') from None
 
     submitted = call('POST', submit_path, body)
-    public_id = (submitted.get('output') or {}).get('task_id') if args.format == 'dashscope' else submitted.get('id' if args.format == 'openai' else 'task_id')
+    public_id = submitted.get('id' if args.format == 'openai' else 'task_id')
     if not isinstance(public_id, str) or not public_id:
         raise RuntimeError('提交响应缺少 New API 公开 task_id')
     print('task_id: ' + public_id, flush=True)
-    query_prefix = {'openai': '/v1/videos/', 'minimax': '/v2/query/video_generation/', 'autodl': '/api/v1/comfyui/comfyui_workflow/result/', 'dashscope': '/api/v1/tasks/'}[args.format]
+    query_prefix = {'openai': '/v1/videos/', 'minimax': '/v2/query/video_generation/'}[args.format]
     path = query_prefix + urllib.parse.quote(public_id, safe='')
     failures = 0
     while time.monotonic() < deadline:
@@ -103,10 +82,6 @@ def main():
                 task = task.get('task')
                 if not isinstance(task, dict):
                     raise RuntimeError('MiniMax V2 查询响应缺少 task 对象')
-            if args.format == 'dashscope':
-                task = task.get('output')
-                if not isinstance(task, dict):
-                    raise RuntimeError('DashScope 查询响应缺少 output 对象')
             failures = 0
         except (RuntimeError, urllib.error.URLError, TimeoutError):
             failures += 1
@@ -114,29 +89,17 @@ def main():
                 raise
             time.sleep(min(args.interval, max(0, deadline - time.monotonic())))
             continue
-        status = task.get('task_status' if args.format == 'dashscope' else 'status')
+        status = task.get('status')
         print('status: ' + str(status), flush=True)
         if status in ['FAILURE', 'failed', 'cancelled', 'FAILED', 'CANCELED']:
             raise RuntimeError('任务失败，请查看任务错误信息：' + str(task.get('error') or task.get('fail_reason') or task.get('message') or status))
         if status in ['SUCCESS', 'succeeded', 'completed', 'SUCCEEDED']:
-            if args.format in ['minimax', 'dashscope']:
+            if args.format == 'minimax':
                 if args.artifact and task.get('modality', 'video') != args.artifact:
                     raise ValueError('MiniMax V2 返回的产物类型与 --artifact 不一致')
-                url = (task.get('results') or {}).get('video_url') if args.format == 'dashscope' else (task.get('content') or {}).get('url')
-                parsed = urllib.parse.urlsplit(url) if isinstance(url, str) else None
-                if not parsed or parsed.scheme not in ['http', 'https'] or not parsed.hostname or parsed.username or parsed.password:
-                    raise RuntimeError('查询响应缺少公开 HTTP(S) 产物 URL')
                 # Official V2 returns a public provider URL. Never forward the
                 # New API bearer token to the provider's media host.
-                download = urllib.request.Request(url)
-            elif args.format == 'autodl':
-                items = task.get('results', [])
-                artifact = next((item for item in items if not args.artifact or item.get('type') == args.artifact), None)
-                url = artifact.get('url') if isinstance(artifact, dict) else None
-                parsed = urllib.parse.urlsplit(url) if isinstance(url, str) else None
-                if not parsed or parsed.scheme not in ['http', 'https'] or not parsed.hostname or parsed.username or parsed.password:
-                    raise RuntimeError('原生查询响应缺少公开 HTTP(S) 产物 URL')
-                download = urllib.request.Request(url)
+                download = urllib.request.Request(_public_url((task.get('content') or {}).get('url')))
             else:
                 if args.artifact and args.artifact != 'video':
                     raise ValueError('OpenAI Video --artifact 只支持 video')
@@ -167,6 +130,13 @@ def main():
             return
         time.sleep(min(args.interval, max(0, deadline - time.monotonic())))
     raise TimeoutError('客户端轮询达到截止时间；New API / AutoDL 上游任务可能仍在运行')
+
+
+def _public_url(url):
+    parsed = urllib.parse.urlsplit(url) if isinstance(url, str) else None
+    if not parsed or parsed.scheme not in ['http', 'https'] or not parsed.hostname or parsed.username or parsed.password:
+        raise RuntimeError('查询响应缺少公开 HTTP(S) 产物 URL')
+    return url
 
 
 if __name__ == '__main__':

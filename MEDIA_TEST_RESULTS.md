@@ -1,5 +1,7 @@
 # 输入媒体真实测试记录
 
+> **版本说明：**1.0.5 起插件只保留 **OpenAI Videos**（`POST /v1/videos`）与 **MiniMax 官方 V2**（`POST /v2/video_generation`）两种请求格式，并移除了官方模型名（`MiniMax-H3` / `MiniMax-H3-Max`）自动路由，调用时请直接使用 AutoDL 工作流 ID。本文件 1.0.0–1.0.4 章节中的 AutoDL 原生、DashScope Wan 以及官方别名记录是**当时的历史证据**，对应的能力已按要求删除；保留原文是为了不篡改历史测试结论。
+
 2026-10-09；插件 `1.0.0`。全部创建与查询请求通过 `https://api.example.com`，不是 mock。15 个任务轮询至成功，下载 MP4 并以 ffprobe 确认视频轨道，覆盖 22 个协议/媒体/输入类型组合及纯文本回归。New API 实扣合计 **¥0.541**；9 个失败任务结算额度为 0。该金额是 New API 任务账目，不代表独立核验的 AutoDL 账单。
 
 输入使用 JPEG、WAV、MP4；Data URL 使用匹配的 MIME 与标准 Base64。图片和音频合并在同一 H3 任务中测试以减少费用。输出均为公网 URL，签名有效期为签发后 24 小时。签名查询字符串包含临时访问凭证，GitHub 密钥保护规则拒绝将其写入仓库；完整结果 URL 已随交付报告提供。此表保留公开任务 ID 和视频验证结论。
@@ -141,3 +143,27 @@ URL 缓存复用，以及结算时成片不可读而改用输入测量值的分�
 这条日志证明结算确实按实测时长走：预扣按声明的 3 秒，最终按实测的 1 秒退回差额。宿主把实测秒数取整到整数秒后再乘单价（0.9667 → 1 秒 → ¥0.04）。
 
 **部署状态：** `autodl` **1.0.4** `active=true`、`runtime_status=registered`、`plugin_errors={}`，源码哈希 `816bff7bbfd04973266e19dc6a7a64430da74c8c94a4cf7cec59e9886ac7f91a`，13 个模型价格表达式与 channels/tasks/abilities/models 行数部署前后一致。
+
+## 1.0.5 请求格式收敛（2026-10-11）
+
+按需求收敛插件表面：**只保留 OpenAI Videos 与 MiniMax 官方 V2 两种请求格式**，并**删除官方模型名自动路由**。
+
+**已删除的能力**
+
+| 已删除 | 说明 |
+|---|---|
+| AutoDL 原生 / ComfyUI 透传 | `POST /api/v1/comfyui/comfyui_workflow/{workflow_id}`、`GET .../result/{task_id}`；原生 body 透传、旁路计费校验、`?billing_seconds=` 查询参数一并移除 |
+| DashScope Wan | `POST /api/v1/services/aigc/image2video/video-synthesis`、`GET /api/v1/tasks/{task_id}`，以及 `input` / `parameters` 风格的请求校验 |
+| 官方模型名自动路由 | `MiniMax-H3`、`MiniMax-H3-Max`、`MiniMax-H3-MAX` 不再存在，也不再由模型名路由到不同工作流；`model` 直接填工作流 ID |
+| Nginx 路径转发 | 插件只注册 `/v2/...` 路由，不与宿主保留命名空间相交，**不再需要任何 Nginx 配置** |
+
+**保留的能力**
+
+- 17 个 AutoDL 工作流 ID 在两种格式下都可用，`model` 直接填工作流 ID。
+- 渠道别名 `wan2.2-animate-move` 仍可作为 **OpenAI 格式**的别名，通过渠道模型映射指向 `wan2.2animate-v4-motion_retargeting`。
+- 计费规则不变：15 个 H3 工作流按请求时长（缺省 5 秒）、`indextts2-v1` 按次、动作迁移由调用方声明秒数。
+- 动作迁移的提交阶段测量与结算回退顺序不变：**成片新探测 → 轮询记录 → 提交阶段测得的输入时长 → 声明秒数**。
+
+**离线验证：**`node tests.mjs` **1,097 项检查**、872 个宿主 fixture，覆盖 17 个工作流的 OpenAI 与 MiniMax 双格式映射、MiniMax V2 全生命周期（解码 → 提交 → 持久化 → 轮询 → 结算 → 失败退款）、动作迁移的测量与结算分支，以及被删除能力与已移除模型名的拒绝路径；`tests-client.py` 38 项通过。
+
+**生产变更：**插件更新为 1.0.5；同时从 `api.yiyinfaith.com` 的 vhost 中删除了插件专用的 4 条 rewrite 与内部 `/plugin-bridge/` location（改动前已备份，`nginx -t` 通过）。删除后 `/api/status`、`/api/pricing` 等通用接口不受影响，旧的插件路径按预期返回 404。

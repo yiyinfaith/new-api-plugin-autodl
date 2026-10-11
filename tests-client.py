@@ -1,4 +1,7 @@
-"""Verify submit request shapes with urlopen mocked; never contact a service."""
+"""Verify submit request shapes with urlopen mocked; never contact a service.
+
+Only the two remaining surfaces are exercised: OpenAI Videos and MiniMax V2.
+"""
 import importlib.util, io, json, os, pathlib, sys, tempfile
 from unittest.mock import patch
 
@@ -8,20 +11,23 @@ client = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(client)
 examples = json.loads((ROOT/'examples.json').read_text(encoding='utf-8'))
 model = 'minimax_h3_lightx2v_no_pic'
+motion = 'wan2.2animate-v4-motion_retargeting'
+DIALECTS = ['openai', 'minimax']
+SUBMIT_PATH = {'openai': '/v1/videos', 'minimax': '/v2/video_generation'}
+QUERY_PATH = {'openai': '/v1/videos/task_test', 'minimax': '/v2/query/video_generation/task_test'}
 class Captured(Exception): pass
 checks = 0
 with tempfile.TemporaryDirectory(prefix='autodl-client-qa-') as directory:
     folder = pathlib.Path(directory)
-    for dialect in ['openai', 'minimax', 'autodl']:
-        expected = examples[model] if dialect == 'openai' else examples['_formats'][dialect][model]
-        if dialect == 'autodl': expected = expected['body']
-        path = {'openai': '/v1/videos', 'minimax': '/v2/video_generation', 'autodl': '/api/v1/comfyui/comfyui_workflow/'+model}[dialect]
+    # 1. Both dialects submit exactly the documented body to the documented path.
+    for dialect in DIALECTS:
+        expected = examples[model] if dialect == 'openai' else examples['_formats']['minimax'][model]
+        path = SUBMIT_PATH[dialect]
         for source in ['example', 'request']:
             request_file = folder/(dialect+'.json')
             request_file.write_text(json.dumps(expected), encoding='utf-8')
             argv = ['test-task.py', '--'+source, model if source=='example' else str(request_file), '--out', str(folder/'output.mp4')]
             if dialect != 'openai': argv += ['--format', dialect]
-            if dialect == 'autodl' and source == 'request': argv += ['--model', model]
             def capture(request, **kwargs):
                 assert request.full_url == 'https://newapi.example'+path
                 assert request.method == 'POST'
@@ -32,213 +38,147 @@ with tempfile.TemporaryDirectory(prefix='autodl-client-qa-') as directory:
                 try: client.main()
                 except Captured: checks += 1
                 else: raise AssertionError('Expected submit capture')
-    for alias in ['MiniMax-H3', 'MiniMax-H3-Max']:
-        expected = examples['_formats']['minimax'][alias]
-        def capture_alias(request, **kwargs):
-            assert request.full_url == 'https://newapi.example/v2/video_generation'
-            assert json.loads(request.data) == expected
-            raise Captured()
-        argv = ['test-task.py', '--format', 'minimax', '--example', alias, '--out', str(folder/'output.mp4')]
-        with patch.dict(os.environ, {'NEW_API_BASE_URL':'https://newapi.example', 'NEW_API_KEY':'fake-newapi-key'}), patch.object(sys, 'argv', argv), patch.object(client.urllib.request, 'urlopen', capture_alias):
+    # 2. The removed surfaces are no longer selectable formats.
+    for removed in ['autodl', 'dashscope', 'native']:
+        with patch.dict(os.environ, {'NEW_API_KEY':'fake-newapi-key'}), patch.object(sys,'argv',['test-task.py','--format',removed,'--request',str(folder/'openai.json'),'--out',str(folder/'x.mp4')]), patch.object(client.urllib.request,'urlopen') as network:
             try: client.main()
-            except Captured: checks += 1
-            else: raise AssertionError('Expected official alias capture')
-    with patch.dict(os.environ, {'NEW_API_KEY':'fake-newapi-key'}), patch.object(sys,'argv',['test-task.py','--format','autodl','--request',str(folder/'autodl.json'),'--out',str(folder/'output.mp4')]), patch.object(client.urllib.request,'urlopen') as network:
-        try: client.main()
-        except ValueError as error: assert '--model' in str(error); checks += 1
-        else: raise AssertionError('Missing raw URL model accepted')
-        network.assert_not_called()
+            except (ValueError, SystemExit): checks += 1
+            else: raise AssertionError(removed + ' format still accepted')
+            network.assert_not_called()
+    # 3. The removed official model aliases can no longer be selected.
+    for alias in ['MiniMax-H3', 'MiniMax-H3-Max']:
+        with patch.dict(os.environ, {'NEW_API_KEY':'fake-newapi-key'}), patch.object(sys,'argv',['test-task.py','--format','minimax','--example',alias,'--out',str(folder/'x.mp4')]), patch.object(client.urllib.request,'urlopen') as network:
+            try: client.main()
+            except (ValueError, SystemExit, KeyError): checks += 1
+            else: raise AssertionError(alias + ' alias still accepted')
+            network.assert_not_called()
+# 4. Full submit -> poll -> download flow for both dialects.
 with tempfile.TemporaryDirectory(prefix='autodl-client-flow-') as directory:
     folder = pathlib.Path(directory)
-    for dialect in ['openai', 'minimax', 'autodl']:
-        path = {'openai': '/v1/videos', 'minimax': '/v2/video_generation', 'autodl': '/api/v1/comfyui/comfyui_workflow/'+model}[dialect]
-        query = {'openai': '/v1/videos/task_test', 'minimax': '/v2/query/video_generation/task_test', 'autodl': '/api/v1/comfyui/comfyui_workflow/result/task_test'}[dialect]
+    for dialect in DIALECTS:
+        path = SUBMIT_PATH[dialect]
+        query = QUERY_PATH[dialect]
         video = 'https://cdn.example.com/result.mp4'
-        result = {'openai': {'status':'completed'}, 'minimax': {'task':{'id':'task_test','status':'succeeded','content':{'url':video}}}, 'autodl': {'task_id':'task_test','status':'SUCCESS','results':[{'url':video,'type':'video'}]}}[dialect]
+        result = {'openai': {'status':'completed'}, 'minimax': {'task':{'id':'task_test','status':'succeeded','content':{'url':video}}}}[dialect]
         calls = []
         def network(request, **kwargs):
-            calls.append((request.get_method(),request.full_url))
+            calls.append((request.get_method(), request.full_url))
             if request.get_method() == 'POST':
-                assert request.full_url=='https://newapi.example'+path
-                assert request.headers['Authorization']=='Bearer fake-newapi-key'
+                assert request.full_url == 'https://newapi.example'+path
+                assert request.headers['Authorization'] == 'Bearer fake-newapi-key'
                 return io.BytesIO(json.dumps({'id' if dialect=='openai' else 'task_id':'task_test'}).encode())
-            if request.full_url=='https://newapi.example'+query:
-                assert request.headers['Authorization']=='Bearer fake-newapi-key'
+            if request.full_url == 'https://newapi.example'+query:
+                assert request.headers['Authorization'] == 'Bearer fake-newapi-key'
                 return io.BytesIO(json.dumps(result).encode())
-            if dialect=='openai':
-                assert request.full_url=='https://newapi.example'+query+'/content'
-                assert request.headers['Authorization']=='Bearer fake-newapi-key'
+            if dialect == 'openai':
+                assert request.full_url == 'https://newapi.example'+query+'/content'
+                assert request.headers['Authorization'] == 'Bearer fake-newapi-key'
             else:
-                assert request.full_url==video and not request.has_header('Authorization')
+                assert request.full_url == video and not request.has_header('Authorization')
             return io.BytesIO(b'fake-video-content')
-        output=folder/(dialect+'.mp4')
-        argv=['test-task.py','--format',dialect,'--example',model,'--out',str(output)]
+        output = folder/(dialect+'.mp4')
+        argv = ['test-task.py','--format',dialect,'--example',model,'--out',str(output)]
         with patch.dict(os.environ,{'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',network):
             client.main()
-        assert output.read_bytes()==b'fake-video-content' and len(calls)==3
+        assert output.read_bytes() == b'fake-video-content' and len(calls) == 3
         assert not output.with_name(output.name+'.part').exists()
-        checks+=1
-
-# Audit regressions never submit a real job: all urlopen calls are replaced.
+        checks += 1
+# 5. Audit regressions never submit a real job: all urlopen calls are replaced.
 spec = importlib.util.spec_from_file_location('autodl_video_client', ROOT/'test-video.py')
 video_client = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(video_client)
 with tempfile.TemporaryDirectory(prefix='autodl-client-audit-') as directory:
     folder = pathlib.Path(directory)
-    for dialect in ['openai', 'minimax', 'autodl']:
-        argv=['test-task.py','--format',dialect,'--example',model,'--artifact','not-a-type','--out',str(folder/'invalid.mp4')]
+    for dialect in DIALECTS:
+        argv = ['test-task.py','--format',dialect,'--example',model,'--artifact','not-a-type','--out',str(folder/'invalid.mp4')]
         with patch.dict(os.environ,{'NEW_API_KEY':'fake'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen') as network:
-            try:client.main()
-            except ValueError as error:assert '--artifact' in str(error)
-            else:raise AssertionError('Invalid artifact option accepted')
-            network.assert_not_called();checks+=1
-    request_file=folder/'tts.json'
+            try: client.main()
+            except ValueError as error: assert '--artifact' in str(error)
+            else: raise AssertionError('Invalid artifact option accepted')
+            network.assert_not_called(); checks += 1
+    # A MiniMax audio workflow keeps its modality and downloads the audio artifact.
+    request_file = folder/'tts.json'
     request_file.write_text(json.dumps({'model':'indextts2-v1','content':[{'type':'text','text':'Hello'},{'type':'audio_url','role':'reference_audio','audio_url':{'url':'https://cdn.example.com/reference.wav'}}]}),encoding='utf-8')
-    audio_url='https://cdn.example.com/result.wav'
-    output=folder/'result.wav'
-    def audio_network(request,**kwargs):
-        if request.get_method()=='POST':return io.BytesIO(b'{"task_id":"task_audio"}')
-        if request.full_url.endswith('/v2/query/video_generation/task_audio'):return io.BytesIO(json.dumps({'task':{'status':'succeeded','modality':'audio','content':{'url':audio_url}}}).encode())
-        assert request.full_url==audio_url and not request.has_header('Authorization')
+    audio_url = 'https://cdn.example.com/result.wav'
+    output = folder/'result.wav'
+    def audio_network(request, **kwargs):
+        if request.get_method() == 'POST': return io.BytesIO(b'{"task_id":"task_audio"}')
+        if request.full_url.endswith('/v2/query/video_generation/task_audio'): return io.BytesIO(json.dumps({'task':{'status':'succeeded','modality':'audio','content':{'url':audio_url}}}).encode())
+        assert request.full_url == audio_url and not request.has_header('Authorization')
         return io.BytesIO(b'fake-audio')
-    argv=['test-task.py','--format','minimax','--request',str(request_file),'--artifact','audio','--out',str(output)]
-    with patch.dict(os.environ,{'NEW_API_KEY':'fake'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',audio_network):client.main()
-    assert output.read_bytes()==b'fake-audio';checks+=1
-    output=folder/'existing.mp4';part=folder/'existing.mp4.part';part.write_bytes(b'other-download')
+    argv = ['test-task.py','--format','minimax','--request',str(request_file),'--artifact','audio','--out',str(output)]
+    with patch.dict(os.environ,{'NEW_API_KEY':'fake'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',audio_network): client.main()
+    assert output.read_bytes() == b'fake-audio'; checks += 1
+    output = folder/'existing.mp4'; part = folder/'existing.mp4.part'; part.write_bytes(b'other-download')
     with patch.dict(os.environ,{'NEW_API_KEY':'fake'}),patch.object(sys,'argv',['test-video.py','--out',str(output)]),patch.object(video_client.urllib.request,'urlopen') as network:
-        try:video_client.main()
-        except ValueError:pass
-        else:raise AssertionError('Existing partial download accepted')
-        network.assert_not_called();assert part.read_bytes()==b'other-download';checks+=1
+        try: video_client.main()
+        except ValueError: pass
+        else: raise AssertionError('Existing partial download accepted')
+        network.assert_not_called(); assert part.read_bytes() == b'other-download'; checks += 1
     for race in ['output','part']:
-        output=folder/(race+'.mp4');part=output.with_name(output.name+'.part')
-        def race_network(request,**kwargs):
-            if request.get_method()=='POST':return io.BytesIO(b'{"id":"task_test"}')
+        output = folder/(race+'.mp4'); part = output.with_name(output.name+'.part')
+        def race_network(request, **kwargs):
+            if request.get_method() == 'POST': return io.BytesIO(b'{"id":"task_test"}')
             if request.full_url.endswith('/content'):
-                if race=='output':output.write_bytes(b'concurrent-output')
+                if race == 'output': output.write_bytes(b'concurrent-output')
                 return io.BytesIO(b'fake-video')
-            if race=='part':part.write_bytes(b'concurrent-part')
+            if race == 'part': part.write_bytes(b'concurrent-part')
             return io.BytesIO(b'{"status":"completed"}')
         with patch.dict(os.environ,{'NEW_API_KEY':'fake'}),patch.object(sys,'argv',['test-video.py','--out',str(output)]),patch.object(video_client.urllib.request,'urlopen',race_network):
-            try:video_client.main()
-            except FileExistsError:pass
-            else:raise AssertionError('Concurrent file overwritten')
-        if race=='output':assert output.read_bytes()==b'concurrent-output' and not part.exists()
-        else:assert part.read_bytes()==b'concurrent-part' and not output.exists()
-        checks+=1
-with tempfile.TemporaryDirectory(prefix='autodl-dashscope-client-') as directory:
-    folder = pathlib.Path(directory)
-    wan = 'wan2.2-animate-move'
-    body = examples['_formats']['dashscope'][wan]
-    request_file = folder/'dashscope.json'
-    request_file.write_text(json.dumps(body), encoding='utf-8')
-    for source in ['example', 'request']:
-        argv = ['test-task.py', '--format', 'dashscope', '--billing-seconds', '5', '--'+source, wan if source=='example' else str(request_file), '--out', str(folder/'capture.mp4')]
-        def capture_dash(request, **kwargs):
-            assert request.full_url == 'https://newapi.example/api/v1/services/aigc/image2video/video-synthesis?billing_seconds=5'
-            assert request.get_header('X-dashscope-async') == 'enable'
-            assert request.get_header('Authorization') == 'Bearer fake-newapi-key'
-            assert json.loads(request.data) == body
-            raise Captured()
-        with patch.dict(os.environ, {'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-newapi-key'}), patch.object(sys,'argv',argv), patch.object(client.urllib.request,'urlopen',capture_dash):
-            try: client.main()
-            except Captured: checks += 1
-            else: raise AssertionError('Expected DashScope submit capture')
-    output = folder/'dashscope.mp4'
-    states = iter(['PENDING', 'RUNNING', 'SUCCEEDED'])
-    calls = []
-    def dash_network(request, **kwargs):
-        calls.append(request.full_url)
-        if request.get_method()=='POST':
-            return io.BytesIO(b'{"output":{"task_status":"PENDING","task_id":"task_dash"},"request_id":""}')
-        if request.full_url == 'https://newapi.example/api/v1/tasks/task_dash':
-            assert request.get_header('Authorization')=='Bearer fake-newapi-key'
-            result={'task_id':'task_dash','task_status':next(states)}
-            if result['task_status']=='SUCCEEDED':result['results']={'video_url':'https://cdn.example.com/result.mp4'}
-            return io.BytesIO(json.dumps({'output':result,'request_id':''}).encode())
-        assert request.full_url=='https://cdn.example.com/result.mp4'
-        assert not request.has_header('Authorization') and not request.has_header('X-dashscope-async')
-        return io.BytesIO(b'fake-dashscope-video')
-    argv=['test-task.py','--format','dashscope','--billing-seconds','5','--request',str(request_file),'--out',str(output),'--interval','1']
-    with patch.dict(os.environ, {'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',dash_network),patch.object(client.time,'sleep'):
-        client.main()
-    assert output.read_bytes()==b'fake-dashscope-video' and len(calls)==5
-    checks+=1
-    for status in ['FAILED','CANCELED']:
-        def failed_dash(request, **kwargs):
-            if request.get_method()=='POST':return io.BytesIO(b'{"output":{"task_id":"task_dash"}}')
-            return io.BytesIO(json.dumps({'output':{'task_status':status,'message':'actual failure'}}).encode())
-        argv=['test-task.py','--format','dashscope','--billing-seconds','5','--request',str(request_file),'--out',str(folder/(status+'.mp4'))]
-        with patch.dict(os.environ,{'NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',failed_dash):
-            try:client.main()
-            except RuntimeError as error:assert 'actual failure' in str(error)
-            else:raise AssertionError('DashScope failed task accepted')
-        checks+=1
-# Inline input must survive client serialization unchanged for all four formats.
+            try: video_client.main()
+            except FileExistsError: pass
+            else: raise AssertionError('Concurrent file overwritten')
+        if race == 'output': assert output.read_bytes() == b'concurrent-output' and not part.exists()
+        else: assert part.read_bytes() == b'concurrent-part' and not output.exists()
+        checks += 1
+# 6. Inline input must survive client serialization unchanged for both formats.
 with tempfile.TemporaryDirectory(prefix='autodl-inline-client-') as directory:
     folder = pathlib.Path(directory)
     image = 'data:image/png;base64,AAAA'
     audio = 'data:audio/wav;base64,AAAA'
     video = 'data:video/mp4;base64,AAAA'
-    motion = 'wan2.2animate-v4-motion_retargeting'
     cases = {
-        'openai': {'model':motion, 'input_reference':{'image_url':image}, 'videos':[video]},
-        'minimax': {'model':motion, 'content':[
+        'openai': {'model': motion, 'seconds': 1, 'input_reference': {'image_url': image}, 'videos': [video]},
+        'minimax': {'model': motion, 'duration': 1, 'content': [
             {'type':'image_url','role':'reference_image','image_url':{'url':image}},
             {'type':'video_url','role':'reference_video','video_url':{'url':video}}]},
-        'autodl': {'ref_image':image, 'ref_video':video},
-        'dashscope': {'model':'wan2.2-animate-move', 'input':{'image_url':image,'video_url':video}},
+        'openai-audio': {'model':'minimax_h3_image_audio_to_video_v2','input_reference':{'image_url':image},'audios':[audio],'prompt':'Hello','seconds':1},
+        'minimax-audio': {'model':'minimax_h3_image_audio_to_video_v2','duration':1,'content':[
+            {'type':'text','text':'Hello'},
+            {'type':'audio_url','role':'reference_audio','audio_url':{'url':audio}}]},
     }
-    paths = {'openai':'/v1/videos', 'minimax':'/v2/video_generation',
-             'autodl':'/api/v1/comfyui/comfyui_workflow/'+motion,
-             'dashscope':'/api/v1/services/aigc/image2video/video-synthesis'}
-    # Also exercise existing audio fields; DashScope has no audio field.
-    cases['openai-audio'] = {'model':'minimax_h3_image_audio_to_video_v2',
-                             'input_reference':{'image_url':image}, 'audios':[audio], 'prompt':'Hello','seconds':1}
-    cases['minimax-audio'] = {'model':'minimax_h3_image_audio_to_video_v2','duration':1,'content':[
-        {'type':'text','text':'Hello'},
-        {'type':'audio_url','role':'reference_audio','audio_url':{'url':audio}}]}
-    cases['autodl-audio'] = {'prompt':'Hello','duration':1,'ref_audio_0':audio}
     for case, expected in cases.items():
         dialect = case.split('-')[0]
-        path = paths[dialect]
-        native_model = 'minimax_h3_image_audio_to_video_v2' if case.endswith('-audio') else motion
-        if dialect == 'autodl':path = '/api/v1/comfyui/comfyui_workflow/'+native_model
         request_file = folder/(case+'.json')
         request_file.write_text(json.dumps(expected), encoding='utf-8')
         argv = ['test-task.py','--format',dialect,'--request',str(request_file),'--out',str(folder/(case+'.mp4'))]
-        if dialect == 'autodl':argv += ['--model',native_model]
-        if dialect == 'dashscope' or (dialect == 'autodl' and native_model == motion):
-            argv += ['--billing-seconds', '5']; path += '?billing_seconds=5'
-        def capture_inline(request, **kwargs):
-            assert request.full_url == 'https://newapi.example'+path
+        def capture_inline(request, _path=SUBMIT_PATH[dialect], _expected=expected, **kwargs):
+            assert request.full_url == 'https://newapi.example'+_path
             assert request.get_method() == 'POST'
-            assert json.loads(request.data) == expected
+            assert json.loads(request.data) == _expected
             raise Captured()
         with patch.dict(os.environ,{'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-newapi-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',capture_inline):
-            try:client.main()
-            except Captured:checks += 1
-            else:raise AssertionError('Expected inline input capture')
-# Required declaration is a URL query, never a Native/DashScope body mutation.
+            try: client.main()
+            except Captured: checks += 1
+            else: raise AssertionError('Expected inline input capture')
+# 7. Motion transfer declares its billed seconds in the request body, never a query.
 with tempfile.TemporaryDirectory(prefix='autodl-billing-client-') as directory:
-    folder=pathlib.Path(directory)
-    request_file=folder/'native.json'; request_file.write_text(json.dumps({'ref_image':'https://cdn.example/a.png','ref_video':'https://cdn.example/a.mp4'}),encoding='utf-8')
-    original=json.loads(request_file.read_text())
-    for value in [None,'0','-1','3601','nan','inf']:
-        argv=['test-task.py','--format','autodl','--model','wan2.2animate-v4-motion_retargeting','--request',str(request_file),'--out',str(folder/'bad.mp4')]
-        if value is not None:argv+=['--billing-seconds',value]
-        with patch.dict(os.environ,{'NEW_API_KEY':'fake-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen') as network:
-            try:client.main()
-            except ValueError as error:assert 'billing-seconds' in str(error)
-            else:raise AssertionError('invalid billing declaration accepted')
-            network.assert_not_called();checks+=1
-    argv=['test-task.py','--format','autodl','--model','wan2.2animate-v4-motion_retargeting','--request',str(request_file),'--out',str(folder/'good.mp4'),'--billing-seconds','3.25']
-    def capture_billing(request,**kwargs):
-        assert request.full_url.endswith('/api/v1/comfyui/comfyui_workflow/wan2.2animate-v4-motion_retargeting?billing_seconds=3.25')
-        assert json.loads(request.data)==original
-        raise Captured()
-    with patch.dict(os.environ,{'NEW_API_KEY':'fake-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',capture_billing):
-        try:client.main()
-        except Captured:checks+=1
-        else:raise AssertionError('expected native billing capture')
+    folder = pathlib.Path(directory)
+    declarations = {
+        'openai': {'model': motion, 'seconds': 3.25, 'input_reference': {'image_url': 'https://cdn.example/a.png'}, 'videos': ['https://cdn.example/a.mp4']},
+        'minimax': {'model': motion, 'duration': 3.25, 'content': [{'type':'image_url','role':'reference_image','image_url':{'url':'https://cdn.example/a.png'}},{'type':'video_url','role':'reference_video','video_url':{'url':'https://cdn.example/a.mp4'}}]},
+    }
+    for dialect, body in declarations.items():
+        request_file = folder/(dialect+'-motion.json')
+        request_file.write_text(json.dumps(body), encoding='utf-8')
+        def capture_billing(request, _path=SUBMIT_PATH[dialect], _body=body, **kwargs):
+            assert request.full_url == 'https://newapi.example'+_path
+            assert '?' not in request.full_url
+            assert json.loads(request.data) == _body
+            raise Captured()
+        argv = ['test-task.py','--format',dialect,'--request',str(request_file),'--out',str(folder/'motion.mp4')]
+        with patch.dict(os.environ,{'NEW_API_BASE_URL':'https://newapi.example','NEW_API_KEY':'fake-key'}),patch.object(sys,'argv',argv),patch.object(client.urllib.request,'urlopen',capture_billing):
+            try: client.main()
+            except Captured: checks += 1
+            else: raise AssertionError('expected motion declaration capture')
 print(f'PASS: {checks} zero-network client request, full-flow and audit checks')
