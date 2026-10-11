@@ -1,0 +1,57 @@
+{
+  "plugin_version": "1.0.6",
+  "submitted_via": "https://api.yiyinfaith.com",
+  "model": "minimax_h3_lightx2v_v5",
+  "declared_seconds": 2,
+  "paid_submissions": 1,
+  "request_field_used": "images",
+  "tests_only_local_plugin": true,
+  "active_version": "1.0.6",
+  "active_source_hash": "e6c3d750dde8c4724e525c1ce07f62e99debaf3ef52117b52b3e5e37c76c8bd2",
+  "temporary_api_key_id": 38,
+  "create_http_status": 200,
+  "create_response": {
+    "id": "task_XrqWcn3x1NtyYQvaUwctalvsZ8Jw7TYW"
+  },
+  "task_id": "task_XrqWcn3x1NtyYQvaUwctalvsZ8Jw7TYW",
+  "task_action": "image_to_video",
+  "plugin_state": {
+    "facts": {
+      "orientation": "portrait",
+      "requests": 1,
+      "resolution": "768p",
+      "seconds": 2
+    },
+    "submittedAt": 1791722258,
+    "timeoutSeconds": 1800,
+    "type": "video",
+    "workflowId": "minimax_h3_lightx2v_v5"
+  },
+  "plugin_version_in_execution": "1.0.6",
+  "query_http_status": 200,
+  "status": "completed",
+  "last_query": {
+    "completed_at": 1791722299,
+    "created_at": 1791722258,
+    "id": "task_XrqWcn3x1NtyYQvaUwctalvsZ8Jw7TYW",
+    "model": "minimax_h3_lightx2v_v5",
+    "object": "video",
+    "progress": 100,
+    "results": [
+      {
+        "type": "video",
+        "url": "https://cg-comfyui-prod.tos-cn-beijing.volces.com/comfyui/outputs/2026/10/11/e38723b5-d85b-4a39-bf27-775d81d17e37/8ba54597-504a-4a53-88bb-3b1323f82d81.mp4?<redacted-signed-query>"
+      }
+    ],
+    "status": "completed",
+    "url": "https://cg-comfyui-prod.tos-cn-beijing.volces.com/comfyui/outputs/2026/10/11/e38723b5-d85b-4a39-bf27-775d81d17e37/8ba54597-504a-4a53-88bb-3b1323f82d81.mp4?<redacted-signed-query>"
+  },
+  "task_status": "SUCCESS",
+  "billed_cny": 0.08,
+  "upstream_task_id": "e38723b5-d85b-4a39-bf27-775d81d17e37",
+  "result_host": "cg-comfyui-prod.tos-cn-beijing.volces.com",
+  "content_http_status": 200,
+  "content_bytes": 1917375,
+  "content_has_ftyp": true,
+  "passed": true
+}

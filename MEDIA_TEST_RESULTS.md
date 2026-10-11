@@ -1,6 +1,6 @@
 # 输入媒体真实测试记录
 
-> **版本说明：**1.0.5 起插件只保留 **OpenAI Videos**（`POST /v1/videos`）与 **MiniMax 官方 V2**（`POST /v2/video_generation`）两种请求格式，并移除了官方模型名（`MiniMax-H3` / `MiniMax-H3-Max`）自动路由，调用时请直接使用 AutoDL 工作流 ID。1.0.6 在不放松真实校验的前提下提升了官方格式容错（`images` 恢复为等价兼容别名、`duration` 全工作流开放、官方非媒体字段接受并忽略）。本文件 1.0.0–1.0.4 章节中的 AutoDL 原生、DashScope Wan 以及官方别名记录是**当时的历史证据**，对应的能力已按要求删除；保留原文是为了不篡改历史测试结论。
+> **版本说明：**1.0.5 起插件只保留 **OpenAI Videos**（`POST /v1/videos`）与 **MiniMax 官方 V2**（`POST /v2/video_generation`）两种请求格式，并移除了官方模型名（`MiniMax-H3` / `MiniMax-H3-Max`）自动路由，调用时请直接使用 AutoDL 工作流 ID。1.0.8 修复了 MiniMax 入口把带参考媒体的请求误标为 `text_to_video` 的动作分类缺陷（OpenAI 入口一直正确），并让结算优先读取上游官方 `usage.total_seconds`（仅在本地无法测量时作为兜底，绝不覆盖真实测量值）。1.0.7 起动作迁移的渠道别名 `wan2.2-animate-move` 恢复按秒计费（此前该别名缺少 seconds usage profile，按秒表达式取不到秒数，静默退化为按次）；1.0.6 在不放松真实校验的前提下提升了官方格式容错（`images` 恢复为等价兼容别名、`duration` 全工作流开放、官方非媒体字段接受并忽略）。本文件 1.0.0–1.0.4 章节中的 AutoDL 原生、DashScope Wan 以及官方别名记录是**当时的历史证据**，对应的能力已按要求删除；保留原文是为了不篡改历史测试结论。
 
 2026-10-09；插件 `1.0.0`。全部创建与查询请求通过 `https://api.example.com`，不是 mock。15 个任务轮询至成功，下载 MP4 并以 ffprobe 确认视频轨道，覆盖 22 个协议/媒体/输入类型组合及纯文本回归。New API 实扣合计 **¥0.541**；9 个失败任务结算额度为 0。该金额是 New API 任务账目，不代表独立核验的 AutoDL 账单。
 

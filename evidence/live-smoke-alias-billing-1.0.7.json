@@ -1,0 +1,25 @@
+{
+  "plugin_version": "1.0.7",
+  "submitted_via": "https://api.yiyinfaith.com",
+  "model": "wan2.2-animate-move",
+  "declared_seconds": 1,
+  "paid_submissions": 1,
+  "temporary_api_key_id": 39,
+  "create_http_status": 200,
+  "create_response": {
+    "id": "task_JXPTBCBFMm5lsLguFrDZ6wknkkZWih8v"
+  },
+  "task_id": "task_JXPTBCBFMm5lsLguFrDZ6wknkkZWih8v",
+  "channel_mapped_workflow": "1.0.7",
+  "reserved_cny": 0.04,
+  "status": "completed",
+  "task_status": "SUCCESS",
+  "billed_cny": 0.04,
+  "measured_output_seconds": 0.9666666666666667,
+  "input_seconds": 1,
+  "upstream_task_id": "76d9a357-925a-4963-bfb5-49a1dd1546c1",
+  "rate_applied": 0.04,
+  "expected_cny_from_seconds": 0.04,
+  "billed_matches_seconds": true,
+  "passed": true
+}

@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.6**。两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.8**。两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -123,7 +123,7 @@ OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。�
 | `model_price_error` | 请求 model 未配置价格或计费规则无效；管理员补齐该 model 的价格。渠道映射的 `wan2.2-animate-move` 别名也需单独配置。 |
 | `no_eligible_channel` | 渠道未启用、未包含请求 model，或 Key/用户组无可用渠道；检查 Task Plugin→AutoDL、模型列表及分组权限。 |
 | `invalid media URL` | 输入不是有效 HTTP(S) URL/标准 Data URL，MIME 不匹配或 Base64 格式错误；不用裸 Base64，按对应字段类型编码。 |
-| `intersects reserved namespace /api` | 安装了直接声明宿主保留路径的旧插件；更新为 **1.0.6** 即可，本版本只使用 `/v1/videos` 与 `/v2/...` 路径，不需要任何代理配置，也无需改宿主源码。 |
+| `intersects reserved namespace /api` | 安装了直接声明宿主保留路径的旧插件；更新为 **1.0.7** 即可，本版本只使用 `/v1/videos` 与 `/v2/...` 路径，不需要任何代理配置，也无需改宿主源码。 |
 | `502 / 5xx` | 根据响应错误与宿主日志定位上游/宿主异常；暂时错误退避重试，若已取得 task ID，先查询该任务，避免重复付费提交。 |
 
 以下保留完整字段、响应、工作流能力、计费和技术说明，可在本文件内继续查阅。
@@ -137,9 +137,9 @@ OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。�
 
 渠道选择 **Task Plugin（61）→ AutoDL**；Base URL `https://autodl.art`，不加 API 路径；密钥为 **AutoDL ComfyUI 分组 Token 原文，不加 Bearer**。加入要调用的模型，配置价格、分组权限并启用；安装不自动配置这些项。
 
-使用官方 **New API v1.0.0-rc.43**，要求 Plugin API v1、usageProfiles、openai_video、credentialless 下载；**无需修改源码、重建镜像或安装 FFmpeg**。1.0.6 只使用宿主自带的 `POST /v1/videos`（及其查询、内容下载路径）和插件自己注册的 `POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`：这些路径都不与宿主保留命名空间冲突，因此**本版本不需要任何反向代理、路径重写或额外服务器配置**，插件也不注册 `/api` 或内部桥接前缀，单文件安装即可运行。更新插件后检查插件 registered、价格 schema 及入口可用性即可。
+使用官方 **New API v1.0.0-rc.43**，要求 Plugin API v1、usageProfiles、openai_video、credentialless 下载；**无需修改源码、重建镜像或安装 FFmpeg**。1.0.7 只使用宿主自带的 `POST /v1/videos`（及其查询、内容下载路径）和插件自己注册的 `POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`：这些路径都不与宿主保留命名空间冲突，因此**本版本不需要任何反向代理、路径重写或额外服务器配置**，插件也不注册 `/api` 或内部桥接前缀，单文件安装即可运行。更新插件后检查插件 registered、价格 schema 及入口可用性即可。
 
-rc.43 用 Root 安装，浏览器需可访问 Raw URL。同 key/版本、不同源码报 `plugin key and version already exist with different source`；1.0.0 升级 1.0.6 直接导入新版本并启用，保留旧任务记录；同版本不同源码的开发调试应按后台版本冲突提示处理。
+rc.43 用 Root 安装，浏览器需可访问 Raw URL。同 key/版本、不同源码报 `plugin key and version already exist with different source`；1.0.0 升级 1.0.7 直接导入新版本并启用，保留旧任务记录；同版本不同源码的开发调试应按后台版本冲突提示处理。
 
 客户端用 **New API 根地址与 Key**，不传 AutoDL Token。curl 共用以下变量；request.json 保存所选接口的 body，其他 POST 替换路径，GET 仅保留 Authorization：
 
@@ -153,7 +153,7 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 
 ### 请求时长与结算
 
-**计费秒数（v1.0.6，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（`duration` 是所有工作流的等价别名），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1` 没有视频秒数字段，仍按请求次数计费。
+**计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（`duration` 是所有工作流的等价别名），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1` 没有视频秒数字段，仍按请求次数计费。
 
 动作迁移（`wan2.2animate-v4-motion_retargeting`）没有官方固定时长或默认秒数，成片时长跟随参考视频，因此必须声明计费秒数：OpenAI body 用 `seconds`，MiniMax body 用 `duration`。声明支持数值或普通十进制字符串，`0 < 秒数 <= 3600`，允许小数；它只用于计费，不裁剪视频、不写入 AutoDL body。
 
@@ -428,6 +428,8 @@ seed 上限 **999999999999999**，下限 **1**（zm_u24/zm_u08 为 **0**），�
 ## 动作迁移与 wan2.2-animate-move 渠道别名
 
 `wan2.2animate-v4-motion_retargeting`（动作迁移）：1 图+1 视频，不传 prompt/text/audio_duration，也没有可控时长字段；OpenAI 格式必填 `seconds`，MiniMax 格式必填 `duration`，都只用于计费声明。`model` 可填实际 workflow ID；OpenAI 格式也可用渠道把外部别名 `wan2.2-animate-move` 映射到该工作流。渠道需允许请求模型，并按请求 model 配置价格。
+
+**动作迁移按成片秒数计费（含别名）。** 别名 `wan2.2-animate-move` 现在自带 `seconds` usage profile（1.0.7 修复；此前该别名只继承 `usageSchema` 的 `requests`，价格页缺少秒数输入，按秒计费会静默退化为按次），价格页与工作流 ID 一样有「视频生成单价」输入。别名与 workflow ID 各自配置价格表达式，两者都必须包含 `u("seconds")` 才会按秒结算。
 
 动作迁移只有 E 组两个档位：竖 `832p`（官网标签 `464*832px(竖版)`，默认）与横 `464p`（`832*464px(横版)`）；没有精确 size。
 

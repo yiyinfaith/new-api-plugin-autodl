@@ -2467,7 +2467,10 @@ const MOTION_WORKFLOW = "wan2.2animate-v4-motion_retargeting";
 // Channel-mapped external model name for motion transfer over OpenAI /v1/videos.
 const MOTION_ALIAS = "wan2.2-animate-move";
 
-function usageProfile(model) {
+// `publicModel` lets the channel-mapped motion alias reuse the motion workflow's
+// capability profile while still being advertised and priced under its own name.
+// It is validated as a string because Array.map would otherwise pass an index.
+function usageProfile(model, publicModel) {
   const config = WORKFLOWS[model];
   const schema = Object.assign({}, REQUEST_SCHEMA);
   const facts = { requests: 1 };
@@ -2482,14 +2485,14 @@ function usageProfile(model) {
     facts.resolution = choice.resolution;
     facts.orientation = choice.orientation;
   }
-  return { models: [model], schema: schema, examples: [{ label: config.name, facts: facts }] };
+  return { models: [typeof publicModel === "string" ? publicModel : model], schema: schema, examples: [{ label: config.name, facts: facts }] };
 }
 
 export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.6",
+  version: "1.0.8",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2512,7 +2515,12 @@ export const meta = {
     { method: "GET", path: "/v2/query/video_generation/:task_id", type: "query", render: "miniTask" },
   ],
   usageSchema: REQUEST_SCHEMA,
-  usageProfiles: Object.keys(WORKFLOWS).map(usageProfile),
+  // The channel-mapped motion alias is a public model, so it needs its own
+  // profile: motion transfer bills per second of the delivered clip, exactly
+  // like the workflow it resolves to. Without this the host priced the alias
+  // from usageSchema alone (requests only) and its per-second expression had no
+  // seconds value to read, so per-second billing silently degraded to per-request.
+  usageProfiles: Object.keys(WORKFLOWS).map(usageProfile).concat([usageProfile(MOTION_WORKFLOW, MOTION_ALIAS)]),
 };
 
 function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
@@ -3235,6 +3243,17 @@ function taskAction(config, input) {
     const body = normalizeRequest(config, input).body;
     return config.type === "audio" ? "text_to_audio" : config.videos.some(function (key) { return has(body, key); }) ? "video_to_video" : config.input_reference.some(function (key) { return has(body, key); }) ? "image_to_video" : "text_to_video";
   }
+  // decodeCompatible stores the already-normalized MiniMax body as
+  // __autodl_fields key/value pairs, so the upstream slot names (ref_image_0,
+  // ref_video) are the reliable signal here; input_reference/images are absent
+  // by then. Reading only the OpenAI spellings mislabeled every reference
+  // MiniMax request as text_to_video.
+  if (object(input) && Array.isArray(input.__autodl_fields)) {
+    const slots = new Set(input.__autodl_fields.map(function (entry) { return entry[0]; }));
+    if (config.type === "audio") return "text_to_audio";
+    if (config.videos.some(function (key) { return slots.has(key); })) return "video_to_video";
+    return config.input_reference.some(function (key) { return slots.has(key); }) ? "image_to_video" : "text_to_video";
+  }
   // Read references through the same alias resolution the mapping uses, so an
   // `images` request is classified as image_to_video rather than text_to_video.
   return config.type === "audio" ? "text_to_audio" : (input.videos || []).length ? "video_to_video" : referenceURLs(referenceInput(input)).length ? "image_to_video" : "text_to_video";
@@ -3334,11 +3353,34 @@ function motionSecondsInRange(value) {
   return typeof value === "number" && value > 1e-9 && value <= 3600 ? value : null;
 }
 
+// MiniMax's official query response carries an authoritative usage block:
+//   "usage": {"total_seconds": 5, "input_seconds": 0, "output_seconds": 5, ...}
+// AutoDL exposes nothing equivalent (its top-level `duration` is render wall
+// time, NOT video length), so this reads the official field only when an
+// upstream actually provides it. It is a fallback, never an override of a
+// locally measured value: a real measurement is always closer to what shipped.
+function upstreamDeclaredSeconds(body) {
+  if (!object(body)) return null;
+  const candidates = [];
+  const usage = object(body.usage) ? body.usage : null;
+  if (usage) {
+    candidates.push(usage.total_seconds, usage.output_seconds);
+  }
+  // The official example also mirrors duration next to the usage block.
+  candidates.push(body.duration);
+  for (const candidate of candidates) {
+    const seconds = motionSecondsInRange(candidate);
+    if (seconds !== null) return seconds;
+  }
+  return null;
+}
+
 export function extractUsage(ctx) {
   return normalized(ctx).facts;
 }
 
-export function extractUsageOnComplete(task, result) {
+// `body` is the raw upstream polling payload the host forwards to this hook.
+export function extractUsageOnComplete(task, result, body) {
   const state = task && task.state;
   if (!object(state) || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
   const status = completionStatus(result);
@@ -3352,9 +3394,14 @@ export function extractUsageOnComplete(task, result) {
         seconds = parseVideoDuration(mediaRange(url, 0, MEDIA_PROBE_END).bytes);
       } catch (_) { seconds = null; }
     }
+    // Priority: freshest real measurement, then the value measured while
+    // polling, then the reference clip the caller submitted, and only last the
+    // upstream's own usage block. A measurement always wins because it
+    // describes the file that was actually delivered.
     const settled = motionSecondsInRange(seconds)
       || motionSecondsInRange(state.measuredSeconds)
-      || motionSecondsInRange(state.inputSeconds);
+      || motionSecondsInRange(state.inputSeconds)
+      || upstreamDeclaredSeconds(body);
     if (settled !== null) facts.seconds = settled;
   }
   if (status === "FAILURE" || status === "CANCELLED") {

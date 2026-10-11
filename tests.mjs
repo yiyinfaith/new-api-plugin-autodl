@@ -20,13 +20,33 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.6');
+  assert.equal(p.meta.version, '1.0.8');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
   assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'wan2.2-animate-move'].sort());
   assert.equal(p.meta.protocols[0].models.length, 17);
   assert.ok(!p.meta.protocols[0].models.includes('indextts2-v1'));
+});
+
+// Every advertised model must carry a usage profile, otherwise the host prices it
+// from usageSchema alone and per-second billing silently disappears. The
+// channel-mapped motion alias regressed this way once: it was listed in
+// meta.models but absent from usageProfiles, so it billed per request only.
+test('every advertised model has a usage profile', () => {
+  const covered = new Set();
+  for (const profile of p.meta.usageProfiles) for (const model of profile.models) covered.add(model);
+  assert.deepEqual(p.meta.models.filter(model => !covered.has(model)), []);
+  assert.deepEqual(p.meta.protocols[0].models.filter(model => !covered.has(model)), []);
+});
+test('motion transfer bills per second under both its workflow id and channel alias', () => {
+  for (const model of [motionModel, 'wan2.2-animate-move']) {
+    const profile = p.meta.usageProfiles.find(entry => entry.models.includes(model));
+    assert.ok(profile, model + ' has no usage profile');
+    assert.equal(profile.schema.seconds.unit, 'second', model + ' lost per-second billing');
+    assert.equal(profile.schema.requests.unit, 'count', model);
+    assert.ok(profile.examples[0].facts.seconds > 0, model + ' declares no default seconds');
+  }
 });
 for (const [model, config] of Object.entries(catalog)) {
   const source = official.find(row => row.uuid === config.workflowId);
@@ -382,6 +402,35 @@ for (const [model, request] of Object.entries(workflowMiniMax)) {
     if (facts.seconds !== undefined) assert.equal(facts.seconds, 0);
   });
 }
+// Both request formats describe the same workflow, so they must agree on the
+// classified action and on the billed seconds. The MiniMax branch reads the
+// already-normalized __autodl_fields slots while the OpenAI branch reads
+// input_reference/images, so a reference request once decoded as text_to_video
+// on one surface and image_to_video on the other without any test noticing.
+for (const [model, request] of Object.entries(workflowMiniMax)) {
+  // The channel-mapped motion alias has no OpenAI example of its own; skip it
+  // here because its workflow id is covered by the motion suites below.
+  // indexTTS2 derives its duration from the reference audio instead of a
+  // declared seconds field, so it has no seconds value to compare.
+  if (!examples[model]) continue;
+  // Drive both surfaces to the same declared duration so the comparison is
+  // about classification and accounting, not about differing inputs. The
+  // upstream field name varies (duration vs audio_duration), so mirror it.
+  const secondsField = catalog[model].secondsField;
+  const declaresSeconds = typeof secondsField === 'string';
+  const openaiBody = Object.assign({}, examples[model], declaresSeconds ? { seconds: 4 } : {});
+  const miniBody = Object.assign({}, request, declaresSeconds ? { [secondsField]: 4 } : {});
+  const openai = p.protocols.openai_video.decodeRequest({ ...ctx(model, openaiBody), body: { kind: 'json', value: openaiBody } });
+  const minimax = p.native.miniCreate(v2Context(miniBody));
+  const openaiFacts = declaresSeconds ? p.extractUsage(ctx(model, openaiBody)) : null;
+  const minimaxFacts = declaresSeconds ? p.extractUsage({ ...base, model, upstreamModel: model, requestBody: minimax.requestBody, body: { kind: 'json', value: miniBody } }) : null;
+  test(model + ': both formats classify the same action', () => assert.equal(minimax.action, openai.action, 'openai=' + openai.action + ' minimax=' + minimax.action));
+  test(model + ': both formats bill the same seconds', () => {
+    if (!declaresSeconds) return;
+    if (openaiFacts.seconds === undefined) assert.equal(minimaxFacts.seconds, undefined);
+    else assert.equal(minimaxFacts.seconds, openaiFacts.seconds);
+  });
+}
 for (const body of [{ kind: 'none' }, { kind: 'form', fields: {} }, { kind: 'json', value: [] }, { kind: 'json', value: { model: 'minimax_h3_z0901', prompt: 'test' } }]) nativeFixture('V2 rejects non-content request ' + JSON.stringify(body), 'miniCreate', [{ path: '/v2/video_generation', body }], null, 'requires a JSON object with model and content');
 nativeFixture('V2 create response is the official task_id object', 'miniCreated', [{}, { task_id: 'task_public', data: envelope('QUEUED') }], { task_id: 'task_public' });
 const v2QueryContext = { method: 'GET', path: '/v2/query/video_generation/task_public', params: { task_id: 'task_public' } };
@@ -615,6 +664,35 @@ test('motion settlement bills the measured reference length when the output cann
     const facts = p.extractUsageOnComplete({ state: { ...settlementState(undefined), inputSeconds: 2.5 } }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.mp4' });
     assert.equal(facts.seconds, 2.5);
     assert.equal(facts.requests, 1);
+  } finally { utils.fetch = previousFetch; }
+});
+// MiniMax's official query response carries an authoritative usage block. AutoDL
+// has no equivalent, so this is a last-resort fallback for upstreams that do
+// provide it; it must never override a real measurement of the delivered file.
+test('motion settlement uses the upstream official usage block only as a last resort', () => {
+  const previousFetch = utils.fetch;
+  try {
+    utils.fetch = () => { throw new Error('output host blocks range reads'); };
+    const noState = { ...settlementState(undefined), inputSeconds: undefined };
+    const blocked = 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.mp4';
+    // Official MiniMax shape: {"usage":{"total_seconds":...}} beside duration.
+    const official = { usage: { total_seconds: 5, input_seconds: 0, output_seconds: 5 }, duration: 5 };
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, official).seconds, 5);
+    // output_seconds is honoured when total_seconds is missing.
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 7 } }).seconds, 7);
+    // A bare official duration field also works.
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { duration: 4 }).seconds, 4);
+    // Out-of-range or malformed upstream values are ignored, not billed.
+    for (const bad of [0, -1, 3601, '5', null, {}, [], true]) {
+      assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { usage: { total_seconds: bad } }).seconds, motionState.facts.seconds, 'rejected ' + JSON.stringify(bad));
+    }
+    // A locally measured value always beats the upstream declaration.
+    assert.equal(p.extractUsageOnComplete({ state: settlementState(4) }, { status: 'SUCCESS' }, official).seconds, 4);
+    // AutoDL's processing wall time must never be billed as video seconds.
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, { duration: 196 }).seconds, 196);
+    assert.equal(p.extractUsageOnComplete({ state: noState }, { status: 'SUCCESS', url: blocked }, envelope('SUCCESS', [], { duration: 196 })).seconds, motionState.facts.seconds, 'the AutoDL envelope wrapper is not an upstream usage block');
+    // Failed tasks still refund and never read the block.
+    assert.deepEqual(p.extractUsageOnComplete({ state: settlementState(4) }, { status: 'FAILURE' }, official), { ...motionState.facts, requests: 0, seconds: 0 });
   } finally { utils.fetch = previousFetch; }
 });
 for (const [model, config] of Object.entries(catalog)) {
