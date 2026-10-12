@@ -448,6 +448,31 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 | `minimax_h3_lightx2v`<br>H3首尾帧生成视频 | 图 2 | `duration` 1–15 | G | ≤2000000 | `479044338007328` |
 | `indextts2-v1`<br>indextts2<br>别名 `IndexTTS-2` | 音 1–2 | 无（秒数取自成片实测） | — | ≤2048 | 无 |
 
+### 模型与官网名称对照（含媒体数量、文本支持与分辨率）
+下面的图片、音频、视频范围表示官网定义的最少数量和最多数量，**「文本 ✓/✗」表示该工作流是否接受文字提示词**（`prompt`；不接受的传了会报 `this workflow does not accept a text prompt`）。两种格式的转换层都会严格校验媒体数量。完整默认值、枚举、参数上下限和精确尺寸映射见 [workflows.json](workflows.json)。[examples.json](examples.json) 在根目录保留各工作流 ID 的统一参数示例，并在 `_formats.minimax` 中给出全部 17 个工作流的 MiniMax V2 请求体（音频工作流含 `emo_control_method` 扩展字段）；调用时只发送示例中的请求 body，音频工作流请以 `_formats.minimax` 的示例为准。
+
+| 模型名 / 官网工作流 ID | 官网名称 | seconds 范围 | 输入媒体数量 | resolution |
+|---|---|---|---|---|
+| `minimax_h3_z0903` | H3六图三音频生视频（高质量音画融合） | 1–15 秒 | 图 1–6, 音频 1–3，文本 ✓ | 480p/768p/1088p/1440p |
+| `minimax_h3_z0902` | H3六图生视频（多图一致性创作） | 1–15 秒 | 图 1–6，文本 ✓ | 480p/768p/1088p/1440p |
+| `minimax_h3_z0901` | H3文生视频（高质量创意直出） | 1–15 秒 | 无需媒体，文本 ✓ | 480p/768p/1088p/1440p |
+| `minimax_h3_zm_u24` | H3多图多音频生视频(升级画质) | 1–15 秒 | 图 1–9, 音频 0–3，文本 ✓ | 480p/768p |
+| `minimax_h3_zm_u08` | H3多图多音频生视频(高速版) | 1–15 秒 | 图 1–9, 音频 0–3，文本 ✓ | 480p/768p |
+| `minimax_h3_b99_002` | H3首尾帧生成视频 | 1–15 秒 | 图 2–2，文本 ✓ | 736p |
+| `minimax_h3_b99_001` | H3文生视频 | 1–15 秒 | 无需媒体，文本 ✓ | 736p |
+| `minimax_h3_b99_003_12s` | H3多图生视频12秒 | 1–12 秒 | 图 1–9，文本 ✓ | 736p |
+| `wan2.2animate-v4-motion_retargeting` | 动作迁移 | 无时长控制 | 图 1–1, 视频 1–1，文本 ✗ | 832p/464p |
+| `minimax_h3_image_audio_to_video_v2_15s` | H3多图多音频生视频15秒 | 1–15 秒 | 图 0–9, 音频 0–3，文本 ✓ | 480p/768p |
+| `minimax_h3_lightx2v_v5_15s` | H3多图生视频15秒 | 1–15 秒 | 图 1–9，文本 ✓ | 480p/768p |
+| `minimax_h3_image_audio_to_video_v2` | H3多图多音频生视频 | 1–10 秒 | 图 0–9, 音频 0–3，文本 ✓ | 480p/768p/1080p |
+| `minimax_h3_image_audio_to_video` | H3图生视频-音频同步(自动对口型) | 1–15 秒 | 图 1–1, 音频 1–1，文本 ✗ | 480p/768p/1080p |
+| `minimax_h3_lightx2v_v5` | H3多图参考生视频 | 1–10 秒 | 图 1–9，文本 ✓ | 480p/768p/1080p |
+| `minimax_h3_lightx2v_no_pic` | H3文生视频 | 1–15 秒 | 无需媒体，文本 ✓ | 480p/768p |
+| `minimax_h3_lightx2v` | H3首尾帧生成视频 | 1–15 秒 | 图 2–2，文本 ✓ | 480p/768p |
+| `indextts2-v1` | indextts2 | 无时长参数（按成片实测计费） | 音频 1–2，文本 ✓ | 无 |
+
+官网 API 定义快照保存在 [official-workflows.json](official-workflows.json)，获取日期为 2026-10-07。全部 17 个工作流定义与指定 7 个模型的价格在 2026-10-08 再次从官网读取核实。未来新增工作流时，添加 `WORKFLOWS` 条目、统一字段映射及测试，不需要修改 New API。
+
 ### 调用方字段与数量上限速查
 
 下表是**OpenAI 格式下调用方填写的字段名**与每个模型的媒体数量范围：少于下限或多于上限都报错，
