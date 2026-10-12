@@ -503,7 +503,19 @@ test('the OpenAI speech route translates onto the native TTS workflow', () => {
   const referenceRequest = speech({ input: 'hi', reference_audio: voice, emotion_reference_audio: emotion, emotion: { mode: 'reference' } });
   assert.deepEqual(referenceRequest.requestBody.content.filter(item => item.type === 'audio_url').map(item => item.audio_url.url), [voice, emotion]);
   assert.equal(referenceRequest.requestBody.emo_control_method, '使用情感参考音频');
-  assert.equal(speech({ input: 'hi', reference_audio: voice, prompt_text: 'spoken' }).requestBody.prompt_text, 'spoken');
+  assert.equal(speech({ input: 'hi', reference_audio: voice, prompt_text: 'hi' }).requestBody.content[0].text, 'hi');
+  // prompt_text is AutoDL's OWN name for the primary text field, so it is an alias of
+  // input and never a second slot. Documenting it as an extra slot made every such
+  // request fail upstream with "unsupported or mixed MiniMax field prompt_text".
+  for (const body of [{ text: 'hi' }, { prompt_text: 'hi' }, { input: 'hi', text: 'hi' }]) {
+    assert.equal(speech({ reference_audio: voice, ...body }).requestBody.content[0].text, 'hi', JSON.stringify(body));
+  }
+  assert.throws(() => speech({ input: 'hi', reference_audio: voice, prompt_text: 'different' }), /must agree/);
+  assert.throws(() => speech({ input: 'hi', reference_audio: voice, text: 'different' }), /must agree/);
+  assert.throws(() => speech({ prompt_text: '', reference_audio: voice }), /prompt_text must not be empty/);
+  assert.throws(() => speech({ prompt_text: 5, reference_audio: voice }), /prompt_text must be a string/);
+  // No spelling at all is the documented OpenAI requirement being enforced.
+  assert.throws(() => speech({ reference_audio: voice }), /input \(the text to speak\) is required/);
   // Official-but-unhonourable fields are refused rather than silently ignored: a voice
   // preset names a speaker AutoDL cannot synthesise, and a silent substitution would be
   // invisible to the caller.
@@ -534,6 +546,43 @@ test('the speech query surface reports status and never leaks the credential', (
   assert.equal(p.native.speechTask({ ...base }, task('IN_PROGRESS', [audio])).status, 'running');
   assert.equal(p.native.speechTask({ ...base, apiKey: token, authHeader: 'Bearer ' + token }, task('FAILURE', [], { fail_reason: 'rejected Bearer ' + token })).error.message, 'rejected Bearer [redacted]');
   assert.equal(p.native.speechTask({ ...base }, task('CANCELED', [])).status, 'cancelled');
+});
+// The vendor minimum is a floor on the settled value itself, not merely a default for a
+// missing one. A saved value BELOW the minimum is corrupt -- submission writes 10 and
+// polling floors at 10 -- but it must still not settle under CNY 0.010, which is what an
+// `else if (invalid) reset` form allowed.
+test('the TTS floor applies even to a saved value below the minimum', () => {
+  for (const workflowId of ['indextts2-v1', 'IndexTTS-2']) {
+    for (const saved of [5, 1, 0.5, 9.99, 0.0001]) {
+      const out = p.extractUsageOnComplete(
+        { state: { workflowId, type: 'audio', facts: { requests: 1, seconds: saved } } }, { status: 'SUCCESS' }, {});
+      assert.equal(out.seconds, 10, workflowId + ' saved ' + saved + ' must settle at the 10s minimum');
+      assert.equal(out.requests, 1);
+    }
+  }
+  // A genuine measurement above the floor is still billed as measured, not raised to 10.
+  const previousFetch = utils.fetch;
+  const RATE = 8000;
+  const dataBytes = 30 * RATE;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii'); header.writeUInt32LE(36 + dataBytes, 4); header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii'); header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22); header.writeUInt32LE(8000, 24); header.writeUInt32LE(RATE, 28);
+  header.writeUInt16LE(1, 32); header.writeUInt16LE(8, 34);
+  header.write('data', 36, 'ascii'); header.writeUInt32LE(dataBytes, 40);
+  const media = new Uint8Array(Buffer.concat([header, Buffer.alloc(dataBytes)]));
+  try {
+    utils.fetch = request => {
+      const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      const start = Number(m[1]), end = Math.min(Number(m[2]), media.length - 1);
+      const body = media.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}` }, body: body.buffer };
+    };
+    const out = p.extractUsageOnComplete(
+      { state: { workflowId: 'indextts2-v1', type: 'audio', facts: { requests: 1, seconds: 10 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.wav' }, {});
+    assert.equal(out.seconds, 30, 'a measured 30s clip must bill 30s');
+  } finally { utils.fetch = previousFetch; }
 });
 for (const [model, config] of Object.entries(catalog)) {
   const source = official.find(row => row.uuid === config.workflowId);

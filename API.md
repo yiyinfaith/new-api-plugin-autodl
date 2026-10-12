@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.18**。OpenAI Videos、OpenAI Speech 与 MiniMax 官方 V2 三套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.19**。OpenAI Videos、OpenAI Speech 与 MiniMax 官方 V2 三套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -452,7 +452,7 @@ curl -sS "$BASE/autodl/v1/audio/speech/{task_id}" -H "Authorization: Bearer $NEW
 | 字段 | 说明 |
 | --- | --- |
 | `model` | `IndexTTS-2` 或 `indextts2-v1`，二者等价（同别名）。 |
-| `input` | 要合成的文本，**必填**，映射 `prompt_text`（1–2048 字符）。也接受 `text` 拼写。 |
+| `input` | 要合成的文本，**必填**，映射上游的 `prompt_text`（1–2048 字符）。`text` 与 `prompt_text` 是同义拼写，都指这**同一个**字段（不是额外槽位）；同时给多个时必须取值一致，否则报错而不是静默取其一。 |
 | `response_format` | 可选：`mp3` / `wav` / `flac` / `pcm`。 |
 | `speed` | 可选，接受但**无对应控制**（上游无此参数），传合法正数即可。 |
 | `instructions` | 可选，接受但**无对应控制**；情感请用下面的 `emotion`。 |
@@ -466,8 +466,9 @@ curl -sS "$BASE/autodl/v1/audio/speech/{task_id}" -H "Authorization: Bearer $NEW
 | `emotion_reference_audio` | **情感参考音频**，仅 `emotion.mode = "reference"` 时使用。 |
 | `emotion` | 情感对象：`{"mode":"voice"\|"reference"\|"vector", "happy":0.8, ...}`，映射顶层 `emo_control_method` 与 `emo_*`。 |
 | `emotion_vector` | `emotion` 的简写，等价于 `{"mode":"vector", ...}`，例如 `{"happy":0.8}`。 |
-| `prompt_text` | 可选的第二段文本（上游 `prompt_text` 之外的补充槽）。 |
 | `emo_audio_url` | `emotion_reference_audio` 的别名，二者等价。 |
+
+> **注意：**上游 TTS 只有一个文本字段 `prompt_text`，所以**没有**「第二段文本」这种能力；`prompt_text` 只是 `input` 的同义拼写。此前文档曾把它写成额外槽位，实际会让请求被上游以 `unsupported or mixed MiniMax field prompt_text` 拒绝——已更正。
 
 `emotion` 可用的情感键：`random`（布尔）、`afraid`、`angry`、`calm`、`disgusted`、`happy`、`melancholic`、`sad`、`surprised`（数值 0–1.4）。
 

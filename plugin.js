@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.18",
+  version: "1.0.19",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -3165,6 +3165,12 @@ const SPEECH_FORMATS = { mp3: "mp3", wav: "wav", flac: "flac", pcm: "wav" };
 // reference audio clips, so the name cannot be honoured and must not be invented:
 // an unmapped voice is refused rather than silently substituted.
 const SPEECH_FIELDS = ["model", "input", "voice", "response_format", "speed", "instructions", "stream_format"];
+// Accepted spellings of the text to speak. `prompt_text` is AutoDL's own name for the
+// SAME field -- the TTS workflow's promptField is literally prompt_text -- so it is an
+// alias of `input`, never a second text slot. It was briefly documented as a separate
+// extension; the workflow rejects that shape outright ("unsupported or mixed MiniMax
+// field prompt_text"), because one field cannot hold two texts.
+const SPEECH_TEXT_ALIASES = ["text", "prompt_text"];
 // OpenAI fields this route accepts and ignores because AutoDL has no counterpart and
 // they carry no media: dropping them keeps an official client working.
 const SPEECH_DROPPED = ["stream_format"];
@@ -3177,8 +3183,7 @@ const SPEECH_DROPPED = ["stream_format"];
 //   emotion / emotion_vector - the emotion control method, which OpenAI encodes only
 //     as free-text `instructions` that AutoDL cannot act on.
 //   emo_audio_url - the emotion reference clip for reference mode.
-//   prompt_text - an optional second text slot some workflows accept.
-const SPEECH_AUTODL_FIELDS = ["reference_audio", "emotion_reference_audio", "emo_audio_url", "emotion", "emotion_vector", "prompt_text"];
+const SPEECH_AUTODL_FIELDS = ["reference_audio", "emotion_reference_audio", "emo_audio_url", "emotion", "emotion_vector"];
 const SPEECH_EMOTION_KEYS = ["random", "afraid", "angry", "calm", "disgusted", "happy", "melancholic", "sad", "surprised"];
 
 function speechMedia(value, name) {
@@ -3200,13 +3205,21 @@ function decodeSpeech(ctx) {
   if (!model) throw new Error("AutoDL: model is required");
   const config = workflowForName(model) || model;
   if (config !== TTS_WORKFLOW) throw new Error("AutoDL: OpenAI speech is served only by " + TTS_ALIAS);
-  // `input` is the text to speak. OpenAI requires it; accept `text` too because
-  // AutoDL's own spelling is prompt_text and a caller may reach for either.
-  const speech = typeof input.input === "string" ? input.input : typeof input.text === "string" ? input.text : undefined;
-  if (speech === undefined) throw new Error("AutoDL: input (the text to speak) is required");
-  if (!speech) throw new Error("AutoDL: input must not be empty");
+  // The text to speak. OpenAI requires `input`; `text` and `prompt_text` are accepted
+  // spellings of the SAME field, not extra slots. When more than one is given they must
+  // agree, because picking one silently would discard the caller's words.
+  const spellings = [["input", input.input], ["text", input.text], ["prompt_text", input.prompt_text]]
+    .filter(function (pair) { return pair[1] !== undefined; });
+  if (!spellings.length) throw new Error("AutoDL: input (the text to speak) is required");
+  for (const pair of spellings) {
+    if (typeof pair[1] !== "string") throw new Error("AutoDL: " + pair[0] + " must be a string");
+    if (!pair[1]) throw new Error("AutoDL: " + pair[0] + " must not be empty");
+  }
+  const texts = spellings.map(function (pair) { return pair[1]; }).filter(function (value, index, all) { return all.indexOf(value) === index; });
+  if (texts.length > 1) throw new Error("AutoDL: input, text and prompt_text must agree when more than one is given");
+  const speech = texts[0];
   for (const key of Object.keys(input)) {
-    if (!SPEECH_FIELDS.includes(key) && !SPEECH_AUTODL_FIELDS.includes(key) && key !== "text") {
+    if (!SPEECH_FIELDS.includes(key) && !SPEECH_TEXT_ALIASES.includes(key) && !SPEECH_AUTODL_FIELDS.includes(key)) {
       // Refuse rather than drop: a caller sending media under an unknown key would
       // otherwise believe the voice was applied.
       throw new Error("AutoDL: unsupported speech field " + key);
@@ -3240,14 +3253,8 @@ function decodeSpeech(ctx) {
     : input.reference_audio !== undefined && input.emotion_reference_audio !== undefined ? input.emotion_reference_audio : undefined;
   if (emotionClip !== undefined) content.push({ type: "audio_url", role: "reference_audio", audio_url: { url: speechMedia(emotionClip, "emotion_reference_audio") } });
   // Emotion reaches the workflow as top-level emo_* fields beside the content array,
-  // which is the shape the native MiniMax surface takes. `prompt_text` is AutoDL's
-  // separate second text slot, not a MiniMax content entry: the content array accepts
-  // exactly one text item, so sending it there was rejected.
+  // which is the shape the native MiniMax surface takes.
   const body = { model: model, content: content };
-  if (input.prompt_text !== undefined) {
-    if (typeof input.prompt_text !== "string" || !input.prompt_text) throw new Error("AutoDL: prompt_text must be a non-empty string");
-    body.prompt_text = input.prompt_text;
-  }
   const vector = input.emotion !== undefined ? input.emotion
     : input.emotion_vector !== undefined ? Object.assign({ mode: "vector" }, input.emotion_vector) : undefined;
   if (vector !== undefined) {
@@ -4052,7 +4059,16 @@ export function extractUsageOnComplete(task, result, body) {
       || motionSecondsInRange(state.measuredSeconds)
       || upstreamDeclaredSeconds(body);
     if (settled !== null) facts.seconds = Math.max(settled, TTS_DEFAULT_SECONDS);
-    else if (motionSecondsInRange(facts.seconds) === null) facts.seconds = TTS_DEFAULT_SECONDS;
+    else {
+      // No measurement was available, so the saved reservation stands -- but it must
+      // still be raised to the vendor minimum. The previous `else if` only replaced an
+      // INVALID saved value, so a saved 5 (valid, positive, in range) settled below the
+      // CNY 0.010 floor. A stored value below the minimum cannot be earned: submission
+      // writes 10 and polling floors at 10, so anything lower is a corrupt record, and
+      // charging less than the vendor minimum is a loss on every such task.
+      const saved = motionSecondsInRange(facts.seconds);
+      facts.seconds = saved === null ? TTS_DEFAULT_SECONDS : Math.max(saved, TTS_DEFAULT_SECONDS);
+    }
   }
   // Compare the status by meaning, not by exact spelling. native.miniTask
   // renders this plugin's own FAILURE/CANCELLED as the lowercase strings
