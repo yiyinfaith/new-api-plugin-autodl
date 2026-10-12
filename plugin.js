@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.24",
+  version: "1.0.25",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -3414,49 +3414,95 @@ function u32le(bytes, offset) {
   return bytes[offset] + bytes[offset + 1] * 0x100 + bytes[offset + 2] * 0x10000 + bytes[offset + 3] * 0x1000000;
 }
 
-function wavDuration(bytes, totalBytes) {
-  if (!bytes || bytes.length < 12) return null;
-  if (ascii4(bytes, 0) !== "RIFF" || ascii4(bytes, 8) !== "WAVE") return null;
-  // `bytes` is a fixed probe WINDOW, not the file. Clamping a declared size to
-  // `bytes.length` therefore truncated every WAV larger than the window: a 3600s file
-  // measured 65.53325s (the window minus the header, over the byte rate), and because
-  // that result is non-null the caller's tail read -- which exists precisely for files
-  // bigger than the window -- never ran. The true size is the Content-Range total, so
-  // the clamp uses that; when the total is unknown the declared size is taken at face
-  // value, which is what a WAV header is for and what the vendor itself charges from.
-  const total = typeof totalBytes === "number" && isFinite(totalBytes) && totalBytes > 0 ? totalBytes : null;
+// ---------------------------------------------------------------------------
+// Synchronous fetch budget
+// ---------------------------------------------------------------------------
+// The host grants at most four synchronous fetches per hook call (15 s each, 30 s total,
+// 1 MiB per body). A hook can measure twice -- a submit whose response is already a
+// terminal success measures the reference clip AND the delivered one -- so without a
+// shared count the fifth request would fail inside a measuring helper and silently drop the
+// measurement to null, i.e. to the vendor minimum. Counting against a budget reset at each
+// hook entry keeps every path inside the limit and degrades to a lower bound instead.
+const FETCH_BUDGET = 4;
+let fetchesUsed = 0;
+function resetFetchBudget() { fetchesUsed = 0; }
+function fetchesLeft() { return FETCH_BUDGET - fetchesUsed; }
+
+// The single point through which every host fetch passes, so this count mirrors the host's
+// own. Routing only the Range reads through the budget left the direct HEAD probes
+// uncounted, and a fifth request was then attempted for a file that needed several windows.
+function budgetedFetch(options) {
+  if (fetchesLeft() <= 0) throw new Error("media fetch budget exhausted");
+  fetchesUsed++;
+  return utils.fetch(options);
+}
+
+function isRiff(bytes) {
+  return !!bytes && bytes.length >= 12 && ascii4(bytes, 0) === "RIFF" && ascii4(bytes, 8) === "WAVE";
+}
+
+// Walk a WAV's RIFF chunk chain, summing every `data` chunk.
+//
+// `first` is the file's first window; `fetchWindow(start, end)` may return further windows,
+// or null when the budget is exhausted. Walking is what makes a SPLICED WAV exact: the walk
+// previously ended when the window ran out, so a 170s file whose second chunk began past
+// 1 MiB billed 70s. The walk jumps by each chunk's declared size, so the number of windows
+// it needs grows with the number of CHUNKS, not with the file size -- head plus two more
+// completes every realistic shape, including a trailing 1 MB cover image.
+//
+// `complete` is false when the chain could not be followed to the end of the file, making
+// `audioBytes` a lower bound. The caller still bills it: a partial sum is closer to the
+// truth than the vendor minimum, and it can never over-charge.
+function wavWalk(first, totalBytes, fetchWindow) {
+  if (!first || first.length < 12) return null;
+  if (ascii4(first, 0) !== "RIFF" || ascii4(first, 8) !== "WAVE") return null;
+  // The clamp uses the real resource size, never the window: clamping to the window
+  // truncated every file larger than it (a 3600s WAV billed 65.53325s) and, because that
+  // result is non-null, the caller's tail read never ran to correct it.
+  let total = typeof totalBytes === "number" && isFinite(totalBytes) && totalBytes > 0 ? totalBytes : null;
+  let window = first;
+  let windowStart = 0;
   let offset = 12;
   let byteRate = 0;
   // RIFF permits more than one `data` chunk (concatenating writers emit them) and a
-  // `data` chunk may appear before `fmt `. Every audio byte in the file is billable, so
-  // the chunks are SUMMED rather than the first one returned: returning early billed a
-  // 12s+48s file as 12s, and a chunk seen before `fmt ` was skipped outright, so a
-  // 30s+30s file billed 30s. `openData` accumulates while byteRate is still unknown and
-  // is converted once `fmt ` provides it.
+  // `data` chunk may appear before `fmt `. Every audio byte is billable, so the chunks are
+  // SUMMED rather than the first one returned. `openData` accumulates while byteRate is
+  // still unknown and is converted once `fmt ` provides it.
   let audioBytes = 0;
   let openData = 0;
   let sawData = false;
-  while (offset + 8 <= bytes.length) {
-    const id = ascii4(bytes, offset);
-    const size = u32le(bytes, offset + 4);
+  let complete = false;
+  for (let guard = 0; guard < 200000; guard++) {
+    if (offset < windowStart || offset + 8 > windowStart + window.length) {
+      if (!fetchWindow) break;
+      const next = fetchWindow(offset, offset + MEDIA_PROBE_BYTES - 1);
+      if (!next || !next.bytes || next.bytes.length < 8) break;
+      window = next.bytes;
+      windowStart = offset;
+      if (Number.isSafeInteger(next.total)) total = next.total;
+    }
+    const at = offset - windowStart;
+    if (at < 0 || at + 8 > window.length) break;
+    const id = ascii4(window, at);
+    const size = u32le(window, at + 4);
     const data = offset + 8;
-    if (id === "fmt " && data + 16 <= bytes.length) {
-      // byteRate at +8 is authoritative; derive it only when a streamed writer
-      // left it zero, so a real value is never overridden by an estimate.
-      byteRate = u32le(bytes, data + 8);
+    if (id === "fmt " && at + 24 <= window.length) {
+      // byteRate at body+8 is authoritative; derive it only when a streamed writer left it
+      // zero, so a real value is never overridden by an estimate.
+      byteRate = u32le(window, at + 16);
       if (byteRate <= 0) {
-        const channels = u16le(bytes, data + 2);
-        const rate = u32le(bytes, data + 4);
-        const bits = u16le(bytes, data + 14);
+        const channels = u16le(window, at + 10);
+        const rate = u32le(window, at + 12);
+        const bits = u16le(window, at + 22);
         if (channels > 0 && rate > 0 && bits > 0) byteRate = rate * channels * (bits / 8);
       }
     } else if (id === "data") {
       sawData = true;
-      const windowBytes = Math.max(bytes.length - data, 0);
-      // A streamed WAV uses 0xffffffff (or 0) for an unknown size, meaning "to the end
-      // of the file"; otherwise the header states it. Either way the honest upper bound
-      // is how much file remains after this chunk header, computed from the TOTAL when
-      // it is known. Clamping can only lower an inflated claim, never invent audio.
+      const windowBytes = Math.max(windowStart + window.length - data, 0);
+      // A streamed WAV uses 0xffffffff (or 0) for an unknown size, meaning "to the end of
+      // the file"; otherwise the header states it. Either way the honest upper bound is how
+      // much file remains after this header, computed from the TOTAL when it is known.
+      // Clamping can only lower an inflated claim, never invent audio.
       const remaining = total !== null ? Math.max(total - data, 0) : windowBytes;
       const declared = size === 0xffffffff || size === 0
         ? remaining
@@ -3466,15 +3512,22 @@ function wavDuration(bytes, totalBytes) {
         else openData += declared;
       }
     }
-    if (size <= 0 || size === 0xffffffff) break;
+    if (size <= 0 || size === 0xffffffff) { complete = true; break; }
     // Chunks are word-aligned: an odd size is followed by one pad byte.
-    offset = data + size + (size % 2);
+    const nextOffset = data + size + (size % 2);
+    if (total !== null && nextOffset >= total) { complete = true; break; }
+    offset = nextOffset;
   }
   if (byteRate > 0 && openData > 0) audioBytes += openData;
+  return { audioBytes: audioBytes, byteRate: byteRate, sawData: sawData, complete: complete };
+}
+
+function wavDuration(bytes, totalBytes) {
+  const walked = wavWalk(bytes, totalBytes, null);
   // Any `data` chunk with a usable rate is a measurement; a file whose chunks were all
   // empty is not.
-  if (sawData && byteRate > 0 && audioBytes > 0) return audioBytes / byteRate;
-  return null;
+  if (!walked || !walked.sawData || !(walked.byteRate > 0) || !(walked.audioBytes > 0)) return null;
+  return walked.audioBytes / walked.byteRate;
 }
 
 // MP3 gives no single reliable length field. The Xing/Info frame count is the only
@@ -3567,7 +3620,9 @@ function parseVideoDuration(bytes) {
 }
 
 function mediaRange(url, start, end) {
-  const response = utils.fetch({ url: url, method: "GET", headers: { Range: "bytes=" + start + "-" + end }, responseType: "bytes" });
+  // Callers wrap their measurements in try/catch, so exhausting the budget degrades to a
+  // null measurement (a lower bound) instead of a failed hook.
+  const response = budgetedFetch({ url: url, method: "GET", headers: { Range: "bytes=" + start + "-" + end }, responseType: "bytes" });
   if (!response || (response.status !== 200 && response.status !== 206)) throw new Error("media range request failed");
   const bytes = bytesView(response.body);
   if (!bytes || bytes.length > MEDIA_PROBE_BYTES) throw new Error("media range is too large");
@@ -3592,7 +3647,7 @@ function measuredOutputDuration(url) {
     if (seconds !== null) return seconds;
     let total = head.total;
     if (!Number.isSafeInteger(total)) {
-      const response = utils.fetch({ url: url, method: "HEAD", responseType: "bytes" });
+      const response = budgetedFetch({ url: url, method: "HEAD", responseType: "bytes" });
       const value = response && response.headers && Number(response.headers["Content-Length"]);
       total = Number.isSafeInteger(value) ? value : undefined;
     }
@@ -3622,13 +3677,25 @@ function measuredAudioDuration(url) {
     // size has to come from a HEAD.
     let total = head.total;
     if (!Number.isSafeInteger(total)) {
-      const response = utils.fetch({ url: url, method: "HEAD", responseType: "bytes" });
+      const response = budgetedFetch({ url: url, method: "HEAD", responseType: "bytes" });
       const value = response && response.headers && Number(response.headers["Content-Length"]);
       total = Number.isSafeInteger(value) ? value : undefined;
     }
+    // A RIFF file is walked chunk by chunk rather than parsed from this one window: a
+    // spliced WAV puts later chunk headers beyond the window, which is exactly what
+    // under-billed it. The walk spends what remains of the hook's fetch budget, so it stops
+    // and returns a lower bound instead of asking for a request the host would refuse.
+    if (isRiff(head.bytes)) {
+      const walked = wavWalk(head.bytes, total, function (start, end) {
+        if (fetchesLeft() <= 0) return null;
+        try { return mediaRange(url, start, end); } catch (_) { return null; }
+      });
+      if (!walked || !walked.sawData || !(walked.byteRate > 0) || !(walked.audioBytes > 0)) return null;
+      return motionSecondsInRange(walked.audioBytes / walked.byteRate);
+    }
     let seconds = parseAudioDuration(head.bytes, total);
     if (seconds !== null) return motionSecondsInRange(seconds);
-    if (Number.isSafeInteger(total) && total > MEDIA_PROBE_BYTES) {
+    if (Number.isSafeInteger(total) && total > MEDIA_PROBE_BYTES && fetchesLeft() > 0) {
       const tail = mediaRange(url, total - MEDIA_PROBE_BYTES, total - 1);
       seconds = parseAudioDuration(tail.bytes, total);
     }
@@ -3794,6 +3861,10 @@ function taskAction(config, input) {
 }
 
 export function buildSubmitRequest(ctx) {
+  // Reset here, not in the helpers: the host counts per hook call, and one hook can
+  // measure more than once (a submit whose response is already terminal measures the
+  // reference clip and the delivered one).
+  resetFetchBudget();
   if ((ctx.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; encode a standard image Data URL or use public URLs in input_reference");
   const config = requestWorkflow(ctx);
   const parsed = normalized(ctx);
@@ -3811,6 +3882,10 @@ export function buildSubmitRequest(ctx) {
 }
 
 export function parseSubmitResponse(ctx, response) {
+  // Reset here, not in the helpers: the host counts per hook call, and one hook can
+  // measure more than once (a submit whose response is already terminal measures the
+  // reference clip and the delivered one).
+  resetFetchBudget();
   if (response.statusCode < 200 || response.statusCode >= 300) throw new Error(httpError(response.statusCode));
   const body = envelope(response.body);
   const id = taskId(body.data.task_id);
@@ -3819,13 +3894,17 @@ export function parseSubmitResponse(ctx, response) {
   // The vendor is already rendering, so the input measurement runs now and every
   // later poll reuses it; the submission reservation itself stays as declared.
   const state = withMeasuredInput({ facts: request.facts, type: config.type, submittedAt: utils.unixNow(), timeoutSeconds: config.timeoutSeconds, workflowId: config.workflowId }, config, request.body);
-  const parsed = parseTaskResult(Object.assign({}, ctx, { taskId: id, state: state }), body, { status: response.statusCode, headers: {} });
+  const parsed = parseTaskResultInner(Object.assign({}, ctx, { taskId: id, state: state }), body, { status: response.statusCode, headers: {} });
   const output = { taskId: id, taskData: body, state: state };
   if (parsed.status === "SUCCESS" || parsed.status === "FAILURE") output.immediate = parsed;
   return output;
 }
 
 export function buildQueryRequest(ctx) {
+  // Reset here, not in the helpers: the host counts per hook call, and one hook can
+  // measure more than once (a submit whose response is already terminal measures the
+  // reference clip and the delivered one).
+  resetFetchBudget();
   return {
     url: endpoint(ctx, "/api/v1/comfyui/comfyui_workflow/result/" + encodeURIComponent(taskId(ctx.taskId))),
     method: "GET",
@@ -3833,7 +3912,7 @@ export function buildQueryRequest(ctx) {
   };
 }
 
-export function parseTaskResult(ctx, body, response) {
+function parseTaskResultInner(ctx, body, response) {
   const code = response && response.status;
   if (code && (code < 200 || code >= 300)) {
     if ([400, 404, 410, 422].includes(code)) return { status: "FAILURE", reason: httpError(code) };
@@ -3940,12 +4019,31 @@ function upstreamDeclaredSeconds(body) {
   return null;
 }
 
+// The host's fetch budget is per HOOK CALL, so the reset belongs to the exported entry
+// points only. `parseSubmitResponse` measures the reference clip and then calls this same
+// logic for the delivered one; resetting inside the shared body gave that second
+// measurement a fresh budget, letting one host call spend up to seven fetches -- past the
+// four the host grants. The inner function therefore owns no reset, and the submit path
+// calls it directly so both measurements share one budget.
+export function parseTaskResult(ctx, body, response) {
+  resetFetchBudget();
+  return parseTaskResultInner(ctx, body, response);
+}
+
 export function extractUsage(ctx) {
+  // Reset here, not in the helpers: the host counts per hook call, and one hook can
+  // measure more than once (a submit whose response is already terminal measures the
+  // reference clip and the delivered one).
+  resetFetchBudget();
   return normalized(ctx).facts;
 }
 
 // `body` is the raw upstream polling payload the host forwards to this hook.
 export function extractUsageOnComplete(task, result, body) {
+  // Reset here, not in the helpers: the host counts per hook call, and one hook can
+  // measure more than once (a submit whose response is already terminal measures the
+  // reference clip and the delivered one).
+  resetFetchBudget();
   const state = task && task.state;
   if (!object(state) || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
   const status = completionStatus(result);
@@ -4052,6 +4150,10 @@ function artifacts(task) {
 }
 
 export function listArtifacts(task) {
+  // Reset here, not in the helpers: the host counts per hook call, and one hook can
+  // measure more than once (a submit whose response is already terminal measures the
+  // reference clip and the delivered one).
+  resetFetchBudget();
   // Deliberately NOT wrapped in a catch-all: `artifacts` already returns an empty list for
   // a success with no media, while still refusing an entry with a forbidden URL scheme.
   // Swallowing every error here would silently hand a caller a file:// or javascript: URL.
@@ -4063,6 +4165,10 @@ export function listArtifacts(task) {
 }
 
 export function buildContentRequest(ctx) {
+  // Reset here, not in the helpers: the host counts per hook call, and one hook can
+  // measure more than once (a submit whose response is already terminal measures the
+  // reference clip and the delivered one).
+  resetFetchBudget();
   const item = artifacts({ status: "SUCCESS", data: ctx.data, action: ctx.action }).find(function (entry) { return entry.key === ctx.artifactKey; });
   if (!item) throw new Error("AutoDL: artifact not found");
   // The host always supplies clientRequest; guard it so a missing one yields a diagnosis

@@ -1839,5 +1839,176 @@ test('render-time inputs are guarded rather than dereferenced blindly', () => {
   assert.equal(p.native.miniCreated({}, { task_id: 42 }).task_id, '');
   assert.equal(p.native.miniCreated({}, { task_id: null }).task_id, '');
 });
+// ---------------------------------------------------------------------------
+// The RIFF chunk walk and the per-hook fetch budget.
+// ---------------------------------------------------------------------------
+const walkRate = 16000;   // 8 kHz mono 16-bit
+// Build a WAV of `secondsList` data chunks, optionally followed by a trailing chunk.
+const walkWav = (secondsList, tailId, tailBytes) => {
+  const parts = [];
+  const push = (id, body) => {
+    const head = Buffer.alloc(8);
+    head.write(id, 0, 'ascii'); head.writeUInt32LE(body.length, 4);
+    parts.push(head, body);
+    if (body.length % 2) parts.push(Buffer.alloc(1));
+  };
+  const fmt = Buffer.alloc(16);
+  fmt.writeUInt16LE(1, 0); fmt.writeUInt16LE(1, 2); fmt.writeUInt32LE(8000, 4);
+  fmt.writeUInt32LE(walkRate, 8); fmt.writeUInt16LE(1, 12); fmt.writeUInt16LE(16, 14);
+  push('fmt ', fmt);
+  for (const seconds of secondsList) push('data', Buffer.alloc(Math.round(seconds * walkRate)));
+  if (tailId) push(tailId, Buffer.alloc(tailBytes));
+  const body = Buffer.concat(parts);
+  const riff = Buffer.alloc(12);
+  riff.write('RIFF', 0, 'ascii'); riff.writeUInt32LE(body.length + 4, 4); riff.write('WAVE', 8, 'ascii');
+  return Buffer.concat([riff, body]);
+};
+// A host-faithful server: 1 MiB body cap, and a REFUSAL on the fifth fetch of one hook
+// call, which is exactly what the host does. Any path that asks for more therefore fails
+// the assertion loudly instead of degrading invisibly.
+const walkServe = (file, state, omitContentRange) => request => {
+  state.calls++;
+  if (state.calls > 4) throw new Error('HOST REFUSED: fetch ' + state.calls + ' in one hook call');
+  if (request.method === 'HEAD') {
+    state.heads++;
+    return { status: 200, headers: { 'Content-Length': String(file.length) }, body: null };
+  }
+  const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range || 'bytes=0-1048575');
+  const start = Number(m[1]), end = Math.min(Number(m[2]), file.length - 1);
+  if (end - start + 1 > 1048576) throw new Error('HOST REFUSED: body over 1 MiB');
+  state.ranges.push(start + '-' + end);
+  const headers = { 'Content-Range': `bytes ${start}-${end}/${file.length}` };
+  if (omitContentRange) delete headers['Content-Range'];
+  return { status: 206, headers: headers, body: file.slice(start, end + 1) };
+};
+const walkBill = (file, omitContentRange) => {
+  const previousFetch = utils.fetch;
+  const state = { calls: 0, heads: 0, ranges: [] };
+  const serve = walkServe(file, state, omitContentRange);
+  utils.fetch = request => serve(request);
+  let seconds = null;
+  try {
+    seconds = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.wav' }, {}).seconds;
+  } finally { utils.fetch = previousFetch; }
+  return { seconds: seconds, calls: state.calls, ranges: state.ranges };
+};
+// A spliced WAV whose later chunk headers lie beyond the first probe window used to be
+// summed only as far as the window reached: a 170s file billed 70s.
+test('a spliced WAV is measured by walking its chunks', () => {
+  const two = walkBill(walkWav([70, 100]));
+  assert.ok(Math.abs(two.seconds - 170) < 0.01, '170s file must bill 170s, got ' + two.seconds);
+  assert.equal(two.calls, 2, 'one extra window should be enough');
+  // The walk jumps by the declared size to the next header.
+  assert.ok(two.ranges[1].startsWith(String(44 + 70 * walkRate).slice(0, 4)), 'second read must start at the next header: ' + two.ranges[1]);
+  const five = walkBill(walkWav([40, 40, 40, 40, 40]));
+  assert.ok(Math.abs(five.seconds - 200) < 0.01, '200s across five chunks must bill 200s, got ' + five.seconds);
+  assert.ok(five.calls <= 4, 'five chunks must still fit the budget, used ' + five.calls);
+});
+// The walk must sum only `data` bodies, so a trailing non-audio chunk is never billed --
+// counting the unread remainder would have over-charged by the whole cover image.
+test('a trailing cover image is excluded rather than billed as audio', () => {
+  const r = walkBill(walkWav([70, 100], 'id3 ', 1024 * 1024));
+  assert.ok(Math.abs(r.seconds - 170) < 0.01, 'cover art must not be billed: got ' + r.seconds);
+  assert.ok(r.seconds <= 170.01, 'must never exceed the true audio length');
+});
+// When the chain genuinely cannot be walked within the budget the result is a LOWER BOUND:
+// never null (which would drop to the vendor minimum), never an over-charge, and never a
+// fifth request.
+test('an unwalkable chain settles on a lower bound without exceeding the budget', () => {
+  const r = walkBill(walkWav(Array(100).fill(20)));
+  assert.ok(r.calls <= 4, 'must not exceed four fetches, used ' + r.calls);
+  assert.ok(r.seconds !== null, 'a partial sum beats the vendor minimum');
+  assert.ok(r.seconds > 10, 'a 320s prefix must not collapse to the floor: ' + r.seconds);
+  assert.ok(r.seconds < 2000, 'it is a lower bound');
+});
+// Without Content-Range the size comes from a HEAD, which is itself a host fetch and must
+// be counted; otherwise the walk asks for a fifth request the host refuses.
+test('the budget also covers the HEAD probe', () => {
+  for (const secondsList of [[70, 100], [100, 100, 100], [70, 100], Array(100).fill(20)]) {
+    const r = walkBill(walkWav(secondsList), true);
+    assert.ok(r.calls <= 4, 'no Content-Range must still fit the budget, used ' + r.calls);
+  }
+});
+// An unsupported emotion key must diagnose, not crash: a config assembled without the
+// `emo_<key>` rule used to be dereferenced and surfaced as a raw TypeError.
+test('emotion controls are refused outside the audio workflow', () => {
+  // A diagnosis, not a raw TypeError out of the emotion mapper.
+  const body = { model: 'my-private-tts', prompt: 'hi', audios: ['https://cdn.example.com/v.wav'], emotion: { happy: 1 } };
+  assert.throws(() => p.buildSubmitRequest({ ...base, model: 'my-private-tts', requestBody: body }),
+    /emotion controls are supported only by indexTTS2/);
+});
+// The frame scan must reach the end of the probe window. Capping it 8 KB past the start
+// left any file whose first frame sits further in unmeasurable, and therefore billed at the
+// vendor minimum.
+test('the MP3 scan reaches a frame that sits far into the window', () => {
+  const previousFetch = utils.fetch;
+  const BITRATE = 128000, RATE = 44100, frameLen = Math.floor(144 * BITRATE / RATE);
+  const frames = Math.ceil(60 * RATE / 1152);
+  const first = Buffer.alloc(frameLen);
+  first.writeUInt32BE(0xfffb9000, 0);
+  first.write('Xing', 36, 'ascii');
+  first.writeUInt32BE(1, 40);
+  first.writeUInt32BE(frames, 44);
+  // 20 KB with no frame sync at all before the first real frame.
+  const file = Buffer.concat([Buffer.alloc(20480), first, Buffer.alloc(frameLen * (frames - 1))]);
+  try {
+    utils.fetch = request => {
+      const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range || 'bytes=0-1048575');
+      const start = Number(m[1]), end = Math.min(Number(m[2]), file.length - 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` }, body: file.slice(start, end + 1) };
+    };
+    const out = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.mp3' }, {});
+    assert.ok(Math.abs(out.seconds - 60) < 0.1, 'a frame 20 KB in must be found, got ' + out.seconds);
+  } finally { utils.fetch = previousFetch; }
+});
+// The budget is per HOOK CALL, so it must be reset at each entry point. Without the reset
+// the counter carried over and the second hook of a process silently lost its measurement.
+test('the fetch budget resets between host hook calls', () => {
+  const previousFetch = utils.fetch;
+  const RATE = 16000;
+  const make = chunks => {
+    const parts = [];
+    const push = (id, body) => {
+      const head = Buffer.alloc(8);
+      head.write(id, 0, 'ascii'); head.writeUInt32LE(body.length, 4);
+      parts.push(head, body);
+      if (body.length % 2) parts.push(Buffer.alloc(1));
+    };
+    const fmt = Buffer.alloc(16);
+    fmt.writeUInt16LE(1, 0); fmt.writeUInt16LE(1, 2); fmt.writeUInt32LE(8000, 4);
+    fmt.writeUInt32LE(RATE, 8); fmt.writeUInt16LE(1, 12); fmt.writeUInt16LE(16, 14);
+    push('fmt ', fmt);
+    for (let i = 0; i < chunks; i++) push('data', Buffer.alloc(Math.round(40 * RATE)));
+    const body = Buffer.concat(parts);
+    const riff = Buffer.alloc(12);
+    riff.write('RIFF', 0, 'ascii'); riff.writeUInt32LE(body.length + 4, 4); riff.write('WAVE', 8, 'ascii');
+    return Buffer.concat([riff, body]);
+  };
+  const file = make(5);   // 200s across five chunks: the walk spends several windows
+  let calls = 0;
+  try {
+    utils.fetch = request => {
+      calls++;
+      const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range || 'bytes=0-1048575');
+      const start = Number(m[1]), end = Math.min(Number(m[2]), file.length - 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` }, body: file.slice(start, end + 1) };
+    };
+    // First hook call: settlement, which spends most of one budget.
+    const settled = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.wav' }, {});
+    assert.ok(Math.abs(settled.seconds - 200) < 0.01, 'first hook must measure, got ' + settled.seconds);
+    const afterFirst = calls;
+    // Second hook call: polling. Its budget must be fresh, or the walk cannot run at all.
+    const parsed = p.parseTaskResult({ ...base, taskId: 't1', state: { workflowId: 'indextts2-v1', type: 'audio', facts: { requests: 1 } } },
+      { code: 'Success', data: { task_id: 't1', status: 'SUCCESS', results: [{ url: 'https://cdn.example.com/a.wav', type: 'audio', file_type: 'wav' }] } },
+      { status: 200 });
+    assert.equal(parsed.status, 'SUCCESS');
+    assert.ok(Math.abs(parsed.state.measuredSeconds - 200) < 0.01,
+      'the second hook must measure too, got ' + parsed.state.measuredSeconds + ' (fetches so far ' + calls + ')');
+    assert.ok(calls > afterFirst, 'the second hook must have been allowed to read');
+  } finally { utils.fetch = previousFetch; }
+});
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

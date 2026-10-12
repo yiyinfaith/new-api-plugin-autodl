@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.24**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.25**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -153,7 +153,7 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 
 ### 请求时长与结算
 
-**计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（`duration` 是所有工作流的等价别名），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1`（别名 `IndexTTS-2`）同样按秒计费，但秒数来自**成片音频实测**：该工作流没有时长参数（调用方无法指定长度），AutoDL 的 `price_type` 为 `audio_sec_cost`，因此插件在轮询与结算时用受限 Range 读取交付的 WAV/MP3，解析出真实时长作为计费秒数。
+**计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（`duration` 是所有工作流的等价别名），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1`（别名 `IndexTTS-2`）同样按秒计费，但秒数来自**成片音频实测**：该工作流没有时长参数（调用方无法指定长度），AutoDL 的 `price_type` 为 `audio_sec_cost`，因此插件在轮询与结算时用受限 Range 读取交付的 WAV/MP3（WAV 按 RIFF 块链整条游走、只累加 `data` 块），解析出真实时长作为计费秒数。
 
 动作迁移（`wan2.2animate-v4-motion_retargeting`）没有官方固定时长或默认秒数，成片时长跟随参考视频，因此计费秒数**可选**：OpenAI body 用 `seconds`，MiniMax body 用 `duration`；省略时按默认 5 秒预扣。声明支持数值或普通十进制字符串，`1 <= 秒数 <= 3600`，允许小数；它只用于预扣，不裁剪视频、不写入 AutoDL body，**也不作为计费上限**。
 
@@ -420,7 +420,7 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 
 **计费（按交付音频实测秒数）：**AutoDL 官网 `price_type` 为 `audio_sec_cost`，官方牌价为 **高峰 ¥0.001/秒、空闲 ¥0.001/秒，最低计费 ¥0.010**（`minimum_price` 原始值 10，×0.001 得 ¥0.010，正好等于 10 秒的单价，故最低计费即前 10 秒）。
 
-工作流没有 `duration` 参数，调用方无法指定时长，所以秒数只能取自交付的音频：插件先发 `Range: bytes=0-1048575` 读文件头（WAV 的 `fmt`/`data` 块、MP3 的 Xing/Info 帧数），必要时再读文件尾；解析失败则沿用 10 秒预扣。上游响应里的 `data.duration` 是**运行耗时**，任何情况下都不作为计费秒数。
+工作流没有 `duration` 参数，调用方无法指定时长，所以秒数只能取自交付的音频：插件先发 `Range: bytes=0-1048575` 读文件头（MP3 的 Xing/Info 帧数；WAV 则从 `offset=12` 起按 RIFF 块链逐块游走，只累加 `data` 块并跳过封面图等其它块），必要时再按块头跳读后续窗口或读文件尾；解析失败则沿用 10 秒预扣。游走受宿主抓取预算（每次钩子调用最多 4 次 fetch）约束：预算用尽时保留已读到的部分和作为**下界**，因此只会少算、不会多算。上游响应里的 `data.duration` 是**运行耗时**，任何情况下都不作为计费秒数。
 
 **最低计费放在插件里，不写进计价表达式：**该工作流的价格在原样照搬 `wan2.2-animate-move` 的单层 `hour(...) ? tier(...) : tier(...)` 时能正常显示，而把条件嵌套进单价（含 `max()`）时模型广场解析失败（对线上实际显示核对过），价格渲染不出来时模型看起来像免费，因此这里选择保守的单层写法。因此广场表达式只表达单价 `u("seconds") * 0.001`，而「不足 10 秒按 ¥0.010」由插件在**轮询与结算**两处把秒数下限抬到 10 秒来实现，其金额与官方最低计费完全一致。这样广场价格可正常显示，实际扣费也不低于官方最低价。
 
