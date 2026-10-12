@@ -1,0 +1,79 @@
+{
+  "plugin_version": "1.0.14",
+  "change": "IndexTTS-2 added as a public alias of the indextts2-v1 TTS workflow, mirroring the wan2.2-animate-move motion alias",
+  "alias": {
+    "name": "IndexTTS-2",
+    "resolves_to": "indextts2-v1",
+    "upstream_model_id_of_underlying_open_source_model": "IndexTeam/IndexTTS-2 (Bilibili IndexTeam), arXiv:2506.21619",
+    "surfaces": ["/v2/video_generation"],
+    "excluded_from": ["/v1/videos (openai_video) - TTS is not a video surface"],
+    "billing": "per request; the workflow has no duration field, so the alias must never advertise seconds",
+    "shares_capability_table_with": "indextts2-v1"
+  },
+  "equivalence_verified": {
+    "upstream_url_identical": true,
+    "action": "text_to_audio",
+    "rewrite_model": "indextts2-v1",
+    "body_slots_identical": ["prompt_text", "prompt_simple", "emo_control_method"],
+    "usage_identical": {"requests": 1},
+    "emotion_reference_slot_binds": "emo_ref_audio",
+    "emotion_vector_passthrough": true,
+    "saved_internal_model": "indextts2-v1",
+    "openai_surface_refused_with": "AutoDL: audios[0] is required for this workflow"
+  },
+  "regression_protection": {
+    "method": "revert each part of the wiring and confirm the suite fails",
+    "reverts_tested": 5,
+    "reverts_caught": 5,
+    "missing": 0,
+    "reverts": [
+      "compare the alias to the pinned workflow id raw (the conflict bug)",
+      "stop resolving aliases in the MiniMax decoder (the TTS path)",
+      "stop resolving aliases in the shared request validator",
+      "give the TTS alias a per-second profile it cannot fill",
+      "advertise the audio-only alias on the OpenAI video surface"
+    ]
+  },
+  "bug_found_and_fixed": {
+    "symptom": "AutoDL: internal MiniMax workflow identity conflicts",
+    "cause": "requestWorkflow compared ctx.model (the alias) against the saved source's pinned workflow id without resolving the alias first, so every aliased MiniMax request was rejected",
+    "fixed_in": "1.0.14",
+    "caught_by": "adversarial probe before deployment, not by a customer"
+  },
+  "host_pricing_mechanism_confirmed": {
+    "source": "live consume logs, other.usage_facts",
+    "finding": "the host passes the plugin's usage facts into the pricing expression's u() namespace",
+    "observed_facts_include": "requests: 1 on every AutoDL plugin model billed so far",
+    "conclusion": "u(\"requests\") resolves for IndexTTS-2"
+  },
+  "live_pricing": {
+    "model": "IndexTTS-2",
+    "billing_expr": "tier(\"standard\", u(\"requests\") * 0.5)",
+    "billing_mode": "tiered_expr",
+    "usage_schema": ["requests"],
+    "price_cny_per_request": 0.5,
+    "quota_per_request": 250000,
+    "enable_groups": ["管理员", "index"],
+    "visible_in_pricing_api": true,
+    "expression_keys_match_working_reference": true,
+    "other_expressions_changed": 0,
+    "row_counts_unchanged": true,
+    "note": "the host serves billing options from memory; the database write alone is not enough and the option API reload is required before the price appears"
+  },
+  "channel": {
+    "id": 345,
+    "name": "AutoDL_index-tts",
+    "models": ["IndexTTS-2"],
+    "configured_by": "operator",
+    "paidsubmissions": 0
+  },
+  "row_counts": {"channels": "107", "tasks": "3391", "abilities": "413", "models": "182"},
+  "gates": {
+    "plugin_js_syntax": "pass",
+    "tests_mjs": "PASS: 1301 checks; generated 956 official host fixture cases for all 17 workflows.",
+    "tests_client_py": "PASS: 24 zero-network client request, full-flow and audit checks",
+    "verify_round2_fixes": "24/24",
+    "verify_mapping_protection": "pass (fallback strictness still enforced)",
+    "verify_media_requirements": "pass"
+  }
+}

@@ -20,13 +20,16 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.13');
+  assert.equal(p.meta.version, '1.0.14');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
-  assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'wan2.2-animate-move'].sort());
+  assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'wan2.2-animate-move', 'IndexTTS-2'].sort());
   assert.equal(p.meta.protocols[0].models.length, 17);
   assert.ok(!p.meta.protocols[0].models.includes('indextts2-v1'));
+  // TTS is served only by the MiniMax V2 surface, so its alias must not be
+  // advertised on /v1/videos where the audio path cannot answer it.
+  assert.ok(!p.meta.protocols[0].models.includes('IndexTTS-2'));
 });
 
 // Every advertised model must carry a usage profile, otherwise the host prices it
@@ -48,6 +51,65 @@ test('motion transfer bills per second under both its workflow id and channel al
     assert.ok(profile.examples[0].facts.seconds > 0, model + ' declares no default seconds');
   }
 });
+// TTS is billed per request, never per second: it has no duration control at all.
+// The alias must inherit that shape exactly, or pricing the alias would silently
+// gain a seconds input the workflow can never fill.
+test('the IndexTTS-2 alias mirrors indextts2-v1, including its per-request billing', () => {
+  const officialProfile = p.meta.usageProfiles.find(entry => entry.models.includes('indextts2-v1'));
+  const aliasProfile = p.meta.usageProfiles.find(entry => entry.models.includes('IndexTTS-2'));
+  assert.ok(officialProfile, 'indextts2-v1 has no usage profile');
+  assert.ok(aliasProfile, 'the IndexTTS-2 alias has no usage profile');
+  assert.deepEqual(Object.keys(aliasProfile.schema).sort(), Object.keys(officialProfile.schema).sort());
+  assert.equal(aliasProfile.schema.requests.unit, 'count');
+  assert.ok(!('seconds' in aliasProfile.schema), 'TTS must not advertise per-second billing');
+  assert.deepEqual(aliasProfile.examples[0].facts, officialProfile.examples[0].facts);
+  assert.deepEqual(aliasProfile.examples[0].facts, { requests: 1 });
+});
+test('the IndexTTS-2 alias resolves to the same workflow as indextts2-v1', () => {
+  const voice = 'data:audio/wav;base64,AA==';
+  const tts = (model, extra) => ({ model, content: [
+    { type: 'text', text: 'hello world' },
+    { type: 'audio_url', role: 'reference_audio', audio_url: { url: voice } },
+  ], ...extra });
+  const drive = (model, body) => {
+    const driver = { ...base, model, body: { kind: 'json', value: body } };
+    const decoded = p.native.miniCreate(driver);
+    const request = p.buildSubmitRequest({ ...driver, requestBody: decoded.requestBody });
+    return { decoded, request, usage: p.extractUsage({ ...driver, requestBody: decoded.requestBody }) };
+  };
+  const official = drive('indextts2-v1', tts('indextts2-v1'));
+  const alias = drive('IndexTTS-2', tts('IndexTTS-2'));
+  // The alias must send the workflow's own id upstream, not the alias name.
+  assert.equal(alias.request.url, official.request.url);
+  assert.ok(alias.request.url.endsWith('/indextts2-v1'));
+  assert.equal(alias.request.rewriteModel, 'indextts2-v1');
+  assert.equal(alias.request.action, 'text_to_audio');
+  assert.deepEqual(alias.request.body, official.request.body);
+  assert.deepEqual(alias.usage, official.usage);
+  // The saved source pins the workflow id, so every later poll revalidates without
+  // needing the alias. Comparing ctx.model against it raw is what rejected every
+  // aliased MiniMax request as a workflow-identity conflict.
+  assert.equal(JSON.parse(alias.decoded.requestBody.__autodl_minimax).model, 'indextts2-v1');
+  for (const model of ['indextts2-v1', 'IndexTTS-2']) {
+    assert.equal(p.parseSubmitResponse(
+      { ...base, model, requestBody: drive(model, tts(model)).decoded.requestBody },
+      { statusCode: 200, body: envelope('QUEUED') }).state.workflowId, 'indextts2-v1', model + ' must poll as the workflow id');
+  }
+  // Alias-only behaviours that must round-trip through the same code path.
+  const two = tts('IndexTTS-2');
+  two.content.push({ type: 'audio_url', role: 'reference_audio', audio_url: { url: voice } });
+  assert.ok('emo_ref_audio' in drive('IndexTTS-2', two).request.body, 'the emotion reference slot must still bind');
+  const emo = drive('IndexTTS-2', tts('IndexTTS-2', { emo_control_method: '使用情感向量控制', emo_happy: 0.8 }));
+  assert.equal(emo.request.body.emo_happy, 0.8);
+});
+// The alias is a public name, so it must not be routable where TTS cannot answer.
+// Reaching the audio-slot check proves it resolved to the TTS workflow rather than
+// being accepted as a generic video request.
+const ttsAsVideo = { model: 'IndexTTS-2', prompt: 'hello' };
+reject('IndexTTS-2 is refused on the OpenAI video surface', 'buildSubmitRequest',
+  [{ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: ttsAsVideo }, requestBody: ttsAsVideo }], 'audios[0] is required');
+test('the TTS alias is not advertised on the OpenAI surface', () =>
+  assert.ok(!p.meta.protocols[0].models.includes('IndexTTS-2')));
 for (const [model, config] of Object.entries(catalog)) {
   const source = official.find(row => row.uuid === config.workflowId);
   const input = examples[model];
@@ -376,7 +438,7 @@ for (const alias of removedOfficialModels) {
 test('no automatic model routing remains', () => {
   assert.ok(!p.meta.models.includes('MiniMax-H3'));
   assert.ok(!p.meta.models.includes('MiniMax-H3-Max'));
-  assert.ok(p.meta.models.length === Object.keys(catalog).length + 1, 'only the 17 workflows plus the motion alias');
+  assert.ok(p.meta.models.length === Object.keys(catalog).length + 2, 'the 17 workflows plus the motion and TTS aliases');
   assert.ok(p.meta.noAutoRouting === undefined || true);
 });
 // Only workflow ids are callable now; filter defensively so a stale fixture can

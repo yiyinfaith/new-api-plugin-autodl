@@ -2466,6 +2466,19 @@ const REQUEST_SCHEMA = { requests: { type: "number", unit: "count", unitLabel: {
 const MOTION_WORKFLOW = "wan2.2animate-v4-motion_retargeting";
 // Channel-mapped external model name for motion transfer over OpenAI /v1/videos.
 const MOTION_ALIAS = "wan2.2-animate-move";
+const TTS_WORKFLOW = "indextts2-v1";
+// The upstream project's own model id for the TTS workflow, added for the same
+// reason as the motion alias: callers know the vendor's name, not AutoDL's
+// wrapped workflow id. Exact spelling comes from the creator's model repos
+// (IndexTeam/IndexTTS-2), which use the hyphenated form in prose and in the
+// repository id alike.
+const TTS_ALIAS = "IndexTTS-2";
+// Public model names that resolve to a declared workflow instead of to themselves.
+// Keeping this a table means the two aliases cannot drift apart in how they are
+// advertised, validated, priced or resolved.
+const PUBLIC_ALIASES = {};
+PUBLIC_ALIASES[MOTION_ALIAS] = MOTION_WORKFLOW;
+PUBLIC_ALIASES[TTS_ALIAS] = TTS_WORKFLOW;
 
 // Motion transfer has no upstream duration control, so a caller's declaration is
 // only the pre-charge reservation and settlement replaces it with the measured
@@ -2494,6 +2507,14 @@ function usageProfile(model, publicModel) {
   return { models: [typeof publicModel === "string" ? publicModel : model], schema: schema, examples: [{ label: config.name, facts: facts }] };
 }
 
+// Map a public alias onto the workflow it runs as, leaving every other name
+// untouched. This is what makes an alias inherit the workflow's capability table,
+// media slots and validation rather than falling through to the permissive
+// profile used for names we hold no table for.
+function workflowForName(model) {
+  return typeof model === "string" && has(PUBLIC_ALIASES, model) ? PUBLIC_ALIASES[model] : model;
+}
+
 // Removed on purpose and never coming back: the official model names this adapter
 // used to auto-route. An operator mapping a channel could otherwise resurrect one
 // by accident and silently restore routing that was deliberately deleted, so these
@@ -2504,7 +2525,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.13",
+  version: "1.0.14",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2514,10 +2535,12 @@ export const meta = {
   // Result URLs are signed Volcengine objects. Polling uses credentialless
   // byte-range reads against this exact media host for motion duration checks.
   allowedHosts: ["cg-comfyui-prod.tos-cn-beijing.volces.com"],
-  models: Object.keys(WORKFLOWS).concat([MOTION_ALIAS]),
+  models: Object.keys(WORKFLOWS).concat([MOTION_ALIAS, TTS_ALIAS]),
   fetchMode: "per_task",
   // The channel-mapped OpenAI motion alias stays selectable; its OpenAI decoder
-  // is unchanged.
+  // is unchanged. The TTS alias is deliberately absent: this plugin exposes TTS
+  // only through the MiniMax V2 surface, and adding it here would advertise a
+  // model on /v1/videos that the audio path cannot serve.
   protocols: [{ name: "openai_video", models: VIDEO_MODELS.concat([MOTION_ALIAS]) }],
   // Only the MiniMax V2 routes are registered. Neither OpenAI (/v1/videos) nor
   // MiniMax (/v2/...) intersects a host-reserved namespace, so this plugin needs
@@ -2532,7 +2555,12 @@ export const meta = {
   // like the workflow it resolves to. Without this the host priced the alias
   // from usageSchema alone (requests only) and its per-second expression had no
   // seconds value to read, so per-second billing silently degraded to per-request.
-  usageProfiles: Object.keys(WORKFLOWS).map(usageProfile).concat([usageProfile(MOTION_WORKFLOW, MOTION_ALIAS)]),
+  // Both public aliases advertise their own profile so each can be priced
+  // separately. Motion inherits the workflow's per-second shape; TTS has no
+  // seconds field at all, so its alias is per-request exactly like the workflow
+  // it resolves to, and the shared usageProfile keeps that automatic.
+  usageProfiles: Object.keys(WORKFLOWS).map(usageProfile)
+    .concat([usageProfile(MOTION_WORKFLOW, MOTION_ALIAS), usageProfile(TTS_WORKFLOW, TTS_ALIAS)]),
 };
 
 function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
@@ -2918,7 +2946,12 @@ function savedMiniMax(input) {
 }
 
 function requestWorkflow(ctx) {
-  const model = text(ctx.upstreamModel || ctx.model), input = ctx.requestBody;
+  const input = ctx.requestBody;
+  // Both sides of the identity check are resolved through the alias table: when a
+  // caller used a public alias, ctx.model is that alias while the saved source
+  // pins the real workflow id, and comparing them raw rejected every aliased
+  // MiniMax request as a conflict.
+  const model = text(workflowForName(ctx.upstreamModel) || workflowForName(ctx.model));
   if (object(input) && has(input, "__autodl_minimax")) {
     const source = savedMiniMax(input), config = workflow(source.model);
     if (model !== config.workflowId) throw new Error("AutoDL: internal MiniMax workflow identity conflicts");
@@ -2926,9 +2959,10 @@ function requestWorkflow(ctx) {
   }
   // Past this point the request already carries a resolved workflow id. Validation
   // still follows the model the caller named, so a declared model keeps its own
-  // capability table even when a channel mapped it to a private id; only a name
-  // with no table -- a self-chosen one -- falls back to the permissive profile.
-  return resolveWorkflow(text(ctx.upstreamModel), text(ctx.model));
+  // capability table even when a channel mapped it to a private id; a public alias
+  // resolves to the workflow it names; only a name with no table at all -- a
+  // self-chosen one -- falls back to the permissive profile.
+  return resolveWorkflow(text(ctx.upstreamModel), text(workflowForName(ctx.model)));
 }
 
 function normalizeMiniMax(config, input) {
@@ -3704,7 +3738,7 @@ function decode(ctx, pinnedModel) {
   // The channel-mapped workflow id means the operator already decided which
   // workflow this name runs as, so a self-chosen name is valid here even though
   // it appears in no capability table of ours.
-  const requested = model === MOTION_ALIAS ? MOTION_WORKFLOW : model;
+  const requested = workflowForName(model);
   const config = resolveWorkflow(ctx.upstreamModel, requested);
   normalizeInput(config, request);
   const action = taskAction(config, request);
@@ -3719,9 +3753,9 @@ function decodeCompatible(ctx, pinnedModel) {
   const model = pinnedModel || text(request.model);
   if (!model) throw new Error("AutoDL: model is required");
   request.model = model;
-  // The channel decides the workflow; the caller names the AutoDL workflow id or
-  // a name the operator mapped to one in their own channel.
-  const config = resolveWorkflow(ctx.upstreamModel, model);
+  // The channel decides the workflow; the caller names the AutoDL workflow id, a
+  // name the operator mapped to one in their own channel, or a public alias.
+  const config = resolveWorkflow(ctx.upstreamModel, workflowForName(model));
   // Key/value pairs keep the host's recursive usage preflight from reading a
   // generated resolution enum label as a billing enum value. Facts stay explicit.
   const normalizedBody = normalizeMiniMax(config, request);
