@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.21**。OpenAI Videos、OpenAI Speech 与 MiniMax 官方 V2 三套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.22**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -137,7 +137,7 @@ OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。�
 
 渠道选择 **Task Plugin（61）→ AutoDL**；Base URL `https://autodl.art`，不加 API 路径；密钥为 **AutoDL ComfyUI 分组 Token 原文，不加 Bearer**。加入要调用的模型，配置价格、分组权限并启用；安装不自动配置这些项。
 
-使用官方 **New API v1.0.0-rc.43**，要求 Plugin API v1、usageProfiles、openai_video、credentialless 下载；**无需修改源码、重建镜像或安装 FFmpeg**。插件使用宿主自带的 `POST /v1/videos`（及其查询、内容下载路径）和插件自己注册的 `POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`、`POST /autodl/v1/audio/speech`、`GET /autodl/v1/audio/speech/{task_id}`：这些路径都不与宿主保留命名空间**或宿主静态路由**冲突（宿主会拒绝与静态路由相交的插件，且是整插件级拒绝），因此**本版本不需要任何反向代理、路径重写或额外服务器配置**，插件也不注册 `/api` 或内部桥接前缀，单文件安装即可运行。更新插件后检查插件 registered、价格 schema 及入口可用性即可。
+使用官方 **New API v1.0.0-rc.43**，要求 Plugin API v1、usageProfiles、openai_video、credentialless 下载；**无需修改源码、重建镜像或安装 FFmpeg**。插件使用宿主自带的 `POST /v1/videos`（及其查询、内容下载路径）和插件自己注册的 `POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`：这些路径都不与宿主保留命名空间**或宿主静态路由**冲突（宿主会拒绝与静态路由相交的插件，且是整插件级拒绝），因此**本版本不需要任何反向代理、路径重写或额外服务器配置**，插件也不注册 `/api` 或内部桥接前缀，单文件安装即可运行。更新插件后检查插件 registered、价格 schema 及入口可用性即可。
 
 rc.43 用 Root 安装，浏览器需可访问 Raw URL。同 key/版本、不同源码报 `plugin key and version already exist with different source`；1.0.0 升级 1.0.7 直接导入新版本并启用，保留旧任务记录；同版本不同源码的开发调试应按后台版本冲突提示处理。
 
@@ -168,10 +168,9 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 | 格式 | 创建（POST） | 查询（GET） | 成功产物 |
 |---|---|---|---|
 | OpenAI Videos | `/v1/videos` | `/v1/videos/{task_id}` | `url / results`；`GET /v1/videos/{task_id}/content` 下载视频 |
-| OpenAI Speech（仅 TTS） | `/autodl/v1/audio/speech` | `/autodl/v1/audio/speech/{task_id}` | `url`（交付音频） |
 | MiniMax V2 | `/v2/video_generation` | `/v2/query/video_generation/{task_id}` | `task.content.url` |
 
-路径决定格式，`model` 决定工作流。宿主检查密钥、归属、渠道和价格；始终用创建返回的 **New API 公开 task ID** 查询，不用上游私有 ID。TTS（`IndexTTS-2` / `indextts2-v1`）同时支持 **MiniMax V2** 与 **OpenAI Speech** 两种入口；其余 17 个模型用 OpenAI Videos 与 MiniMax V2。OpenAI Speech 用 `/autodl/v1` 前缀而非官方 `/v1/audio/speech`，原因见该节说明（官方路径被宿主静态占用，插件抢占会导致整个插件被拒绝）。
+路径决定格式，`model` 决定工作流。宿主检查密钥、归属、渠道和价格；始终用创建返回的 **New API 公开 task ID** 查询，不用上游私有 ID。16 个视频模型可用 **OpenAI Videos** 与 **MiniMax V2**；TTS（`IndexTTS-2` / `indextts2-v1`）**只用 MiniMax V2**（`POST /v2/video_generation`）。
 
 ## 输入媒体：URL 与 Data URL
 
@@ -411,8 +410,7 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 {"model":"indextts2-v1","content":[{"type":"text","text":"用平静的语气读这句话。"},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://your-public-host.example/voice.wav"}}],"emo_control_method":"使用情感向量控制","emo_calm":0.3,"emo_random":false}
 ```
 
-**3）用 OpenAI 官方的语音接口调用**（`/v1/audio/speech`）**可以**，见下一节。
-但用 OpenAI 的视频接口（`/v1/videos`）**不行**：TTS 是音频工作流，不在该入口公开的模型列表里。
+**3）用 OpenAI 的视频接口**（`/v1/videos`）**不行**：TTS 是音频工作流，不在该入口公开的模型列表里；OpenAI 的语音接口 `/v1/audio/speech` 也**不能用**（该路径被宿主静态占用，插件抢占会导致整插件被拒绝，故本插件不提供该入口）。TTS 只走 `/v2/video_generation`。
 
 **不要传的字段：**`duration` / `seconds` / `resolution` / `ratio`。该工作流的音频长度由文本与模型决定，
 没有任何时长参数；传入会直接报错（不是被忽略）。计费秒数由插件从交付音频实测得出，见下节。
@@ -425,56 +423,6 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 工作流没有 `duration` 参数，调用方无法指定时长，所以秒数只能取自交付的音频：插件先发 `Range: bytes=0-1048575` 读文件头（WAV 的 `fmt`/`data` 块、MP3 的 Xing/Info 帧数），必要时再读文件尾；解析失败则沿用 10 秒预扣。上游响应里的 `data.duration` 是**运行耗时**，任何情况下都不作为计费秒数。
 
 **最低计费放在插件里，不写进计价表达式：**该工作流的价格在原样照搬 `wan2.2-animate-move` 的单层 `hour(...) ? tier(...) : tier(...)` 时能正常显示，而把条件嵌套进单价（含 `max()`）时模型广场解析失败（对线上实际显示核对过），价格渲染不出来时模型看起来像免费，因此这里选择保守的单层写法。因此广场表达式只表达单价 `u("seconds") * 0.001`，而「不足 10 秒按 ¥0.010」由插件在**轮询与结算**两处把秒数下限抬到 10 秒来实现，其金额与官方最低计费完全一致。这样广场价格可正常显示，实际扣费也不低于官方最低价。
-
-### TTS 的 OpenAI 官方格式：`POST /autodl/v1/audio/speech`
-
-除 MiniMax content 结构外，TTS 也接受 OpenAI 官方的语音合成格式，字段名与官方一致，**请求体是 JSON**：
-
-```bash
-curl -sS -X POST "$BASE/autodl/v1/audio/speech" \
-  -H "Authorization: Bearer $NEW_API_KEY" -H "Content-Type: application/json" \
-  -d '{"model":"IndexTTS-2","input":"用平静的语气读这句话。","response_format":"wav",
-       "reference_audio":"https://your-public-host.example/voice.wav"}'
-```
-
-用 OpenAI SDK 时把 `base_url` 设为 `<你的 New API 地址>/autodl/v1`，SDK 拼出的 `/audio/speech` 就会到这里。
-
-**查询任务：**
-
-```bash
-curl -sS "$BASE/autodl/v1/audio/speech/{task_id}" -H "Authorization: Bearer $NEW_API_KEY"
-```
-
-> **为什么不是 `/v1/audio/speech`？**该路径**已被宿主静态注册**（`router/relay-router.go` 的 `POST /v1/audio/speech`，供其他 TTS 渠道使用），而宿主的 `SetRelayRouter` 在 `SetPluginRouter` 之前执行，因此它在插件路由快照里；`router/plugin-router.go` 的 `validatePlugin` 会**拒绝任何与静态路由相交的插件**，且该拒绝是**整个插件级**的（该插件的全部路由与模型都会退出公共路由，不只是这一个接口）。所以插件若抢占 `/v1/audio/speech`，会**直接导致 AutoDL 插件整体不可用**。rc.43 也没有音频协议（只有 `openai_responses`/`openai_video`/`openai_image`），任务插件渠道无法走宿主自带的语音处理器。因此官方**请求体格式**保留，路径改为插件自有前缀 `/autodl/v1/audio/speech`。若日后宿主新增音频协议或让出该路径，改回一行路由即可。
-
-**官方字段：**
-
-| 字段 | 说明 |
-| --- | --- |
-| `model` | `IndexTTS-2` 或 `indextts2-v1`，二者等价（同别名）。 |
-| `input` | 要合成的文本，**必填**，映射上游的 `prompt_text`（1–2048 字符）。`text` 与 `prompt_text` 是同义拼写，都指这**同一个**字段（不是额外槽位）；同时给多个时必须取值一致，否则报错而不是静默取其一。 |
-| `response_format` | 可选：`mp3` / `wav` / `flac` / `pcm`。 |
-| `speed` | 可选，接受但**无对应控制**（上游无此参数），传合法正数即可。 |
-| `instructions` | 可选，接受但**无对应控制**；情感请用下面的 `emotion`。 |
-| `voice` | 官方预设音色名。AutoDL 是**参考音频克隆**，没有预设音色，因此**传了但不给参考音频会直接报错**，不会静默替换成别的音色。 |
-
-**AutoDL 独有的扩展字段**（OpenAI 格式在功能上确实没有对应物，才会加）：
-
-| 字段 | 说明 |
-| --- | --- |
-| `reference_audio` | **音色参考音频**（URL 或 `data:` URL）。上游为必填：没有它就无音色可克隆。 |
-| `emotion_reference_audio` | **情感参考音频**，仅 `emotion.mode = "reference"` 时使用。 |
-| `emotion` | 情感对象：`{"mode":"voice"\|"reference"\|"vector", "happy":0.8, ...}`，映射顶层 `emo_control_method` 与 `emo_*`。 |
-| `emotion_vector` | `emotion` 的简写，等价于 `{"mode":"vector", ...}`，例如 `{"happy":0.8}`。 |
-| `emo_audio_url` | `emotion_reference_audio` 的别名，二者等价。 |
-
-> **注意：**上游 TTS 只有一个文本字段 `prompt_text`，所以**没有**「第二段文本」这种能力；`prompt_text` 只是 `input` 的同义拼写。此前文档曾把它写成额外槽位，实际会让请求被上游以 `unsupported or mixed MiniMax field prompt_text` 拒绝——已更正。
-
-`emotion` 可用的情感键：`random`（布尔）、`afraid`、`angry`、`calm`、`disgusted`、`happy`、`melancholic`、`sad`、`surprised`（数值 0–1.4）。
-
-**语义差异（务必知悉）：**官方 `/v1/audio/speech` 是**同步**返回音频二进制的；本插件返回**任务对象**（`{"id":"task_xxx","status":"queued"}`），需再用上面的查询接口取 `url`。这是任务型上游的必然结果：AutoDL 是异步任务模型，没有同步二进制的可能。
-
-**计费：**与 MiniMax 入口**完全一致**——两条路径归一化成同一个上游请求，因此同样按交付音频实测秒数、同样适用 10 秒最低计费。同一段文本无论走哪个入口，费用相同。
 
 ## 工作流目录与能力边界
 

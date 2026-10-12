@@ -2,9 +2,9 @@
 
 为 New API 提供 AutoDL.Art Task Plugin 适配，将 AutoDL ComfyUI 工作流接入 New API。
 
-插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.21**（插件元数据为 `1.0.21`）。
+插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.22**（插件元数据为 `1.0.22`）。
 
-**调用方从这里开始：[5 分钟快速开始与完整 API 参考](API.md#5-分钟快速开始)。** 一份文档介绍 OpenAI Videos、OpenAI Speech 与 MiniMax 官方 V2 三种接口；每种都有完整 curl、创建响应、任务查询和成功结果字段。覆盖文生视频、图片 URL/Data URL、图+音频、图+视频、语音合成，并提供常用模型与错误速查；后半部分保留完整字段类型、必填/默认值、工作流范围、计费及技术限制，无需跳到其他说明文档。
+**调用方从这里开始：[5 分钟快速开始与完整 API 参考](API.md#5-分钟快速开始)。** 一份文档介绍 OpenAI Videos 与 MiniMax 官方 V2 两种接口；每种都有完整 curl、创建响应、任务查询和成功结果字段。覆盖文生视频、图片 URL/Data URL、图+音频、图+视频、语音合成，并提供常用模型与错误速查；后半部分保留完整字段类型、必填/默认值、工作流范围、计费及技术限制，无需跳到其他说明文档。
 
 **AutoDL 官网工作流 ID 直接作为 MiniMax V2 的 `model`。** 在 `model` 填 `minimax_h3_z0901`、`minimax_h3_lightx2v` 等 workflow ID，继续使用 `content / resolution / duration / ratio`，统一调用 `POST /v2/video_generation`；完整说明和多图、音频、首尾帧示例见 [MiniMax 官方 V2 API](API.md#minimax-官方-v2-api)。
 
@@ -13,7 +13,6 @@
 支持：
 
 - OpenAI Video 接口（`POST /v1/videos`，16 个视频工作流，另含 `wan2.2-animate-move` 渠道别名）
-- OpenAI Speech 请求格式（`POST /autodl/v1/audio/speech`，TTS 模型；官方 `/v1/audio/speech` 被宿主静态占用，插件抢占会导致整插件被拒绝，故用 `/autodl/v1` 前缀）
 - MiniMax 官方 V2 路径和请求格式（`POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`，17 个工作流 ID 直接作为 `model`）
 - 通过 New API 管理全部 17 个工作流的异步任务
 - AutoDL ComfyUI 异步任务

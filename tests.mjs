@@ -458,95 +458,6 @@ test('artifact content is downloaded credentialless and only over http(s)', () =
   assert.throws(() => p.buildContentRequest({ data: task([video], 'text_to_video').data, action: 'text_to_video', artifactKey: 'video', clientRequest: { method: 'POST' } }), /GET and HEAD/);
   assert.throws(() => p.buildContentRequest({ data: task([video], 'text_to_video').data, action: 'text_to_video', artifactKey: 'nope', clientRequest: { method: 'GET' } }), /artifact not found/);
 });
-// OpenAI POST /v1/audio/speech. Plugin API v1 has no audio protocol, so this is a
-// native route; it must reuse the TTS validation, billing and settlement unchanged.
-test('the OpenAI speech route translates onto the native TTS workflow', () => {
-  const voice = 'https://cdn.example.com/voice.wav';
-  const emotion = 'https://cdn.example.com/emotion.wav';
-  // The decode hook is invoked the way the HOST invokes it for a native route: a
-  // ctx.body of {kind, value} and NO top-level model (only protocol contexts carry
-  // one). Building the ctx in the protocol shape instead is precisely what let a
-  // decoder that read ctx.requestBody/model ship -- every real request was rejected.
-  const speech = (body, model) => {
-    const request = { model: model || 'IndexTTS-2', ...body };
-    return p.native.speechCreate({ ...base, body: { kind: 'json', value: request } });
-  };
-  // The route is registered and scoped to TTS only.
-  const route = p.meta.routes.find(r => r.path === '/autodl/v1/audio/speech');
-  assert.ok(route, 'the speech submit route must be registered');
-  assert.equal(route.type, 'submit');
-  assert.deepEqual(route.models, ['indextts2-v1', 'IndexTTS-2']);
-  assert.ok(p.meta.routes.some(r => r.method === 'GET' && r.path === '/autodl/v1/audio/speech/:task_id' && r.type === 'query'));
-  const request = speech({ input: 'hello', reference_audio: voice }).requestBody;
-  // The speech decode IS the pinned source, so it carries no __autodl_minimax replay
-  // envelope; the upstream body it normalizes to must still equal the native one.
-  const native = p.native.miniCreate({ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: { model: 'IndexTTS-2', content: [
-    { type: 'text', text: 'hello' }, { type: 'audio_url', role: 'reference_audio', audio_url: { url: voice } }] } } }).requestBody;
-  const speechSubmit = p.buildSubmitRequest({ ...base, model: 'IndexTTS-2', requestBody: request, action: 'text_to_speech' });
-  const nativeSubmit = p.buildSubmitRequest({ ...base, model: 'IndexTTS-2', requestBody: native, action: 'text_to_audio' });
-  assert.equal(speechSubmit.url, nativeSubmit.url);
-  assert.deepEqual(speechSubmit.body, nativeSubmit.body);
-  // Therefore it bills identically: per audio second at the vendor minimum.
-  assert.deepEqual(p.extractUsage({ ...base, model: 'IndexTTS-2', requestBody: request }), { requests: 1, seconds: 10 });
-  // Submission routes to the TTS workflow and polls back into the same state.
-  const submitted = p.buildSubmitRequest({ ...base, model: 'IndexTTS-2', requestBody: request, action: 'text_to_speech' });
-  assert.ok(submitted.url.endsWith('/indextts2-v1'));
-  const state = p.parseSubmitResponse({ ...base, model: 'IndexTTS-2', requestBody: request },
-    { statusCode: 200, body: { code: 'Success', data: { task_id: 'u1', status: 'QUEUED' } } }).state;
-  assert.equal(state.workflowId, 'indextts2-v1');
-  assert.deepEqual(state.facts, { requests: 1, seconds: 10 });
-  // Emotion modes map onto the same top-level emo_* fields the native surface uses.
-  assert.equal(speech({ input: 'hi', reference_audio: voice, emotion_vector: { happy: 0.8 } }).requestBody.emo_happy, 0.8);
-  assert.equal(speech({ input: 'hi', reference_audio: voice, emotion: { mode: 'vector', happy: 0.8 } }).requestBody.emo_happy, 0.8);
-  // The emotion reference binds to the second audio slot; both clips must be present
-  // in the decoded content, in the order that assigns prompt_simple then emo_ref_audio.
-  const referenceRequest = speech({ input: 'hi', reference_audio: voice, emotion_reference_audio: emotion, emotion: { mode: 'reference' } });
-  assert.deepEqual(referenceRequest.requestBody.content.filter(item => item.type === 'audio_url').map(item => item.audio_url.url), [voice, emotion]);
-  assert.equal(referenceRequest.requestBody.emo_control_method, '使用情感参考音频');
-  assert.equal(speech({ input: 'hi', reference_audio: voice, prompt_text: 'hi' }).requestBody.content[0].text, 'hi');
-  // prompt_text is AutoDL's OWN name for the primary text field, so it is an alias of
-  // input and never a second slot. Documenting it as an extra slot made every such
-  // request fail upstream with "unsupported or mixed MiniMax field prompt_text".
-  for (const body of [{ text: 'hi' }, { prompt_text: 'hi' }, { input: 'hi', text: 'hi' }]) {
-    assert.equal(speech({ reference_audio: voice, ...body }).requestBody.content[0].text, 'hi', JSON.stringify(body));
-  }
-  assert.throws(() => speech({ input: 'hi', reference_audio: voice, prompt_text: 'different' }), /must agree/);
-  assert.throws(() => speech({ input: 'hi', reference_audio: voice, text: 'different' }), /must agree/);
-  assert.throws(() => speech({ prompt_text: '', reference_audio: voice }), /prompt_text must not be empty/);
-  assert.throws(() => speech({ prompt_text: 5, reference_audio: voice }), /prompt_text must be a string/);
-  // No spelling at all is the documented OpenAI requirement being enforced.
-  assert.throws(() => speech({ reference_audio: voice }), /input \(the text to speak\) is required/);
-  // Official-but-unhonourable fields are refused rather than silently ignored: a voice
-  // preset names a speaker AutoDL cannot synthesise, and a silent substitution would be
-  // invisible to the caller.
-  for (const body of [{ input: 'hi', voice: 'alloy' }, { input: 'hi', voice: 'alloy', response_format: 'mp3' }]) {
-    assert.throws(() => speech(body), /voice presets are not supported/, JSON.stringify(body));
-  }
-  assert.throws(() => speech({ input: 'hi', reference_audio: voice, response_format: 'ogg' }), /response_format must be one of/);
-  assert.throws(() => speech({ voice: 'alloy', reference_audio: voice }), /input \(the text to speak\) is required/);
-  assert.throws(() => speech({ input: '', reference_audio: voice }), /input must not be empty/);
-  assert.throws(() => speech({ input: 'hi', reference_audio: voice, bogus: 1 }), /unsupported speech field/);
-  assert.throws(() => speech({ input: 'hi', reference_audio: voice, speed: -1 }), /speed must be a positive number/);
-  assert.throws(() => speech({ input: 'hi', reference_audio: voice, emotion_vector: { nope: 1 } }), /unsupported emotion field/);
-  // The route serves TTS only; another model must be refused with a diagnosis.
-  assert.throws(() => speech({ input: 'hi' }, 'minimax_h3_z0903'), /served only by IndexTTS-2/);
-  // Speed and instructions are documented by OpenAI with no AutoDL counterpart. They
-  // carry no media, so they are accepted and ignored rather than failing the call.
-  assert.deepEqual(speech({ input: 'hello', reference_audio: voice, speed: 1.5, instructions: 'warm' }).requestBody, request);
-});
-test('the speech query surface reports status and never leaks the credential', () => {
-  const token = 'super-secret-token-value';
-  const audio = { url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.wav', type: 'audio', file_type: 'wav' };
-  const env = results => ({ code: 'Success', data: { task_id: 'u1', status: 'SUCCESS', results } });
-  const task = (status, results, extra) => ({ task_id: 'task_abc', status, action: 'text_to_speech', data: env(results), ...extra });
-  assert.deepEqual(p.native.speechCreated({ ...base }, { task_id: 'task_abc' }), { id: 'task_abc', status: 'queued' });
-  const done = p.native.speechTask({ ...base }, task('SUCCESS', [audio]));
-  assert.equal(done.status, 'succeeded');
-  assert.equal(done.url, audio.url);
-  assert.equal(p.native.speechTask({ ...base }, task('IN_PROGRESS', [audio])).status, 'running');
-  assert.equal(p.native.speechTask({ ...base, apiKey: token, authHeader: 'Bearer ' + token }, task('FAILURE', [], { fail_reason: 'rejected Bearer ' + token })).error.message, 'rejected Bearer [redacted]');
-  assert.equal(p.native.speechTask({ ...base }, task('CANCELED', [])).status, 'cancelled');
-});
 // The vendor minimum is a floor on the settled value itself, not merely a default for a
 // missing one. A saved value BELOW the minimum is corrupt -- submission writes 10 and
 // polling floors at 10 -- but it must still not settle under CNY 0.010, which is what an
@@ -662,53 +573,20 @@ test('an MP3 whose frame header is not the first frame still measures', () => {
 test('the query and submit renderers survive malformed task records', () => {
   const audio = { url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.wav', type: 'audio', file_type: 'wav' };
   const env = results => ({ code: 'Success', data: { task_id: 'u1', status: 'SUCCESS', results } });
+  // A render hook that throws turns a client poll into a generic 500.
   for (const value of [null, undefined]) {
-    assert.equal(p.native.speechTask(base, value).status, 'failed');
     assert.equal(p.native.miniTask(base, value).task.status, 'failed');
-    assert.equal(p.native.speechCreated(base, value).id, '');
     assert.equal(p.native.miniCreated(base, value).task_id, '');
   }
   for (const data of [undefined, null, 'junk', { code: 'Success', data: {} }]) {
-    const out = p.native.speechTask(base, { task_id: 't', status: 'SUCCESS', action: 'text_to_speech', data });
-    assert.ok(out.error, 'a success with no usable output must report an error, got ' + JSON.stringify(out));
+    const out = p.native.miniTask(base, { task_id: 't', status: 'SUCCESS', action: 'text_to_audio', data });
+    assert.ok(out.task, 'a malformed record must still render, got ' + JSON.stringify(out));
   }
   // Case-insensitive status must still deliver the media, including through artifacts().
-  const lower = { task_id: 't', status: 'success', action: 'text_to_speech', data: env([audio]) };
-  assert.equal(p.native.speechTask(base, lower).url, audio.url);
+  const lower = { task_id: 't', status: 'success', action: 'text_to_audio', data: env([audio]) };
+  assert.equal(p.native.miniTask(base, lower).task.content.url, audio.url);
   assert.deepEqual(p.listArtifacts(lower).map(a => a.type), ['audio']);
-  assert.equal(p.native.miniTask(base, { ...lower, action: 'text_to_audio' }).task.content.url, audio.url);
   assert.equal(p.native.miniTask(base, { task_id: 't', status: 'failure', fail_reason: 'boom' }).task.error.message, 'boom');
-});
-// Both TTS entry points must send the SAME upstream request for the same intent,
-// including the emotion control value, so neither can bill or render differently.
-test('the speech and native TTS entry points agree on the upstream emotion control', () => {
-  const voice = 'https://cdn.example.com/voice.wav';
-  const emo = 'https://cdn.example.com/emotion.wav';
-  const speechBody = body => p.native.speechCreate({ ...base, body: { kind: 'json', value: { model: 'IndexTTS-2', input: 'hi', reference_audio: voice, ...body } } });
-  const nativeBody = extra => p.native.miniCreate({ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: { model: 'IndexTTS-2', content: [
-    { type: 'text', text: 'hi' }, { type: 'audio_url', role: 'reference_audio', audio_url: { url: voice } }], ...extra } } });
-  const upstream = decoded => p.buildSubmitRequest({ ...base, model: 'IndexTTS-2', requestBody: decoded.requestBody, action: decoded.action }).body;
-  const canonical = value => JSON.stringify(value, Object.keys(value).sort());
-  const pairs = [
-    ['no emotion', {}, {}],
-    ['empty emotion object', { emotion: {} }, {}],
-    ['emotion_vector', { emotion_vector: { happy: 0.5 } }, { emo_control_method: '使用情感向量控制', emo_happy: 0.5 }],
-    ['vector with mode', { emotion: { mode: 'vector', happy: 0.5 } }, { emo_control_method: '使用情感向量控制', emo_happy: 0.5 }],
-    ['explicit voice', { emotion: { mode: 'voice' } }, { emo_control_method: '与音色参考音频相同' }],
-  ];
-  for (const [label, speechExtra, nativeExtra] of pairs) {
-    assert.equal(canonical(upstream(speechBody(speechExtra))), canonical(upstream(nativeBody(nativeExtra))),
-      label + ' must produce the same upstream body on both entry points');
-  }
-  // An empty object must select the default (voice/clone), not vector with no vector.
-  assert.equal(upstream(speechBody({ emotion: {} })).emo_control_method, '与音色参考音频相同');
-  assert.equal(upstream(speechBody({ emotion_vector: { happy: 0.5 } })).emo_control_method, '使用情感向量控制');
-  // A non-object vector cannot be silently ignored.
-  assert.throws(() => speechBody({ emotion_vector: 5 }), /emotion_vector must be an object/);
-  assert.throws(() => speechBody({ emotion: { mode: 'bogus' } }), /emotion.mode must be/);
-  assert.throws(() => speechBody({ emotion: [] }), /emotion must be an object/);
-  // Reference mode still binds the second clip on both entry points.
-  assert.equal(upstream(speechBody({ emotion_reference_audio: emo, emotion: { mode: 'reference' } })).emo_ref_audio, emo);
 });
 for (const [model, config] of Object.entries(catalog)) {
   const source = official.find(row => row.uuid === config.workflowId);
@@ -1019,7 +897,6 @@ const v2Context = request => ({ method: 'POST', path: '/v2/video_generation', bo
 test('only the namespace-safe interfaces are registered', () => {
   assert.deepEqual(p.meta.routes.map(r => [r.method, r.path]), [
     ['POST', '/v2/video_generation'], ['GET', '/v2/query/video_generation/:task_id'],
-    ['POST', '/autodl/v1/audio/speech'], ['GET', '/autodl/v1/audio/speech/:task_id'],
   ]);
   assert.equal(formats.minimax_api.create_path, '/v2/video_generation');
   assert.equal(formats.minimax_api.query_path, '/v2/query/video_generation/{task_id}');
@@ -1031,9 +908,11 @@ test('only the namespace-safe interfaces are registered', () => {
   }
   // A plugin route may not intersect a HOST STATIC route: router/plugin-router.go
   // rejects such a plugin from public routing entirely, taking every route and model
-  // with it. /v1/audio/speech is a static host route (router/relay-router.go), and
-  // SetRelayRouter runs before SetPluginRouter so it is always in the snapshot. The
-  // OpenAI speech format therefore lives under /autodl/v1 instead.
+  // with it. /v1/audio/speech in particular is a static host route
+  // (router/relay-router.go) and SetRelayRouter runs before SetPluginRouter, so it is
+  // always in the snapshot. That is why the OpenAI speech format is not offered at all
+  // rather than served from a bespoke prefix. The guard stays so the collision cannot be
+  // reintroduced by a future route.
   const hostStatic = ['/v1/audio/speech', '/v1/videos', '/v1/images/generations', '/v1/images/edits', '/v1/responses', '/v1/chat/completions', '/v1/models'];
   for (const route of p.meta.routes) {
     for (const reserved of hostStatic) {
@@ -1041,10 +920,13 @@ test('only the namespace-safe interfaces are registered', () => {
         route.path + ' would collide with the host static route ' + reserved + ' and get the whole plugin rejected');
     }
   }
-  assert.ok(p.meta.routes.every(r => r.path === '/v2/video_generation' || r.path.startsWith('/v2/query/') || r.path.startsWith('/autodl/')),
+  assert.ok(p.meta.routes.every(r => r.path === '/v2/video_generation' || r.path.startsWith('/v2/query/')),
     'every plugin route must stay in a namespace the host does not serve statically');
-  // /autodl/v1/audio/speech is a native route precisely because Plugin API v1 has no
-  // audio protocol. If a future host gains one, claiming it here is the better answer.
+  // Plugin API v1 has no audio protocol, so the MiniMax V2 route is the ONLY TTS entry
+  // point; no audio-shaped route may be registered.
+  assert.ok(!p.meta.routes.some(r => /audio/.test(r.path)), 'no audio-shaped plugin route may be registered');
+  // Only the video protocol is claimed. Plugin API v1 has no audio protocol, so TTS is
+  // served solely by the MiniMax V2 native route.
   assert.deepEqual(p.meta.protocols.map(claim => claim.name), ['openai_video']);
 });
 // The removed official model names must not resolve to any workflow any more.

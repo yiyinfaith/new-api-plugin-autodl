@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.21",
+  version: "1.0.22",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2568,21 +2568,6 @@ export const meta = {
   routes: [
     { method: "POST", path: "/v2/video_generation", type: "submit", decode: "miniCreate", render: "miniCreated" },
     { method: "GET", path: "/v2/query/video_generation/:task_id", type: "query", render: "miniTask" },
-    // OpenAI's speech request format, served from a plugin-owned path.
-    //
-    // It cannot live at the official /v1/audio/speech: the host registers that path
-    // statically (router/relay-router.go), SetRelayRouter runs before SetPluginRouter
-    // so it is present in the route snapshot, and router/plugin-router.go's
-    // validatePlugin rejects a plugin whose route intersects a static route. That
-    // rejection is plugin-wide -- every route and model of this plugin would leave
-    // public routing, not just this endpoint -- so claiming the official path would
-    // take AutoDL offline entirely. rc.43 has no audio protocol either (only
-    // openai_responses/openai_video/openai_image), so a task-plugin channel cannot be
-    // reached through the host's own speech handler. The body format is therefore
-    // served under this prefix, which no static route covers; point an OpenAI client
-    // at base_url "<host>/autodl/v1" and /audio/speech resolves here.
-    { method: "POST", path: "/autodl/v1/audio/speech", type: "submit", decode: "speechCreate", render: "speechCreated", models: [TTS_WORKFLOW, TTS_ALIAS] },
-    { method: "GET", path: "/autodl/v1/audio/speech/:task_id", type: "query", render: "speechTask" },
   ],
   usageSchema: REQUEST_SCHEMA,
   // The channel-mapped motion alias is a public model, so it needs its own
@@ -3147,141 +3132,6 @@ function normalizeRequest(config, input) {
 }
 
 function normalized(ctx) { return normalizeRequest(requestWorkflow(ctx), ctx.requestBody); }
-
-// ---------------------------------------------------------------------------
-// OpenAI speech request format, served at POST /autodl/v1/audio/speech
-// ---------------------------------------------------------------------------
-// Plugin API v1 exposes only openai_responses / openai_video / openai_image as
-// protocols, so there is no audio protocol with which to claim the official
-// /v1/audio/speech -- and that path is a host static route, which a plugin route may
-// not intersect (a collision rejects this plugin from public routing entirely). The
-// official body format is therefore translated here, under a plugin-owned prefix.
-//
-// The translation targets the MiniMax content shape the TTS path already understands,
-// so validation, the 10-second vendor minimum, per-audio-second billing and settlement
-// are reused rather than reimplemented.
-const SPEECH_FORMATS = { mp3: "mp3", wav: "wav", flac: "flac", pcm: "wav" };
-// OpenAI `voice` is a fixed enum of preset speakers. AutoDL indexes zero or more
-// reference audio clips, so the name cannot be honoured and must not be invented:
-// an unmapped voice is refused rather than silently substituted.
-const SPEECH_FIELDS = ["model", "input", "voice", "response_format", "speed", "instructions", "stream_format"];
-// Accepted spellings of the text to speak. `prompt_text` is AutoDL's own name for the
-// SAME field -- the TTS workflow's promptField is literally prompt_text -- so it is an
-// alias of `input`, never a second text slot. It was briefly documented as a separate
-// extension; the workflow rejects that shape outright ("unsupported or mixed MiniMax
-// field prompt_text"), because one field cannot hold two texts.
-const SPEECH_TEXT_ALIASES = ["text", "prompt_text"];
-// OpenAI fields this route accepts and ignores because AutoDL has no counterpart and
-// they carry no media: dropping them keeps an official client working.
-const SPEECH_DROPPED = ["stream_format"];
-
-// AutoDL has no OpenAI equivalent for these, so they are added on top of the official
-// shape. Each is a genuine capability the official format cannot express:
-//   reference_audio / emotion_reference_audio - the voice-cloning and emotion-reference
-//     clips. `voice` names a preset and carries no media, so without these a caller
-//     could not supply the reference AutoDL actually needs.
-//   emotion / emotion_vector - the emotion control method, which OpenAI encodes only
-//     as free-text `instructions` that AutoDL cannot act on.
-//   emo_audio_url - the emotion reference clip for reference mode.
-const SPEECH_AUTODL_FIELDS = ["reference_audio", "emotion_reference_audio", "emo_audio_url", "emotion", "emotion_vector"];
-const SPEECH_EMOTION_KEYS = ["random", "afraid", "angry", "calm", "disgusted", "happy", "melancholic", "sad", "surprised"];
-
-function speechMedia(value, name) {
-  if (typeof value === "string" && value) return value;
-  if (object(value) && typeof value.url === "string" && value.url) return value.url;
-  throw new Error("AutoDL: " + name + " must be a URL string or an object with url");
-}
-
-function decodeSpeech(ctx) {
-  // A native route hands the request over as ctx.body ({kind, value}) and carries no
-  // top-level `model` -- only protocol contexts do. Reading ctx.requestBody/model here
-  // rejected every real request with "served only by IndexTTS-2", because both were
-  // undefined. The model therefore comes from the body, which is also exactly what the
-  // host's own route gate validates it against before this hook runs.
-  const jsonBody = ctx.body && ctx.body.kind === "json" && object(ctx.body.value);
-  if (!jsonBody) throw new Error("AutoDL: the speech route requires a JSON body");
-  const input = ctx.body.value;
-  const model = text(input.model) || text(ctx.model);
-  if (!model) throw new Error("AutoDL: model is required");
-  const config = workflowForName(model) || model;
-  if (config !== TTS_WORKFLOW) throw new Error("AutoDL: OpenAI speech is served only by " + TTS_ALIAS);
-  // The text to speak. OpenAI requires `input`; `text` and `prompt_text` are accepted
-  // spellings of the SAME field, not extra slots. When more than one is given they must
-  // agree, because picking one silently would discard the caller's words.
-  const spellings = [["input", input.input], ["text", input.text], ["prompt_text", input.prompt_text]]
-    .filter(function (pair) { return pair[1] !== undefined; });
-  if (!spellings.length) throw new Error("AutoDL: input (the text to speak) is required");
-  for (const pair of spellings) {
-    if (typeof pair[1] !== "string") throw new Error("AutoDL: " + pair[0] + " must be a string");
-    if (!pair[1]) throw new Error("AutoDL: " + pair[0] + " must not be empty");
-  }
-  const texts = spellings.map(function (pair) { return pair[1]; }).filter(function (value, index, all) { return all.indexOf(value) === index; });
-  if (texts.length > 1) throw new Error("AutoDL: input, text and prompt_text must agree when more than one is given");
-  const speech = texts[0];
-  for (const key of Object.keys(input)) {
-    if (!SPEECH_FIELDS.includes(key) && !SPEECH_TEXT_ALIASES.includes(key) && !SPEECH_AUTODL_FIELDS.includes(key)) {
-      // Refuse rather than drop: a caller sending media under an unknown key would
-      // otherwise believe the voice was applied.
-      throw new Error("AutoDL: unsupported speech field " + key);
-    }
-  }
-  if (input.response_format !== undefined) {
-    if (typeof input.response_format !== "string" || !has(SPEECH_FORMATS, input.response_format)) {
-      throw new Error("AutoDL: response_format must be one of " + Object.keys(SPEECH_FORMATS).join(", "));
-    }
-  }
-  // OpenAI's `voice` names a preset speaker that only OpenAI's own models implement.
-  // AutoDL clones from a reference clip instead. With NO reference there is nothing to
-  // clone from, so the request cannot be honoured at all and is refused rather than
-  // quietly synthesised in a voice the caller did not ask for. When a reference IS
-  // supplied the clone target is explicit and the preset name is inert, so it is
-  // ignored -- the caller's own clip already decides the voice.
-  if (input.voice !== undefined && input.reference_audio === undefined && input.emotion_reference_audio === undefined) {
-    throw new Error("AutoDL: voice presets are not supported; supply reference_audio to clone a voice");
-  }
-  // `speed` and `instructions` are documented by OpenAI but have no AutoDL control.
-  // Accepting them keeps an official client working; they cannot change the request.
-  if (input.speed !== undefined && (typeof input.speed !== "number" || !isFinite(input.speed) || input.speed <= 0)) {
-    throw new Error("AutoDL: speed must be a positive number");
-  }
-  const content = [{ type: "text", text: speech }];
-  // Voice cloning wants exactly one reference clip; the emotion reference is a second,
-  // separate clip. Their order is what assigns prompt_simple and emo_ref_audio, so the
-  // primary reference must always be pushed first.
-  const reference = input.reference_audio !== undefined ? input.reference_audio
-    : input.emotion_reference_audio !== undefined ? input.emotion_reference_audio : undefined;
-  if (reference !== undefined) content.push({ type: "audio_url", role: "reference_audio", audio_url: { url: speechMedia(reference, "reference_audio") } });
-  const emotionClip = input.emo_audio_url !== undefined ? input.emo_audio_url
-    : input.reference_audio !== undefined && input.emotion_reference_audio !== undefined ? input.emotion_reference_audio : undefined;
-  if (emotionClip !== undefined) content.push({ type: "audio_url", role: "reference_audio", audio_url: { url: speechMedia(emotionClip, "emotion_reference_audio") } });
-  // Emotion reaches the workflow as top-level emo_* fields beside the content array,
-  // which is the shape the native MiniMax surface takes.
-  const body = { model: model, content: content };
-  const vector = input.emotion !== undefined
-    ? input.emotion
-    : input.emotion_vector !== undefined
-      ? Object.assign({ mode: "vector" }, object(input.emotion_vector) ? input.emotion_vector : null)
-      : undefined;
-  if (vector !== undefined) {
-    if (!object(vector)) throw new Error("AutoDL: emotion must be an object");
-    for (const key of Object.keys(vector)) {
-      if (key !== "mode" && !SPEECH_EMOTION_KEYS.includes(key)) throw new Error("AutoDL: unsupported emotion field");
-    }
-    // `emotion_vector` implies vector mode; a bare `emotion` object does not. Defaulting
-    // it to vector classified `emotion: {}` as "vector control" with no vector at all,
-    // while the native surface emits voice mode for the same no-emotion intent -- the two
-    // entry points then sent different control values for identical requests.
-    if (input.emotion_vector !== undefined && !object(input.emotion_vector)) throw new Error("AutoDL: emotion_vector must be an object");
-    const fallback = input.emotion_vector !== undefined ? "vector" : "voice";
-    const mode = vector.mode === undefined ? fallback : vector.mode;
-    const modes = { voice: "与音色参考音频相同", reference: "使用情感参考音频", vector: "使用情感向量控制" };
-    if (!has(modes, mode)) throw new Error("AutoDL: emotion.mode must be voice, reference or vector");
-    body.emo_control_method = modes[mode];
-    for (const key of SPEECH_EMOTION_KEYS) if (vector[key] !== undefined) body["emo_" + key] = vector[key];
-  }
-  void SPEECH_DROPPED;
-  return { kind: "submit", model: model, action: "text_to_speech", requestBody: body };
-}
 
 function credentials(ctx) {
   // authHeader may be host-generated Bearer; use the original channel key instead.
@@ -4217,26 +4067,6 @@ export const native = {
     return decodeCompatible(ctx);
   },
   miniCreated: function (_ctx, task) { return { task_id: object(task) ? task.task_id : "" }; },
-  // OpenAI /v1/audio/speech. The submit response carries the public id and the
-  // queued status so a client can poll the speech query route.
-  speechCreate: function (ctx) { return decodeSpeech(ctx); },
-  speechCreated: function (_ctx, task) { return { id: object(task) ? task.task_id : "", status: "queued" }; },
-  speechTask: function (ctx, task) {
-    if (!object(task)) return { status: "failed", error: { code: "audio_generation_failed", message: "AutoDL: task record is missing" } };
-    const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed" };
-    const key = text(task.status).toUpperCase();
-    const result = { id: task.task_id, status: statuses[key] || "queued" };
-    if (Number.isFinite(task.created_at)) result.created_at = task.created_at;
-    if (Number.isFinite(task.updated_at)) result.updated_at = task.updated_at;
-    if (key === "SUCCESS") {
-      let audio = null;
-      try { audio = artifacts(task).find(function (item) { return item.type === "audio"; }); } catch (_) { audio = null; }
-      if (audio) result.url = audio.url;
-      else result.error = { code: "audio_generation_failed", message: "AutoDL: task produced no audio output" };
-    }
-    if (key === "FAILURE") result.error = { code: "audio_generation_failed", message: safeReason(ctx, task.fail_reason) };
-    return result;
-  },
   miniTask: function (ctx, task) {
     // A render hook that throws turns a client poll into a generic 500, so a malformed
     // or absent task record becomes a structured result instead.
