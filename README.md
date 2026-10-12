@@ -23,35 +23,6 @@
 
 通过官方 Task Plugin API v1 实现，调用方填写的 `model` 与官网工作流 ID 一致；两种格式都在解码层把各自的请求形状转换成该工作流实际参数。两种格式共用同一套工作流定义、提交、轮询、计费和结果处理。
 
-## 插件如何工作
-插件运行在 New API 的任务插件沙箱中。New API 负责验证调用方密钥、选择渠道、预扣额度、保存公开任务 ID、后台轮询与任务归属检查；AutoDL 负责运行 ComfyUI 工作流。客户端只需要提交一次，再使用提交响应中的 New API 任务 ID 查询结果。
-
-```mermaid
-flowchart TD
-    Client["客户端：New API API Key"] --> Entry{"请求入口"}
-    Entry --> OpenAI["OpenAI：/v1/videos"]
-    Entry --> MiniMax["MiniMax 官方 V2：/v2/video_generation"]
-    OpenAI --> Map["URL/Data URL 输入校验与工作流字段映射"]
-    MiniMax --> Map
-    Map --> Host["New API：渠道选择、usage 校验、预扣额度"]
-    Host --> Submit["共用提交钩子；使用渠道 AutoDL Token"]
-    Submit --> Vendor["AutoDL ComfyUI 异步任务"]
-    Vendor --> Poll["New API 后台轮询；状态与产物解析"]
-    Poll --> Settle["保存结果；H3 沿用请求 facts，动作迁移按实测时长结算；失败归零"]
-    Settle --> Render["按调用接口呈现结果"]
-    Render --> Query["客户端：公开任务 ID 查询与下载"]
-```
-
-OpenAI 解码器将 `prompt / seconds / size / input_reference / audios / videos / seed` 等统一字段转换成该工作流实际参数；MiniMax 解码器解析 `content`，按 `model` 指定的工作流、媒体 role、时长和比例映射到同一份 `WORKFLOWS` 定义。两者都会校验业务字段、媒体数量并应用已定义的默认值，不支持的能力明确报错。
-
-两种入口最终都生成同一份 AutoDL ComfyUI body（`ref_image_* / ref_audio_* / ref_video / duration / resolution` 等官网字段），工作流身份由 `model` 决定，请求体不参与路由。
-
-两种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量；动作迁移提交时按调用方声明秒数预扣（省略则默认 5 秒），任务创建成功后立即对参考视频做一次受限 Range 读取（公网 URL）或内联 Base64 解码（Data URL），把实测输入时长写入任务状态。结算顺序是「成片新探测 → 轮询记录的成片时长 → 上游 usage 块」，取到的值即为最终计费秒数，不再以声明秒数为上限（提交阶段测得的输入时长**不参与计费**，理由见下）。AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。TTS 没有时长参数，但 AutoDL 按 `audio_sec_cost` 计费（¥0.001/秒，最低 ¥0.010），因此其计费秒数同样来自成片实测：轮询与结算各做一次受限 Range 读取，解析 WAV/MP3 的真实时长。官方最低计费不外写进广场表达式（渲染器不支持嵌套三元与 max()），而由插件把结算秒数下限抬到 10 秒（10 秒 × ¥0.001 = ¥0.010，与官方最低计费一致），解析失败时也至少按 10 秒结算。
-
-插件不会替用户上传本地媒体，也不会自动导入价格。动作迁移的输入测量最多读取首个 1 MiB，按 URL 缓存结果，并受 rc.43 的 4 次 fetch、单次 15 秒、单 hook 30 秒限制；无法读取或无法解析时不测量，回退到声明秒数，不阻塞任务。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#比例与-adaptive)。上线前请为全部要调用的工作流（含 OpenAI 动作迁移别名）配置价格；仅安装插件不足以完成渠道和计费配置。
-
-**动作迁移结算的实测顺序：**测量在提交阶段与渲染并行完成，结算钩子会再次尝试读取成片，取值顺序是「成片新探测 → 轮询记录的成片时长 → 上游 usage 块」，取到的值即为最终计费秒数；声明值只决定提交时的预扣，不封顶结算。**提交阶段测得的输入（参考）视频时长不参与计费**（它只用于展示提交了什么；动作迁移只渲染检测到的人物轨迹，参考片通常长于成片，按它计费会多收——该缺陷已在 1.0.26 修复）。实测过程与证据见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md#104-提交阶段测量输入视频2026-10-11)。
-
 ## URL 安装
 **宿主前提：**使用官方 New API **v1.0.0-rc.43**，无需源码补丁、自定义镜像或 FFmpeg。插件只注册 `/v2/video_generation` 与 `/v2/query/video_generation/{task_id}` 两条路由，这两个路径不与宿主保留的命名空间相交；`/v1/videos` 由宿主自身提供。**因此不需要任何转发配置、路径改写或额外配置文件，导入 `plugin.js` 这一个文件即可运行。**
 
@@ -293,6 +264,35 @@ python .\test-task.py --format minimax --example indextts2-v1 --out result.wav
 
 ## 精确尺寸与需确认项目
 各分辨率档位对应的精确 `宽x高`、可用方向、`size` 参数支持情况，以及秒数取值规则见 [API 文档](API.md) 的《分辨率、方向与精确 size》与《计费时长与结算》。
+
+## 插件如何工作
+插件运行在 New API 的任务插件沙箱中。New API 负责验证调用方密钥、选择渠道、预扣额度、保存公开任务 ID、后台轮询与任务归属检查；AutoDL 负责运行 ComfyUI 工作流。客户端只需要提交一次，再使用提交响应中的 New API 任务 ID 查询结果。
+
+```mermaid
+flowchart TD
+    Client["客户端：New API API Key"] --> Entry{"请求入口"}
+    Entry --> OpenAI["OpenAI：/v1/videos"]
+    Entry --> MiniMax["MiniMax 官方 V2：/v2/video_generation"]
+    OpenAI --> Map["URL/Data URL 输入校验与工作流字段映射"]
+    MiniMax --> Map
+    Map --> Host["New API：渠道选择、usage 校验、预扣额度"]
+    Host --> Submit["共用提交钩子；使用渠道 AutoDL Token"]
+    Submit --> Vendor["AutoDL ComfyUI 异步任务"]
+    Vendor --> Poll["New API 后台轮询；状态与产物解析"]
+    Poll --> Settle["保存结果；H3 沿用请求 facts，动作迁移按实测时长结算；失败归零"]
+    Settle --> Render["按调用接口呈现结果"]
+    Render --> Query["客户端：公开任务 ID 查询与下载"]
+```
+
+OpenAI 解码器将 `prompt / seconds / size / input_reference / audios / videos / seed` 等统一字段转换成该工作流实际参数；MiniMax 解码器解析 `content`，按 `model` 指定的工作流、媒体 role、时长和比例映射到同一份 `WORKFLOWS` 定义。两者都会校验业务字段、媒体数量并应用已定义的默认值，不支持的能力明确报错。
+
+两种入口最终都生成同一份 AutoDL ComfyUI body（`ref_image_* / ref_audio_* / ref_video / duration / resolution` 等官网字段），工作流身份由 `model` 决定，请求体不参与路由。
+
+两种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量；动作迁移提交时按调用方声明秒数预扣（省略则默认 5 秒），任务创建成功后立即对参考视频做一次受限 Range 读取（公网 URL）或内联 Base64 解码（Data URL），把实测输入时长写入任务状态。结算顺序是「成片新探测 → 轮询记录的成片时长 → 上游 usage 块」，取到的值即为最终计费秒数，不再以声明秒数为上限（提交阶段测得的输入时长**不参与计费**，理由见下）。AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。TTS 没有时长参数，但 AutoDL 按 `audio_sec_cost` 计费（¥0.001/秒，最低 ¥0.010），因此其计费秒数同样来自成片实测：轮询与结算各做一次受限 Range 读取，解析 WAV/MP3 的真实时长。官方最低计费不外写进广场表达式（渲染器不支持嵌套三元与 max()），而由插件把结算秒数下限抬到 10 秒（10 秒 × ¥0.001 = ¥0.010，与官方最低计费一致），解析失败时也至少按 10 秒结算。
+
+插件不会替用户上传本地媒体，也不会自动导入价格。动作迁移的输入测量最多读取首个 1 MiB，按 URL 缓存结果，并受 rc.43 的 4 次 fetch、单次 15 秒、单 hook 30 秒限制；无法读取或无法解析时不测量，回退到声明秒数，不阻塞任务。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#比例与-adaptive)。上线前请为全部要调用的工作流（含 OpenAI 动作迁移别名）配置价格；仅安装插件不足以完成渠道和计费配置。
+
+**动作迁移结算的实测顺序：**测量在提交阶段与渲染并行完成，结算钩子会再次尝试读取成片，取值顺序是「成片新探测 → 轮询记录的成片时长 → 上游 usage 块」，取到的值即为最终计费秒数；声明值只决定提交时的预扣，不封顶结算。**提交阶段测得的输入（参考）视频时长不参与计费**（它只用于展示提交了什么；动作迁移只渲染检测到的人物轨迹，参考片通常长于成片，按它计费会多收——该缺陷已在 1.0.26 修复）。实测过程与证据见 [输入媒体真实测试记录](MEDIA_TEST_RESULTS.md#104-提交阶段测量输入视频2026-10-11)。
 
 ## 相关官方资料
 - [New API Task Plugin API v1](https://docs.newapi.pro/zh/docs/plugins/api-reference)
