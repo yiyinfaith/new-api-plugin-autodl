@@ -20,7 +20,7 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.14');
+  assert.equal(p.meta.version, '1.0.16');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
@@ -51,19 +51,157 @@ test('motion transfer bills per second under both its workflow id and channel al
     assert.ok(profile.examples[0].facts.seconds > 0, model + ' declares no default seconds');
   }
 });
-// TTS is billed per request, never per second: it has no duration control at all.
-// The alias must inherit that shape exactly, or pricing the alias would silently
-// gain a seconds input the workflow can never fill.
-test('the IndexTTS-2 alias mirrors indextts2-v1, including its per-request billing', () => {
+// TTS is billed per second of delivered audio. AutoDL's own price_type for the
+// workflow is `audio_sec_cost`, so the seconds input MUST exist -- an earlier
+// revision wrongly treated "the caller cannot pass a duration" as "there is no
+// billable duration" and priced the model per request instead. The alias must
+// mirror the workflow exactly.
+test('the IndexTTS-2 alias mirrors indextts2-v1, including its per-audio-second billing', () => {
   const officialProfile = p.meta.usageProfiles.find(entry => entry.models.includes('indextts2-v1'));
   const aliasProfile = p.meta.usageProfiles.find(entry => entry.models.includes('IndexTTS-2'));
   assert.ok(officialProfile, 'indextts2-v1 has no usage profile');
   assert.ok(aliasProfile, 'the IndexTTS-2 alias has no usage profile');
   assert.deepEqual(Object.keys(aliasProfile.schema).sort(), Object.keys(officialProfile.schema).sort());
   assert.equal(aliasProfile.schema.requests.unit, 'count');
-  assert.ok(!('seconds' in aliasProfile.schema), 'TTS must not advertise per-second billing');
+  // Per-second billing is the whole point of audio_sec_cost; losing this input
+  // would silently degrade TTS to a flat per-request charge.
+  for (const profile of [officialProfile, aliasProfile]) {
+    assert.equal(profile.schema.seconds.unit, 'second');
+    assert.equal(profile.schema.seconds.description.zh, '音频生成单价');
+    assert.ok(profile.examples[0].facts.seconds > 0, 'no reservation seconds');
+  }
   assert.deepEqual(aliasProfile.examples[0].facts, officialProfile.examples[0].facts);
-  assert.deepEqual(aliasProfile.examples[0].facts, { requests: 1 });
+  // The reservation must cover the vendor's minimum charge, which equals ten
+  // seconds of audio, so it cannot be inherited from the 5-second motion default.
+  assert.equal(aliasProfile.examples[0].facts.seconds, 10);
+});
+// The delivered audio is the only source of the billable length, so the seconds
+// must come from an actual read of the file rather than a declared value.
+test('TTS polls and settles on the measured length of the delivered audio', () => {
+  const previousFetch = utils.fetch;
+  const wav = (seconds, rate = 16000) => {
+    // 16 kHz mono 16-bit => byteRate 32000, so `seconds` maps 1:1 to a byte count
+    // per 32000. The parsers derive the rate from the fmt chunk; nothing here is
+    // fed to the plugin as a number, only as bytes.
+    const dataBytes = Math.round(seconds * rate * 2);
+    const header = Buffer.alloc(44);
+    header.write('RIFF', 0, 'ascii'); header.writeUInt32LE(36 + dataBytes, 4); header.write('WAVE', 8, 'ascii');
+    header.write('fmt ', 12, 'ascii'); header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22); header.writeUInt32LE(rate, 24); header.writeUInt32LE(rate * 2, 28);
+    header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34);
+    header.write('data', 36, 'ascii'); header.writeUInt32LE(dataBytes, 40);
+    return new Uint8Array(Buffer.concat([header, Buffer.alloc(dataBytes)]));
+  };
+  const ttsContext = { ...base, model: 'IndexTTS-2', taskId: 'upstream-123' };
+  // `state` is the reservation persisted at submission, which is what production
+  // polling receives; the measured value is merged on top of it.
+  const ttsState = { workflowId: 'indextts2-v1', type: 'audio', facts: { requests: 1, seconds: 10 } };
+  ttsContext.state = ttsState;
+  for (const seconds of [3, 12.5]) {
+    // Below the vendor minimum the floor is what gets billed; above it the measured
+    // length is. Both directions are checked so neither the floor nor the rate can
+    // silently swallow the other.
+    const billable = Math.max(seconds, 10);
+    const media = wav(seconds);
+    try {
+      utils.fetch = request => {
+        assert.equal(request.responseType, 'bytes');
+        const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+        const start = Number(range[1]), end = Math.min(Number(range[2]), media.length - 1);
+        const body = media.slice(start, end + 1);
+        return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}`, 'Content-Length': String(body.length) }, body: body.buffer };
+      };
+      const parsed = p.parseTaskResult(ttsContext, envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/voice.wav', type: 'audio' }]), { status: 200 });
+      assert.equal(parsed.status, 'SUCCESS');
+      assert.ok(Math.abs(parsed.state.measuredSeconds - billable) < 0.001, 'polling recorded ' + parsed.state.measuredSeconds + ' for a ' + seconds + 's clip');
+      // Settlement must bill the measured clip, not the reservation -- and never
+      // below the vendor minimum, which is why the floor is applied here rather
+      // than in the pricing expression (the marketplace cannot render it there).
+      const settled = p.extractUsageOnComplete({ state: parsed.state }, { status: 'SUCCESS' });
+      assert.ok(Math.abs(settled.seconds - billable) < 0.001, 'settled ' + settled.seconds + ' for a ' + seconds + 's clip');
+      // Settlement must also re-measure on its own. The host adopts the state
+      // written by the terminal poll only afterwards, so `measuredSeconds` is
+      // frequently absent here and settlement cannot rely on the polling read.
+      const noMeasured = { ...ttsState, measuredSeconds: undefined };
+      delete noMeasured.measuredSeconds;
+      const fresh = p.extractUsageOnComplete({ state: noMeasured }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/voice.wav' });
+      assert.ok(Math.abs(fresh.seconds - billable) < 0.001, 'settlement re-measured ' + fresh.seconds + ' instead of ' + billable);
+      // The floor is the vendor's minimum charge expressed in seconds, so the money
+      // it implies must equal AutoDL minimum_price exactly.
+      assert.ok(Math.abs(billable * 0.001 - Math.max(seconds * 0.001, 0.01)) < 1e-12, 'charge for ' + seconds + 's');
+    } finally { utils.fetch = previousFetch; }
+  }
+});
+// A public alias must poll correctly even when the channel does not map it back to
+// the workflow id: the plugin resolves aliases itself, so requiring a mapping for
+// polling would contradict accepting the alias standalone.
+test('an alias polls without a channel mapping, and an unmapped name uses its saved state', () => {
+  const previousFetch = utils.fetch;
+  const media = (() => {
+    const dataBytes = 4 * 32000, header = Buffer.alloc(44);
+    header.write('RIFF', 0, 'ascii'); header.writeUInt32LE(36 + dataBytes, 4); header.write('WAVE', 8, 'ascii');
+    header.write('fmt ', 12, 'ascii'); header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22); header.writeUInt32LE(16000, 24); header.writeUInt32LE(32000, 28);
+    header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34);
+    header.write('data', 36, 'ascii'); header.writeUInt32LE(dataBytes, 40);
+    return new Uint8Array(Buffer.concat([header, Buffer.alloc(dataBytes)]));
+  })();
+  const serve = () => request => {
+    const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+    const start = Number(range[1]), end = Math.min(Number(range[2]), media.length - 1);
+    const body = media.slice(start, end + 1);
+    return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}`, 'Content-Length': String(body.length) }, body: body.buffer };
+  };
+  const success = envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/voice.wav', type: 'audio' }]);
+  try {
+    // No upstreamModel anywhere: the plugin must resolve the alias on its own.
+    const alias = { ...base, model: 'IndexTTS-2', taskId: 'upstream-123', state: { workflowId: 'indextts2-v1', type: 'audio', facts: { requests: 1, seconds: 10 } } };
+    utils.fetch = serve();
+    const parsed = p.parseTaskResult(alias, success, { status: 200 });
+    assert.equal(parsed.status, 'SUCCESS');
+    // A 4-second clip is below the vendor minimum, so polling records the floor.
+    assert.equal(parsed.state.measuredSeconds, 10, 'alias polling measured ' + parsed.state.measuredSeconds);
+
+    // With no saved state at all, the alias itself must still identify the
+    // workflow: this is what proves polling resolves aliases rather than merely
+    // leaning on the saved type.
+    const bare = { ...base, model: 'IndexTTS-2', taskId: 'upstream-123' };
+    utils.fetch = serve();
+    assert.equal(p.parseTaskResult(bare, success, { status: 200 }).status, 'SUCCESS');
+
+    // A private name the operator mapped to a workflow we hold no table for. The
+    // saved state is the authoritative record of the media type, so polling must
+    // still succeed rather than failing the task outright.
+    const priv = { ...base, model: 'my-private-voice', upstreamModel: 'my-private-workflow', taskId: 'upstream-123', state: { workflowId: 'indextts2-v1', type: 'audio', facts: { requests: 1, seconds: 10 } } };
+    utils.fetch = serve();
+    assert.equal(p.parseTaskResult(priv, success, { status: 200 }).status, 'SUCCESS');
+
+    // With neither a known name nor a saved type, failing is correct: inventing a
+    // type would misread the payload.
+    utils.fetch = () => { throw new Error('no network'); };
+    const unknown = { ...base, model: 'my-private-voice', taskId: 'upstream-123' };
+    assert.equal(p.parseTaskResult(unknown, success, { status: 200 }).status, 'FAILURE');
+  } finally { utils.fetch = previousFetch; }
+});
+test('an unmeasurable TTS clip still settles at the vendor minimum reservation', () => {
+  const previousFetch = utils.fetch;
+  const ttsState = { workflowId: 'indextts2-v1', type: 'audio', facts: { requests: 1, seconds: 10 } };
+  try {
+    // A blocked host must not produce zero seconds: the workflow has no caller
+    // declaration to fall back on, so the reservation is the only honest floor.
+    utils.fetch = () => { throw new Error('output host blocks range reads'); };
+    const blocked = 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.wav';
+    assert.equal(p.extractUsageOnComplete({ state: ttsState }, { status: 'SUCCESS', url: blocked }).seconds, 10);
+    // Upstream usage, when it does carry its own seconds, is more specific -- but it
+    // is still a delivered length, so the vendor minimum applies to it as well.
+    assert.equal(p.extractUsageOnComplete({ state: ttsState }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 7 } }).seconds, 10);
+    // Above the minimum it is billed as reported, unfloored.
+    assert.equal(p.extractUsageOnComplete({ state: ttsState }, { status: 'SUCCESS', url: blocked }, { usage: { output_seconds: 42 } }).seconds, 42);
+    // A bare duration is processing wall time and must never be billed.
+    assert.equal(p.extractUsageOnComplete({ state: ttsState }, { status: 'SUCCESS', url: blocked }, { duration: 196 }).seconds, 10);
+    // A failed TTS task refunds in full.
+    assert.deepEqual(p.extractUsageOnComplete({ state: ttsState }, { status: 'FAILURE' }), { requests: 0, seconds: 0 });
+  } finally { utils.fetch = previousFetch; }
 });
 test('the IndexTTS-2 alias resolves to the same workflow as indextts2-v1', () => {
   const voice = 'data:audio/wav;base64,AA==';
@@ -123,6 +261,10 @@ for (const [model, config] of Object.entries(catalog)) {
   const expectedFacts = { requests: 1 };
   const promptField = ['prompt', 'prompt_text'].find(k => source.input_rules[k]);
   const secondsField = ['duration', 'audio_duration'].find(k => source.input_rules[k]);
+  // TTS has no duration parameter but is still billed per delivered audio second,
+  // so its reservation is recorded at submission like motion transfer's.
+  const measuredSecondsDefault = config.type === 'audio' ? 10 : null;
+  if (measuredSecondsDefault !== null) expectedFacts.seconds = measuredSecondsDefault;
   if (promptField) expectedBody[promptField] = input.prompt;
   if (secondsField) { expectedBody[secondsField] = input.seconds; expectedFacts.seconds = input.seconds; }
   if (model === motionModel) expectedFacts.seconds = 5; // explicit request declaration
@@ -225,7 +367,7 @@ for (const [model, config] of Object.entries(catalog)) {
   const output = envelope('completed', [{ url: 'https://cdn.example.com/out', type: config.type, file_type: config.type === 'audio' ? 'wav' : 'mp4' }], { duration: 196 });
   fixture(model + ': successful result', 'parseTaskResult', [query, output, { status: 200 }], { status: 'SUCCESS', progress: '100%', url: 'https://cdn.example.com/out' });
   fixture(model + ': processing duration is not output seconds', 'extractUsageOnComplete', [query, { status: 'SUCCESS' }, output], expectedFacts);
-  fixture(model + ': failed usage zeroed', 'extractUsageOnComplete', [query, { status: 'FAILURE' }, output], { ...expectedFacts, requests: 0, ...(secondsField || model === motionModel ? { seconds: 0 } : {}) });
+  fixture(model + ': failed usage zeroed', 'extractUsageOnComplete', [query, { status: 'FAILURE' }, output], { ...expectedFacts, requests: 0, ...(secondsField || model === motionModel || config.type === 'audio' ? { seconds: 0 } : {}) });
   const task = { status: 'SUCCESS', action, data: output };
   fixture(model + ': output artifact', 'listArtifacts', [task], [{ key: config.type, type: config.type, mimeType: config.type === 'audio' ? 'audio/wav' : 'video/mp4' }]);
   for (const method of ['GET', 'HEAD']) fixture(model + ': credentialless ' + method, 'buildContentRequest', [{ ...query, action, data: output, artifactKey: config.type, clientRequest: { method, headers: { Range: 'bytes=0-31' } } }], { url: 'https://cdn.example.com/out', method: 'GET', credentialless: true });

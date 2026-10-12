@@ -2486,6 +2486,12 @@ PUBLIC_ALIASES[TTS_ALIAS] = TTS_WORKFLOW;
 // declares nothing, so an omitted declaration can never settle at zero seconds.
 const MOTION_DEFAULT_SECONDS = 5;
 
+// TTS is billed per delivered audio second with a vendor minimum charge equal to
+// ten seconds of audio, so the pre-charge holds exactly that floor: a shorter
+// reservation would let a successful short clip be charged the difference after
+// the fact, and a longer one would lock up balance for no reason.
+const TTS_DEFAULT_SECONDS = 10;
+
 // `publicModel` lets the channel-mapped motion alias reuse the motion workflow's
 // capability profile while still being advertised and priced under its own name.
 // It is validated as a string because Array.map would otherwise pass an index.
@@ -2493,9 +2499,23 @@ function usageProfile(model, publicModel) {
   const config = WORKFLOWS[model];
   const schema = Object.assign({}, REQUEST_SCHEMA);
   const facts = { requests: 1 };
-  if (config.secondsField || model === MOTION_WORKFLOW) {
-    schema.seconds = { type: "number", unit: "second", description: { en: "Video generation unit price", zh: "视频生成单价" } };
-    facts.seconds = config.secondsField ? config.rules[config.secondsField].default : MOTION_DEFAULT_SECONDS;
+  // TTS is billed per second of delivered audio (AutoDL's own price_type for the
+  // workflow is `audio_sec_cost`). It has no duration *parameter* -- the caller
+  // cannot ask for a length -- but the delivered file always has one, so unlike
+  // the H3 workflows its seconds come from measurement, exactly like motion
+  // transfer. The fact is still named `seconds`: every workflow reports its
+  // billable length under that one name, including the H3 audio-sync workflow
+  // whose *parameter* is audio_duration, so pricing expressions stay uniform.
+  const measured = config.secondsField || model === MOTION_WORKFLOW || config.type === "audio";
+  if (measured) {
+    const audio = config.type === "audio";
+    const label = audio
+      ? { en: "Audio generation unit price", zh: "音频生成单价" }
+      : { en: "Video generation unit price", zh: "视频生成单价" };
+    schema.seconds = { type: "number", unit: "second", description: label };
+    facts.seconds = config.secondsField
+      ? config.rules[config.secondsField].default
+      : (audio ? TTS_DEFAULT_SECONDS : MOTION_DEFAULT_SECONDS);
   }
   if (config.resolutions.length) {
     schema.resolution = { enum: Array.from(new Set(config.resolutions.map(function (entry) { return entry.resolution; }))), description: { en: "Output resolution", zh: "输出分辨率" } };
@@ -2525,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.14",
+  version: "1.0.16",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2851,6 +2871,12 @@ function normalizeInput(config, input) {
     // Optional: motion transfer has no upstream seconds control, so this only
     // seeds the reservation and settlement bills the measured clip instead.
     facts.seconds = motionDeclaredSeconds(input);
+  } else if (config.type === "audio") {
+    // TTS has no duration control either, but unlike motion transfer there is no
+    // caller declaration to read: the length is decided by the delivered audio, so
+    // the reservation is fixed and settlement replaces it with the measurement.
+    if (input.seconds !== undefined || input.duration !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
+    facts.seconds = TTS_DEFAULT_SECONDS;
   } else if (input.seconds !== undefined || input.duration !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
   const selected = mapResolution(config, input);
   if (selected) { body.resolution = selected.upstream; facts.resolution = selected.resolution; facts.orientation = selected.orientation; }
@@ -3048,6 +3074,12 @@ function normalizeMiniMax(config, input) {
     // `duration` is optional here: it never reaches upstream, and settlement
     // bills the measured clip. Omitting it leaves the default reservation.
     normalized.facts.seconds = motionSeconds === undefined ? MOTION_DEFAULT_SECONDS : motionSeconds;
+  }
+  if (config.workflowId === TTS_WORKFLOW) {
+    // There is no duration parameter to read at all: the caller cannot influence
+    // the length, and the delivered file is the only source. Set the vendor's
+    // minimum-billable reservation here so the pre-charge is never short.
+    normalized.facts.seconds = TTS_DEFAULT_SECONDS;
   }
   return normalized;
 }
@@ -3315,6 +3347,102 @@ function webmDuration(bytes) {
 }
 
 
+// TTS bills per second of delivered audio (AutoDL's own price_type for the
+// workflow is `audio_sec_cost`), but the upstream returns no duration field and
+// the workflow exposes no duration parameter. So the length has to come from the
+// audio file itself, exactly as motion transfer measures its delivered clip.
+// WAV states its length in the header. Everything in a RIFF file is
+// little-endian, unlike the big-endian MP4/EBML readers above, so it needs its own
+// readers: reusing u32 read each chunk size as hundreds of millions and walked the
+// cursor off the end of the buffer, which made every WAV look unmeasurable.
+// Reads are bounds-checked because the probe may be a Range window, so a chunk
+// header can be cut off mid-way.
+function u16le(bytes, offset) {
+  return bytes[offset] + bytes[offset + 1] * 0x100;
+}
+
+function u32le(bytes, offset) {
+  return bytes[offset] + bytes[offset + 1] * 0x100 + bytes[offset + 2] * 0x10000 + bytes[offset + 3] * 0x1000000;
+}
+
+function wavDuration(bytes) {
+  if (!bytes || bytes.length < 12) return null;
+  if (ascii4(bytes, 0) !== "RIFF" || ascii4(bytes, 8) !== "WAVE") return null;
+  let offset = 12;
+  let byteRate = 0;
+  while (offset + 8 <= bytes.length) {
+    const id = ascii4(bytes, offset);
+    const size = u32le(bytes, offset + 4);
+    const data = offset + 8;
+    if (id === "fmt " && data + 16 <= bytes.length) {
+      // byteRate at +8 is authoritative; derive it only when a streamed writer
+      // left it zero, so a real value is never overridden by an estimate.
+      byteRate = u32le(bytes, data + 8);
+      if (byteRate <= 0) {
+        const channels = u16le(bytes, data + 2);
+        const rate = u32le(bytes, data + 4);
+        const bits = u16le(bytes, data + 14);
+        if (channels > 0 && rate > 0 && bits > 0) byteRate = rate * channels * (bits / 8);
+      }
+    } else if (id === "data" && byteRate > 0) {
+      // A streamed WAV uses 0xffffffff for an unknown size; fall back to what the
+      // probe actually contains so the estimate stays honest instead of absurd.
+      const audioBytes = size === 0xffffffff || size === 0 ? bytes.length - data : size;
+      if (audioBytes > 0) return audioBytes / byteRate;
+    }
+    if (size <= 0 || size === 0xffffffff) break;
+    // Chunks are word-aligned: an odd size is followed by one pad byte.
+    offset = data + size + (size % 2);
+  }
+  return null;
+}
+
+// MP3 gives no single reliable length field. The Xing/Info frame count is the only
+// dependable source, so prefer it and otherwise report nothing: guessing from the
+// bitrate would let a padded file bill more seconds than it plays. The header sits
+// in the first frame, which the head probe always covers.
+function mp3Duration(bytes) {
+  if (!bytes || bytes.length < 4) return null;
+  let offset = 0;
+  if (ascii4(bytes, 0) === "ID3" && bytes.length >= 10) {
+    const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
+    offset = 10 + size;
+  }
+  // Locate a frame sync, skipping any leading padding.
+  let limit = Math.min(bytes.length - 4, offset + 8192);
+  while (offset < limit) {
+    if (bytes[offset] === 0xff && (bytes[offset + 1] & 0xe0) === 0xe0) break;
+    offset++;
+  }
+  if (offset >= limit) return null;
+  const versionBits = (bytes[offset + 1] >> 3) & 0x03;   // 3 = MPEG1
+  const channelMode = (bytes[offset + 3] >> 6) & 0x03;   // 3 = mono
+  const sampleRates = versionBits === 3 ? [44100, 48000, 32000] : [22050, 24000, 16000];
+  const sampleRate = sampleRates[(bytes[offset + 2] >> 2) & 0x03];
+  if (!sampleRate) return null;
+  const sideInfo = versionBits === 3 ? (channelMode === 3 ? 17 : 32) : (channelMode === 3 ? 9 : 17);
+  const xing = offset + 4 + sideInfo;
+  if (xing + 12 > bytes.length) return null;
+  const tag = ascii4(bytes, xing);
+  if (tag !== "Xing" && tag !== "Info") return null;
+  const flags = u32(bytes, xing + 4);
+  if (!(flags & 0x01)) return null;                      // no frame count present
+  const frames = u32(bytes, xing + 8);
+  if (!(frames > 0)) return null;
+  const samplesPerFrame = versionBits === 3 ? 1152 : 576;
+  return frames * samplesPerFrame / sampleRate;
+}
+
+// Dispatch on the container rather than the URL extension, because signed CDN
+// links routinely carry no usable suffix and a wrong guess would misbill.
+function parseAudioDuration(bytes) {
+  if (!bytes || bytes.length === 0) return null;
+  const wav = wavDuration(bytes);
+  if (Number.isFinite(wav) && wav > 0) return wav;
+  const mp3 = mp3Duration(bytes);
+  return Number.isFinite(mp3) && mp3 > 0 ? mp3 : null;
+}
+
 function parseVideoDuration(bytes) {
   if (!bytes || bytes.length === 0) return null;
   const mp4 = mp4Duration(bytes);
@@ -3357,6 +3485,33 @@ function measuredOutputDuration(url) {
       const start = total - MEDIA_PROBE_BYTES;
       const tail = mediaRange(url, start, total - 1);
       seconds = parseVideoDuration(tail.bytes);
+    }
+    return motionSecondsInRange(seconds);
+  } catch (_) {
+    return null;
+  }
+}
+
+// Delivered-audio measurement for the TTS workflow. WAV states its length up
+// front, so the head probe is usually enough; MP3 keeps its Xing/Info frame count
+// in the first frame too. The tail read is still attempted, because a WAV that
+// needs its `data` chunk size may have it past the first window for a long clip.
+function measuredAudioDuration(url) {
+  if (typeof utils === "undefined" || typeof utils.fetch !== "function") return null;
+  if (typeof url !== "string" || !url) return null;
+  try {
+    const head = mediaRange(url, 0, MEDIA_PROBE_END);
+    let seconds = parseAudioDuration(head.bytes);
+    if (seconds !== null) return motionSecondsInRange(seconds);
+    let total = head.total;
+    if (!Number.isSafeInteger(total)) {
+      const response = utils.fetch({ url: url, method: "HEAD", responseType: "bytes" });
+      const value = response && response.headers && Number(response.headers["Content-Length"]);
+      total = Number.isSafeInteger(value) ? value : undefined;
+    }
+    if (Number.isSafeInteger(total) && total > MEDIA_PROBE_BYTES) {
+      const tail = mediaRange(url, total - MEDIA_PROBE_BYTES, total - 1);
+      seconds = parseAudioDuration(tail.bytes);
     }
     return motionSecondsInRange(seconds);
   } catch (_) {
@@ -3560,16 +3715,40 @@ export function parseTaskResult(ctx, body, response) {
   if (status === "FAILURE") return { status: status, reason: safeReason(ctx, data.message || (object(data.error) ? data.error.message : data.error)) };
   if (status === "SUCCESS") {
     try {
-      const config = workflow(ctx.upstreamModel || ctx.model);
-      const outputs = results(body, config.type).filter(function (item) { return item.type === config.type; });
+      // Resolve public aliases here as well as on submission: a caller may name
+      // IndexTTS-2 or the motion alias directly, and looking the name up raw made
+      // polling fail for exactly the requests this plugin accepts standalone. When
+      // the name has no table at all -- an operator's private workflow id -- fall
+      // back to the type saved at submission, which is the authoritative record of
+      // what this task actually is.
+      const named = workflowForName(ctx.upstreamModel) || workflowForName(ctx.model);
+      // A plain membership test, not workflow(): that helper throws for an unknown
+      // name, and throwing here turned every poll of an unmapped private name --
+      // the very case 1.0.13 set out to support -- into a failed task.
+      const config = has(WORKFLOWS, named) ? WORKFLOWS[named] : null;
+      const saved = object(ctx.state) ? ctx.state : {};
+      const type = config ? config.type : text(saved.type);
+      if (!type) throw new Error("AutoDL: cannot determine the media type of this task");
+      const kind = config && has(WORKFLOWS, config.workflowId) ? config.workflowId : text(saved.workflowId);
+      const outputs = results(body, type).filter(function (item) { return item.type === type; });
       if (!outputs.length) throw new Error("AutoDL: SUCCESS response contains no expected media output");
       const parsed = { status: "SUCCESS", progress: "100%", url: outputs[0].url };
       // Stock rc.43 exposes byte-range fetches only from polling hooks. Keep
       // the declared reservation for submission, then opportunistically save
-      // a bounded video-track measurement for motion-transfer settlement.
-      if (config.workflowId === MOTION_WORKFLOW) {
+      // a bounded measurement for settlement: the video track for motion
+      // transfer, the audio stream for TTS.
+      if (kind === MOTION_WORKFLOW) {
         const seconds = measuredOutputDuration(outputs[0].url);
-        if (seconds !== null) parsed.state = Object.assign({}, ctx.state || {}, { measuredSeconds: seconds });
+        if (seconds !== null) parsed.state = Object.assign({}, saved, { measuredSeconds: seconds });
+      } else if (kind === TTS_WORKFLOW) {
+        // The audio track is the only source of the billable length, so measure it
+        // here as well as at settlement: this call happens while the task is still
+        // being polled, and a later hook call gets a fresh fetch budget.
+        const seconds = measuredAudioDuration(outputs[0].url);
+        // Record the floored length, so the value saved while polling and the value
+        // billed at settlement are the same number and neither undercuts the vendor
+        // minimum (see the settlement note below for why the floor lives in code).
+        if (seconds !== null) parsed.state = Object.assign({}, saved, { measuredSeconds: Math.max(seconds, TTS_DEFAULT_SECONDS) });
       }
       return parsed;
     } catch (error) { return { status: "FAILURE", reason: error.message }; }
@@ -3661,6 +3840,28 @@ export function extractUsageOnComplete(task, result, body) {
     // when no candidate measured anything, the reservation stands.
     if (settled !== null) facts.seconds = settled;
     else if (motionSecondsInRange(facts.seconds) === null) facts.seconds = MOTION_DEFAULT_SECONDS;
+  }
+  // TTS bills per delivered audio second, and the upstream reports no duration,
+  // so the delivered file is the only honest source. Unlike motion transfer there
+  // is no caller declaration to fall back on and no reference clip that predicts
+  // the length -- the script decides it -- so a failed measurement keeps the
+  // reservation rather than inventing a better number.
+  //
+  // The vendor also charges a minimum (AutoDL billing_config.minimum_price, raw 10,
+  // i.e. CNY 0.010 = ten seconds at CNY 0.001/s). That floor lives here rather than in
+  // the pricing expression because the model marketplace would not render this
+  // workflow's price once a conditional was nested inside the rate: the single-level
+  // `hour() ? tier() : tier()` form renders and the nested one did not (checked
+  // against the live marketplace), and a model whose price fails to render silently
+  // looks free. Flooring the settled seconds is exact, so the displayed CNY 0.001/s
+  // stays honest and the minimum is still charged.
+  if (status === "SUCCESS" && state.workflowId === TTS_WORKFLOW) {
+    const url = object(result) ? text(result.url) : "";
+    const settled = motionSecondsInRange(url ? measuredAudioDuration(url) : null)
+      || motionSecondsInRange(state.measuredSeconds)
+      || upstreamDeclaredSeconds(body);
+    if (settled !== null) facts.seconds = Math.max(settled, TTS_DEFAULT_SECONDS);
+    else if (motionSecondsInRange(facts.seconds) === null) facts.seconds = TTS_DEFAULT_SECONDS;
   }
   // Compare the status by meaning, not by exact spelling. native.miniTask
   // renders this plugin's own FAILURE/CANCELLED as the lowercase strings

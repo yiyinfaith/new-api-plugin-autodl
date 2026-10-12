@@ -5,8 +5,12 @@
     "name": "IndexTTS-2",
     "resolves_to": "indextts2-v1",
     "upstream_model_id_of_underlying_open_source_model": "IndexTeam/IndexTTS-2 (Bilibili IndexTeam), arXiv:2506.21619",
-    "surfaces": ["/v2/video_generation"],
-    "excluded_from": ["/v1/videos (openai_video) - TTS is not a video surface"],
+    "surfaces": [
+      "/v2/video_generation"
+    ],
+    "excluded_from": [
+      "/v1/videos (openai_video) - TTS is not a video surface"
+    ],
     "billing": "per request; the workflow has no duration field, so the alias must never advertise seconds",
     "shares_capability_table_with": "indextts2-v1"
   },
@@ -14,8 +18,14 @@
     "upstream_url_identical": true,
     "action": "text_to_audio",
     "rewrite_model": "indextts2-v1",
-    "body_slots_identical": ["prompt_text", "prompt_simple", "emo_control_method"],
-    "usage_identical": {"requests": 1},
+    "body_slots_identical": [
+      "prompt_text",
+      "prompt_simple",
+      "emo_control_method"
+    ],
+    "usage_identical": {
+      "requests": 1
+    },
     "emotion_reference_slot_binds": "emo_ref_audio",
     "emotion_vector_passthrough": true,
     "saved_internal_model": "indextts2-v1",
@@ -50,10 +60,15 @@
     "model": "IndexTTS-2",
     "billing_expr": "tier(\"standard\", u(\"requests\") * 0.5)",
     "billing_mode": "tiered_expr",
-    "usage_schema": ["requests"],
+    "usage_schema": [
+      "requests"
+    ],
     "price_cny_per_request": 0.5,
     "quota_per_request": 250000,
-    "enable_groups": ["管理员", "index"],
+    "enable_groups": [
+      "管理员",
+      "index"
+    ],
     "visible_in_pricing_api": true,
     "expression_keys_match_working_reference": true,
     "other_expressions_changed": 0,
@@ -63,11 +78,18 @@
   "channel": {
     "id": 345,
     "name": "AutoDL_index-tts",
-    "models": ["IndexTTS-2"],
+    "models": [
+      "IndexTTS-2"
+    ],
     "configured_by": "operator",
     "paidsubmissions": 0
   },
-  "row_counts": {"channels": "107", "tasks": "3391", "abilities": "413", "models": "182"},
+  "row_counts": {
+    "channels": "107",
+    "tasks": "3391",
+    "abilities": "413",
+    "models": "182"
+  },
   "gates": {
     "plugin_js_syntax": "pass",
     "tests_mjs": "PASS: 1301 checks; generated 956 official host fixture cases for all 17 workflows.",
@@ -75,5 +97,6 @@
     "verify_round2_fixes": "24/24",
     "verify_mapping_protection": "pass (fallback strictness still enforced)",
     "verify_media_requirements": "pass"
-  }
+  },
+  "CORRECTED_IN_1_0_15": "The billing section of this file is WRONG and is superseded by evidence/tts-per-second-billing-1.0.15.json. IndexTTS-2 is billed per delivered audio second (AutoDL price_type \"audio_sec_cost\", CNY 0.001/s, minimum CNY 0.010), not per request. The claim that the workflow \"has no duration field\" confused \"no duration parameter\" with \"no billable duration\". Everything else in this file -- the alias resolution, the refusal on the OpenAI surface, and the workflow-identity conflict bug -- remains accurate."
 }

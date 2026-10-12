@@ -1,0 +1,12 @@
+{
+  "plugin_version": "1.0.16",
+  "task_id": "task_2iidXlqXjzR2VkkObfTTOJ0hEzuDpiMh",
+  "status": "SUCCESS",
+  "channel_id": 345,
+  "quota": 5000,
+  "charged_cny": 0.01,
+  "measured_audio_seconds_independently": 3.088,
+  "expected_charge_cny": 0.01,
+  "vendor_minimum_applied": true,
+  "note": "measured by re-parsing the delivered WAV header, independently of the plugin"
+}

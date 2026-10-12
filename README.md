@@ -2,7 +2,7 @@
 
 为 New API 提供 AutoDL.Art Task Plugin 适配，将 AutoDL ComfyUI 工作流接入 New API。
 
-插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.14**（插件元数据为 `1.0.14`）。
+插件 key：`autodl`；显示名：**AutoDL**；当前版本：**v1.0.16**（插件元数据为 `1.0.16`）。
 
 **调用方从这里开始：[5 分钟快速开始与完整 API 参考](API.md#5-分钟快速开始)。** 一份文档介绍 OpenAI 与 MiniMax 官方 V2 两种接口；每种都有完整 curl、创建响应、任务查询和成功结果字段。覆盖文生视频、图片 URL/Data URL、图+音频、图+视频，并提供常用模型与错误速查；后半部分保留完整字段类型、必填/默认值、工作流范围、计费及技术限制，无需跳到其他说明文档。
 
@@ -47,7 +47,7 @@ OpenAI 解码器将 `prompt / seconds / size / input_reference / audios / videos
 
 两种入口最终都生成同一份 AutoDL ComfyUI body（`ref_image_* / ref_audio_* / ref_video / duration / resolution` 等官网字段），工作流身份由 `model` 决定，请求体不参与路由。
 
-两种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量；动作迁移提交时按调用方声明秒数预扣（省略则默认 5 秒），任务创建成功后立即对参考视频做一次受限 Range 读取（公网 URL）或内联 Base64 解码（Data URL），把实测输入时长写入任务状态。结算顺序是「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 上游 usage 块」，取到的值即为最终计费秒数，不再以声明秒数为上限。AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。
+两种入口最终共用 `buildSubmitRequest / parseSubmitResponse / buildQueryRequest / parseTaskResult` 及结算、artifact 逻辑。提交时保存 `facts / workflowId / type / submittedAt / timeoutSeconds`，H3 完成时沿用请求用量；动作迁移提交时按调用方声明秒数预扣（省略则默认 5 秒），任务创建成功后立即对参考视频做一次受限 Range 读取（公网 URL）或内联 Base64 解码（Data URL），把实测输入时长写入任务状态。结算顺序是「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 上游 usage 块」，取到的值即为最终计费秒数，不再以声明秒数为上限。AutoDL 的 `data.duration` 是运行耗时，不作为生成秒数。视频工作流成功时选择视频产物，TTS 选择音频；下载产物时不向媒体站点发送渠道 Token。TTS 没有时长参数，但 AutoDL 按 `audio_sec_cost` 计费（¥0.001/秒，最低 ¥0.010），因此其计费秒数同样来自成片实测：轮询与结算各做一次受限 Range 读取，解析 WAV/MP3 的真实时长。官方最低计费不外写进广场表达式（渲染器不支持嵌套三元与 max()），而由插件把结算秒数下限抬到 10 秒（10 秒 × ¥0.001 = ¥0.010，与官方最低计费一致），解析失败时也至少按 10 秒结算。
 
 插件不会替用户上传本地媒体，也不会自动导入价格。动作迁移的输入测量最多读取首个 1 MiB，按 URL 缓存结果，并受 rc.43 的 4 次 fetch、单次 15 秒、单 hook 30 秒限制；无法读取或无法解析时不测量，回退到声明秒数，不阻塞任务。MiniMax `adaptive` 使用已确认的工作流默认方向降级，具体限制见 [API 文档](API.md#比例与-adaptive)。上线前请为全部要调用的工作流（含 OpenAI 动作迁移别名）配置价格；仅安装插件不足以完成渠道和计费配置。
 
@@ -81,7 +81,7 @@ URL 导入在浏览器中下载源码，因此使用管理后台的浏览器需�
 
 仓库只维护根目录的一个 `plugin.js` 和一个当前版本，更新后仍使用同一个 `main` Raw URL。`workflows.json`、`official-workflows.json`、`examples.json` 和 `prices.json` 用于查阅、示例及开发验证，插件运行时不会读取它们；测试脚本、校验文件、许可证和 `.github/` 也不是安装依赖。
 
-从 1.0.7 更新：从上方唯一 Raw URL 导入并启用 AutoDL 1.0.14。保留任务记录、渠道、价格表达式和分组倍率；插件不需要任何路径转发配置。1.0.6 提升了官方格式容错，1.0.7 修复了动作迁移别名的按秒计费：`input_reference` 仍是推荐字段，旧 `images` 恢复为等价兼容别名（映射到同一批图片槽位，不会丢图），`duration` 成为全部工作流的 `seconds` 别名，官方非媒体字段接受并忽略，MiniMax 的 `callback_url` / `extra` 接受并忽略。只维护一个当前版本和安装地址。
+从 1.0.7 更新：从上方唯一 Raw URL 导入并启用 AutoDL 1.0.16。保留任务记录、渠道、价格表达式和分组倍率；插件不需要任何路径转发配置。1.0.6 提升了官方格式容错，1.0.7 修复了动作迁移别名的按秒计费：`input_reference` 仍是推荐字段，旧 `images` 恢复为等价兼容别名（映射到同一批图片槽位，不会丢图），`duration` 成为全部工作流的 `seconds` 别名，官方非媒体字段接受并忽略，MiniMax 的 `callback_url` / `extra` 接受并忽略。只维护一个当前版本和安装地址。
 
 **宿主升级：**继续使用官方 `calciumion/new-api:latest`，不维护源码修改。升级后检查插件 registered、模型价格 schema 及两种请求入口；未来若官方 Plugin API 发生不兼容变更，仍需正常回归验证。
 
@@ -111,7 +111,7 @@ URL 安装不会自动配置渠道或导入模型价格。请完成上述渠道�
 | `minimax_h3_lightx2v_v5` | H3多图参考生视频 | 1–10 秒 | 图 1–9 | 480p/768p/1080p |
 | `minimax_h3_lightx2v_no_pic` | H3文生视频 | 1–15 秒 | 无需媒体 | 480p/768p |
 | `minimax_h3_lightx2v` | H3首尾帧生成视频 | 1–15 秒 | 图 2–2 | 480p/768p |
-| `indextts2-v1` | indextts2 | 无时长控制 | 音频 1–2 | 无 |
+| `indextts2-v1` | indextts2 | 无时长参数（按成片实测计费） | 音频 1–2 | 无 |
 
 官网 API 定义快照保存在 [official-workflows.json](official-workflows.json)，获取日期为 2026-10-07。全部 17 个工作流定义与指定 7 个模型的价格在 2026-10-08 再次从官网读取核实。未来新增工作流时，添加 `WORKFLOWS` 条目、统一字段映射及测试，不需要修改 New API。
 
@@ -259,7 +259,7 @@ MiniMax 官方 V2，提交到 `/v2/video_generation`：
 
 省略可选参数时采用该工作流官网默认值。工作流能力不同，统一的是**参数名字**，不代表全部工作流具有相同的分辨率和时长控制。
 
-OpenAI 入口只服务 16 个视频工作流。动作迁移没有 prompt 或可控生成时长，`seconds` 只声明计费秒数；indexTTS2 音频工作流不在这个入口，它的情感控制与音频参数见 [MiniMax 官方兼容 API](#minimax-官方兼容-api)。
+OpenAI 入口只服务 16 个视频工作流。动作迁移没有 prompt 或可控生成时长，`seconds` 只声明计费秒数；indexTTS2 音频工作流不在这个入口（它是音频，挂到视频入口等于承诺一个答不了的模型），它的情感控制与音频参数见 [MiniMax 官方兼容 API](#minimax-官方兼容-api)。
 
 JSON 和文本表单均可使用统一参数。表单里的 `input_reference` 单图填写 JSON 引用对象，多图填写 JSON 对象数组；也可重复同名文本字段，每项填写一个 JSON 引用对象，顺序保持不变。`audios` 和 `videos` 仍须 JSON 编码。参考媒体 URL 的过期时间要覆盖任务排队和处理。
 
@@ -371,7 +371,7 @@ curl -sS "$NEW_API_BASE_URL/v2/query/video_generation/$TASK_ID" -H "Authorizatio
 
 当前指定实例使用 CNY 展示、`USDExchangeRate=1`，表达式直接填写上述数值，未做外汇换算或加价。其他实例如使用不同展示汇率，应由管理员按站点币种设置换算，不能盲目复制；既有分组倍率仍由 New API 应用。官网价格后续变化不会自动同步，本文件是已核实日期的快照。
 
-**计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`）。TTS 仍按请求次数计费。
+**计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有官方 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 使用 `seconds`，MiniMax 使用 `duration`（音频同步工作流使用 `audio_duration`）。TTS `indextts2-v1`（别名 `IndexTTS-2`）同样按秒计费，但秒数来自**成片音频实测**：该工作流没有时长参数（调用方无法指定长度），AutoDL 的 `price_type` 为 `audio_sec_cost`，因此插件在轮询与结算时用受限 Range 读取交付的 WAV/MP3，解析出真实时长作为计费秒数。
 
 动作迁移没有官方固定时长或默认秒数，时长跟随参考视频。因此计费秒数**可选**：OpenAI body 用 `seconds`，MiniMax body 用 `duration`；省略时按默认 5 秒预扣。声明支持数值/普通十进制字符串，`1 <= 秒数 <= 3600`，允许小数；该值只决定提交时的预扣，**不再封顶结算**，不裁剪视频、不写入 AutoDL body。提交成功后插件立即对参考视频做一次测量：公网 MP4/WebM 用 `bytes=0-1048575` 受限 Range 读取，`data:video/...;base64` 内联解码。结算按「成片新探测 → 轮询记录的成片时长 → 提交阶段测得的输入时长 → 上游官方 usage 块」取值，取到的值即为最终计费秒数（声明小了不会少收，声明大了不会多收）；四项都取不到时保留预扣值，避免按 0 秒结算。远程服务器不支持 Range、URL 不在管理员允许主机或媒体格式无法解析时，继续尝试后面的候选值。
 

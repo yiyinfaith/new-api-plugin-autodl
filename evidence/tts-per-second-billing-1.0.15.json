@@ -1,0 +1,89 @@
+{
+  "plugin_version": "1.0.15",
+  "supersedes": "evidence/tts-alias-1.0.14.json",
+  "correction": {
+    "what_was_wrong": "1.0.14 priced IndexTTS-2 per request, on the reasoning that the workflow exposes no duration PARAMETER. That conflated 'the caller cannot choose a length' with 'there is no billable length'. AutoDL's own definition for this workflow carries price_type 'audio_sec_cost', so it is billed per second of delivered audio.",
+    "how_the_mistake_happened": "the capability table was read for input_rules only; the price_type and billing_config fields on the same official record were never inspected, even though the motion workflow had already established the measured-seconds pattern this is an exact analogue of.",
+    "unit_error_also_corrected": "billing_config stores raw units where raw x 0.001 = CNY (confirmed by the shipping wan price: raw video_sec_cost.price 40 -> the live expression uses 0.04). The raw values were first read as yuan, which overstated the TTS price by 1000x (1 yuan/s and a 10 yuan minimum instead of 0.001 yuan/s and a 0.010 yuan minimum).",
+    "source_of_truth": "the operator's own pricing page for the workflow, plus official-workflows.json billing_config"
+  },
+  "official_billing": {
+    "price_type": "audio_sec_cost",
+    "raw_billing_config": {"audio_sec_cost": {"price": 1, "off_peak_price": 1, "minimum_price": 10}},
+    "cny_peak_per_second": 0.001,
+    "cny_off_peak_per_second": 0.001,
+    "cny_minimum_charge": 0.01,
+    "minimum_equals_seconds": 10,
+    "measurement": "AutoDL bills the actual generated-audio duration; the workflow has no duration parameter, so the delivered file is the only source"
+  },
+  "implementation": {
+    "usage_facts_field": "seconds",
+    "rationale_for_the_name": "every workflow reports its billable length as `seconds`, including the H3 audio-sync workflow whose parameter is audio_duration, so one pricing expression idiom covers all models",
+    "reservation_seconds": 10,
+    "reservation_rationale": "equal to the vendor minimum charge, so a short clip is never under-held and a post-charge difference cannot appear",
+    "measurement_hooks": ["parseTaskResult (during polling)", "extractUsageOnComplete (at settlement)"],
+    "parsers_added": ["wavDuration (RIFF little-endian, fmt + data chunks)", "mp3Duration (ID3v2 skip, frame sync, Xing/Info frame count)"],
+    "settlement_priority": ["fresh measurement of the delivered file", "measurement recorded while polling", "upstream usage block", "the 10-second reservation"],
+    "never_billed": "the upstream data.duration field, which is render wall time (observed 196 and 206) and is not audio length"
+  },
+  "bugs_found_and_fixed": [
+    {
+      "symptom": "every WAV looked unmeasurable, so settlement always fell back to the reservation and the real clip length was never billed",
+      "cause": "the WAV parser reused the big-endian u32 built for MP4/EBML, but RIFF stores chunk sizes and fmt fields little-endian; each chunk size read as hundreds of millions and walked the cursor off the buffer",
+      "fixed": "dedicated u16le/u32le readers plus an authoritative fmt byteRate with a derived fallback"
+    },
+    {
+      "symptom": "polling any task whose model name had no capability table failed with 'unsupported model; select one of the 17 declared models'",
+      "cause": "parseTaskResult called workflow(), which THROWS on an unknown name, instead of testing membership; this broke the unmapped-private-name path that 1.0.13 exists to support",
+      "fixed": "membership test with a fallback to the media type saved at submission"
+    },
+    {
+      "symptom": "polling failed for a public alias whenever the channel did not map it back to the workflow id",
+      "cause": "parseTaskResult looked the name up without resolving aliases, contradicting the standalone alias resolution used on submission",
+      "fixed": "aliases are resolved on the polling path too"
+    }
+  ],
+  "regression_protection": {
+    "method": "revert each part of the change and confirm the suite fails",
+    "reverts_tested": 8,
+    "reverts_caught": 8,
+    "missing": 0,
+    "reverts": [
+      "bill TTS per request again (give it no seconds input)",
+      "read WAV fields big-endian again (the parsing bug)",
+      "trust the header byteRate without a bounds-checked data chunk",
+      "stop measuring the delivered audio at settlement",
+      "stop resolving aliases when polling",
+      "drop the saved-type fallback for unmapped names",
+      "give TTS the motion 5-second reservation instead of the vendor minimum",
+      "omit the TTS reservation when replaying an OpenAI-style body"
+    ]
+  },
+  "live_pricing": {
+    "model": "IndexTTS-2",
+    "billing_mode": "tiered_expr",
+    "billing_expr": "hour(\"Asia/Shanghai\") < 8 ? (u(\"seconds\") < 10 ? tier(\"off_peak_minimum\", 0.01) : tier(\"off_peak\", u(\"seconds\") * 0.001)) : (u(\"seconds\") < 10 ? tier(\"peak_minimum\", 0.01) : tier(\"peak\", u(\"seconds\") * 0.001))",
+    "usage_schema": ["requests", "seconds"],
+    "note": "peak and off-peak rates are both CNY 0.001/s today; the split is written out so a future divergence is a one-number edit",
+    "host_caching": "the host serves billing options from memory, so a database write alone leaves the price invisible; the option API reload is required"
+  },
+  "row_counts": {"channels": "107", "tasks": "3391", "abilities": "413", "models": "182"},
+  "gates": {
+    "plugin_js_syntax": "pass",
+    "tests_mjs": "PASS: 1304 checks; generated 956 official host fixture cases for all 17 workflows.",
+    "tests_client_py": "PASS: 24 zero-network client request, full-flow and audit checks",
+    "verify_mapping_protection": "pass",
+    "verify_media_requirements": "pass",
+    "verify_tts_seconds": "8 reverts tested, 8 caught"
+  },
+  "deployment": {
+    "active_version": "1.0.15",
+    "source_sha256": "62ba8d4a47b769dd86441fe635fdbe6f1b0f7feb7d6aa32869b695df439fb4ec",
+    "source_bytes": 155781,
+    "runtime_registered": true,
+    "plugin_errors": {},
+    "pricing_models_verified": 14,
+    "official_host_image_unchanged": true,
+    "nginx_unchanged": true
+  }
+}

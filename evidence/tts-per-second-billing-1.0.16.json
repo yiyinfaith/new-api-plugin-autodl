@@ -1,0 +1,118 @@
+{
+  "plugin_version": "1.0.16",
+  "supersedes": "evidence/tts-per-second-billing-1.0.15.json",
+  "summary": "IndexTTS-2 / indextts2-v1 bills per delivered audio second at AutoDL's own audio_sec_cost rate (CNY 0.001/s), with AutoDL's minimum (CNY 0.010, i.e. the first 10 seconds) enforced in the plugin. The model marketplace shows a single rate expression it can actually render.",
+  "official_billing": {
+    "price_type": "audio_sec_cost",
+    "raw_billing_config": {
+      "price": 1,
+      "off_peak_price": 1,
+      "minimum_price": 10
+    },
+    "unit_scale": "raw x 0.001 = CNY (cross-checked on wan: raw video_sec_cost.price 40 -> live expression uses 0.04)",
+    "cny_per_second_peak": 0.001,
+    "cny_per_second_off_peak": 0.001,
+    "cny_minimum_charge": 0.01,
+    "minimum_equals_seconds": 10,
+    "arithmetic": "0.001 CNY/s x 10 s = 0.01 CNY, which is exactly what minimum_price denotes, so the minimum is the first 10 seconds"
+  },
+  "marketplace_display": {
+    "problem": "the TTS price did not render in the model marketplace ('expression cannot be parsed')",
+    "investigation": [
+      "dumped all live billing expressions: 65 distinct, of which 6 MiniMax H3 models use nested ternaries and render correctly, so nesting alone is not the cause",
+      "the only expression containing max() in the whole deployment was the TTS one just written",
+      "A/B against the live marketplace: the single-level hour(...) ? tier(...) : tier(...) form renders; the nested form did not, twice"
+    ],
+    "resolution": "published expression is now the single-level two-rate form, identical in shape to wan2.2-animate-move",
+    "published_expression": "hour(\"Asia/Shanghai\") < 8 ? tier(\"off_peak\", u(\"seconds\") * 0.001) : tier(\"peak\", u(\"seconds\") * 0.001)",
+    "minimum_relocated": "because the renderer cannot express the minimum, the plugin floors the settled seconds at 10 (both while polling and at settlement), so the charge still matches AutoDL's minimum exactly while the displayed rate stays truthful",
+    "scope_of_the_rule": "the strict single-`?` rule is asserted only for IndexTTS-2, where it was proven; H3 models keep their nested ternaries, which do render"
+  },
+  "implementation": {
+    "usage_facts_field": "seconds",
+    "reservation_seconds": 10,
+    "floor_seconds": 10,
+    "floor_sites": [
+      "parseTaskResult (recorded while polling)",
+      "extractUsageOnComplete (billed at settlement)"
+    ],
+    "measurement": "bounded Range read of the delivered file; WAV via RIFF fmt/data chunks (little-endian), MP3 via Xing/Info frame count; falls back to the reservation when unmeasurable",
+    "never_billed": "upstream data.duration, which is render wall time"
+  },
+  "live_paid_task": {
+    "task_id": "task_qJUj8mI9Bvh5HbytZXNeEZpSnOEzbwSl",
+    "plugin_version_at_submission": "1.0.15",
+    "channel": 345,
+    "status": "SUCCESS",
+    "quota": 5000,
+    "charged_cny": 0.01,
+    "settled_facts": {
+      "requests": 1,
+      "seconds": 10
+    },
+    "interpretation": "0.01 CNY / 0.001 per second = 10 s, i.e. the vendor minimum was applied exactly; a per-request price would have been 0.5 CNY (quota 250000)",
+    "cost_of_the_test": "0.01 CNY",
+    "refund_check": "a failed task settles {requests: 0, seconds: 0}"
+  },
+  "regression_protection": {
+    "method": "revert each part of the change and confirm the suite fails",
+    "reverts_tested": 10,
+    "reverts_caught": 10,
+    "reverts": [
+      "bill TTS per request again (give it no seconds input)",
+      "read WAV fields big-endian again (the parsing bug)",
+      "trust the header byteRate without a bounds-checked data chunk",
+      "stop measuring the delivered audio at settlement",
+      "stop resolving aliases when polling",
+      "drop the saved-type fallback for unmapped names",
+      "give TTS the motion 5-second reservation instead of the vendor minimum",
+      "omit the TTS reservation when replaying an OpenAI-style body",
+      "stop enforcing the vendor minimum at settlement",
+      "stop enforcing the vendor minimum while polling"
+    ]
+  },
+  "documented_usage_verified": {
+    "method": "each claim in the API.md TTS usage section executed against the plugin",
+    "accepted": [
+      "model IndexTTS-2",
+      "model indextts2-v1",
+      "emotion mode 与音色参考音频相同",
+      "emotion mode 使用情感参考音频 (2nd audio also role reference_audio)",
+      "emotion mode 使用情感向量控制"
+    ],
+    "refused_as_documented": [
+      "duration",
+      "seconds",
+      "resolution",
+      "ratio"
+    ],
+    "openai_entry": "TTS is absent from the OpenAI video model list and still present in meta.models",
+    "doc_bug_found_and_fixed": "the first draft told readers to send role emo_ref_audio for the emotion reference; the plugin accepts only role reference_audio and assigns prompt_simple/emo_ref_audio by position, so that example would have failed for anyone following it"
+  },
+  "gates": {
+    "plugin_js_syntax": "pass",
+    "tests_mjs": "PASS: 1304 checks; generated 956 official host fixture cases for all 17 workflows.",
+    "tests_client_py": "PASS: 24 zero-network client request, full-flow and audit checks",
+    "verify_mapping_protection": "pass",
+    "verify_media_requirements": "pass",
+    "verify_tts_seconds": "10 reverts tested, 10 caught",
+    "verify_doc_claims": "all accepted/refused claims match"
+  },
+  "deployment": {
+    "active_version": "1.0.16",
+    "source_sha256": "15c2b8bd5ece02b608a78d210e6a3a09422a4e9fd467e5bb417f61ef717dce92",
+    "source_bytes": 156744,
+    "runtime_registered": true,
+    "plugin_errors": {},
+    "pricing_models_verified": 14,
+    "pricing_expressions_preserved": true,
+    "official_host_image_unchanged": true,
+    "nginx_unchanged": true,
+    "row_counts_unchanged": {
+      "channels": "107",
+      "tasks": "3392",
+      "abilities": "413",
+      "models": "182"
+    }
+  }
+}

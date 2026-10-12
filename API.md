@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.14**。两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.16**。两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -153,7 +153,7 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 
 ### 请求时长与结算
 
-**计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（`duration` 是所有工作流的等价别名），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1`（别名 `IndexTTS-2`）没有视频秒数字段，仍按请求次数计费。
+**计费秒数（v1.0.7，无需修改宿主）：**15 个 H3 工作流有 `duration` 或 `audio_duration`，显式传值时按该值计费；省略时均按官网默认 **5 秒**。OpenAI 格式用 `seconds`（`duration` 是所有工作流的等价别名），MiniMax 格式用 `duration`（音频同步工作流用 `audio_duration`）。TTS `indextts2-v1`（别名 `IndexTTS-2`）同样按秒计费，但秒数来自**成片音频实测**：该工作流没有时长参数（调用方无法指定长度），AutoDL 的 `price_type` 为 `audio_sec_cost`，因此插件在轮询与结算时用受限 Range 读取交付的 WAV/MP3，解析出真实时长作为计费秒数。
 
 动作迁移（`wan2.2animate-v4-motion_retargeting`）没有官方固定时长或默认秒数，成片时长跟随参考视频，因此计费秒数**可选**：OpenAI body 用 `seconds`，MiniMax body 用 `duration`；省略时按默认 5 秒预扣。声明支持数值或普通十进制字符串，`1 <= 秒数 <= 3600`，允许小数；它只用于预扣，不裁剪视频、不写入 AutoDL body，**也不作为计费上限**。
 
@@ -357,7 +357,7 @@ ratio 可用 adaptive/21:9/16:9/4:3/1:1/3:4/9:16：横向映横，3:4/9:16 映�
 
 `indextts2-v1`（上游开源模型 `IndexTTS-2`，B站 IndexTeam 出品）用 MiniMax content 音频扩展（emo_* 等扩展字段写在 body 顶层），只通过 `/v2/video_generation` 调用，不传 duration/resolution/ratio。text 映射 prompt_text（1–2048 字符），第 1 条 reference_audio→必需 prompt_simple（音色），第 2 条→可选 emo_ref_audio（情感），共 1–2 段。
 
-**`IndexTTS-2` 是 `indextts2-v1` 的公开别名，与 `wan2.2-animate-move` 同理：两个名字都可用，`model` 填哪个都行，上游请求始终是 `indextts2-v1`，两者共享同一套能力表和同一个按次计费模板，各自独立配价。**别名同样只在 `/v2/video_generation` 可用——TTS 不走 OpenAI 视频入口。
+**`IndexTTS-2` 是 `indextts2-v1` 的公开别名，与 `wan2.2-animate-move` 同理：两个名字都可用，`model` 填哪个都行，上游请求始终是 `indextts2-v1`，两者共享同一套能力表和同一个按交付音频秒数计费的模板，各自独立配价。**别名同样只在 `/v2/video_generation` 可用——TTS 不走 OpenAI 视频入口。
 
 ```json
 {"model":"indextts2-v1","content":[{"type":"text","text":"你好，这是音色参考合成示例。"},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://media.example.com/voice.wav"}}],"emo_control_method":"与音色参考音频相同"}
@@ -371,6 +371,59 @@ ratio 可用 adaptive/21:9/16:9/4:3/1:1/3:4/9:16：横向映横，3:4/9:16 映�
 | `emo_surprised` | enum / `"0"` | 仅 `"0"`；另兼容官网样例的数字 0。 |
 
 不使用 emotion 包装。内部 emotion.mode 为 voice（默认）/reference（需第二音频）/vector，对应表中三种控制；random 为 boolean，七项数值范围同表，surprised=0 转字符串。OpenAI 入口不公开 TTS。
+
+### TTS 用法（完整示例）
+
+只需一个渠道模型名即可调用：`model` 填 `indextts2-v1` 或 `IndexTTS-2`，两者等价。
+
+**1）最简：音色参考合成**（只传 text + 一段参考音频，情感沿用参考音频本身）
+
+```bash
+curl -sS -X POST "$BASE/v2/video_generation" \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"IndexTTS-2","content":[{"type":"text","text":"你好，这是语音合成测试。"},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://your-public-host.example/voice.wav"}}]}'
+```
+
+返回 `{"task_id":"<task_id>"}`，随后轮询（成功时 `content.url` 指向音频产物）：
+
+```bash
+curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $KEY"
+```
+
+```json
+{"task":{"id":"<task_id>","status":"succeeded","task_type":"generation","modality":"audio","content":{"url":"https://media.example.com/result.wav"}}}
+```
+
+**2）三种情感控制**（`emo_control_method` 决定用哪种，字段写在 body 顶层）
+
+| 取值 | 需要的输入 | 说明 |
+|---|---|---|
+| `与音色参考音频相同`（默认） | 1 段参考音频 | 音色与情感都取自该音频。 |
+| `使用情感参考音频` | 2 段参考音频 | 两段的 `role` 都填 `reference_audio`：**按出现顺序**，第 1 段作音色参考（上游 `prompt_simple`），第 2 段作情感参考（上游 `emo_ref_audio`）。 |
+| `使用情感向量控制` | 1 段参考音频 + 向量字段 | 用 `emo_*` 七项数值直接指定情感。 |
+
+```json
+{"model":"indextts2-v1","content":[{"type":"text","text":"用平静的语气读这句话。"},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://your-public-host.example/voice.wav"}},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://your-public-host.example/calm.wav"}}],"emo_control_method":"使用情感参考音频"}
+```
+
+```json
+{"model":"indextts2-v1","content":[{"type":"text","text":"用平静的语气读这句话。"},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://your-public-host.example/voice.wav"}}],"emo_control_method":"使用情感向量控制","emo_calm":0.3,"emo_random":false}
+```
+
+**3）用 SDK 的 OpenAI 兼容入口调用**（`/v1/videos`）**不行**：TTS 是音频工作流，
+不在 OpenAI 视频入口公开的模型列表里，请使用上面的 `/v2/video_generation`。
+
+**不要传的字段：**`duration` / `seconds` / `resolution` / `ratio`。该工作流的音频长度由文本与模型决定，
+没有任何时长参数；传入会直接报错（不是被忽略）。计费秒数由插件从交付音频实测得出，见下节。
+
+**参考音频要求：**`content` 中 1–2 段 `audio_url`，每段 `role` 均为 `reference_audio`（第 1 段为音色参考，必填；第 2 段仅用于「使用情感参考音频」模式）。`text` 1–2048 字符。
+参考音频需为上游可访问的 URL；本插件支持 `data:` URL（会内联转交），便于自测。
+
+**计费（按交付音频实测秒数）：**AutoDL 官网 `price_type` 为 `audio_sec_cost`，官方牌价为 **高峰 ¥0.001/秒、空闲 ¥0.001/秒，最低计费 ¥0.010**（`minimum_price` 原始值 10，×0.001 得 ¥0.010，正好等于 10 秒的单价，故最低计费即前 10 秒）。
+
+工作流没有 `duration` 参数，调用方无法指定时长，所以秒数只能取自交付的音频：插件先发 `Range: bytes=0-1048575` 读文件头（WAV 的 `fmt`/`data` 块、MP3 的 Xing/Info 帧数），必要时再读文件尾；解析失败则沿用 10 秒预扣。上游响应里的 `data.duration` 是**运行耗时**，任何情况下都不作为计费秒数。
+
+**最低计费放在插件里，不写进计价表达式：**该工作流的价格在原样照搬 `wan2.2-animate-move` 的单层 `hour(...) ? tier(...) : tier(...)` 时能正常显示，而把条件嵌套进单价（含 `max()`）时模型广场解析失败（对线上实际显示核对过），价格渲染不出来时模型看起来像免费，因此这里选择保守的单层写法。因此广场表达式只表达单价 `u("seconds") * 0.001`，而「不足 10 秒按 ¥0.010」由插件在**轮询与结算**两处把秒数下限抬到 10 秒来实现，其金额与官方最低计费完全一致。这样广场价格可正常显示，实际扣费也不低于官方最低价。
 
 ## 工作流目录与能力边界
 
@@ -394,7 +447,7 @@ ratio 可用 adaptive/21:9/16:9/4:3/1:1/3:4/9:16：横向映横，3:4/9:16 映�
 | `minimax_h3_lightx2v_v5`<br>H3多图参考生视频 | 图 1–9 | `duration` 1–10 | I | ≤500000 | `212238359716024` |
 | `minimax_h3_lightx2v_no_pic`<br>H3文生视频 | 无媒体 | `duration` 1–15 | G | ≤200000 | 无 |
 | `minimax_h3_lightx2v`<br>H3首尾帧生成视频 | 图 2 | `duration` 1–15 | G | ≤2000000 | `479044338007328` |
-| `indextts2-v1`<br>indextts2<br>别名 `IndexTTS-2` | 音 1–2 | 无 | — | ≤2048 | 无 |
+| `indextts2-v1`<br>indextts2<br>别名 `IndexTTS-2` | 音 1–2 | 无（秒数取自成片实测） | — | ≤2048 | 无 |
 
 ### 分辨率、方向与精确 size
 

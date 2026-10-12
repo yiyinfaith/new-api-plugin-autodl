@@ -1,0 +1,32 @@
+{
+  "plugin_version": "1.0.15",
+  "model": "IndexTTS-2",
+  "route": "/v2/video_generation",
+  "expectation": "audio produced upstream; billed from measured audio seconds at CNY 0.001/s, minimum CNY 0.010",
+  "rate_cny_per_second": 0.001,
+  "minimum_cny": 0.01,
+  "paid_submissions": 1,
+  "temporary_api_key_id": 45,
+  "request_fields": [
+    "content",
+    "emo_control_method",
+    "model"
+  ],
+  "reference_audio_bytes": 32078,
+  "create_http_status": 200,
+  "task_id": "task_qJUj8mI9Bvh5HbytZXNeEZpSnOEzbwSl",
+  "final_status": null,
+  "has_media": false,
+  "media_url_host": null,
+  "reported_usage": {},
+  "quota_used": 5000,
+  "charged_cny": 0.01,
+  "charged_derived": {
+    "seconds_if_rate_applied": 10.0,
+    "minimum_applied": true,
+    "per_request_charge_would_be": 0.5
+  },
+  "task_quota": "5000",
+  "task_quota_cny": 0.01,
+  "temporary_api_key_removed": true
+}
