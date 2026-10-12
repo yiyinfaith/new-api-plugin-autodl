@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.23",
+  version: "1.0.24",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -3211,21 +3211,26 @@ function safeReason(ctx, value) {
     // and shred the diagnostic an operator needs, e.g. "error" inside
     // "upstream error: ...". Real AutoDL tokens are far longer than this.
     if (secret.length < MIN_REDACTABLE_SECRET) continue;
-    // Redact the credential as sent (header form) and bare.
-    message = message.split(candidate).join("[redacted]");
-    message = message.split(secret).join("[redacted]");
+    const escape = function (part) { return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); };
+    // Redact the WHOLE credential first, as sent (header form) and bare, and
+    // CASE-INSENSITIVELY. An upstream may echo the credential in a different case, and a
+    // case-sensitive match left a 33-character mixed-case token fully readable. Doing this
+    // before the window pass also matters: window fragments can otherwise split a token
+    // into pieces the whole-value match no longer recognises.
+    message = message.replace(new RegExp(escape(candidate), "gi"), "[redacted]");
+    message = message.replace(new RegExp(escape(secret), "gi"), "[redacted]");
     // An upstream may echo the credential split across escapes, quotes or line
     // breaks, which defeats a contiguous match, and the split can fall at any
     // offset. Redact every window of the secret so no partial echo survives.
     // Short windows for short secrets keep the guarantee that no window equals
     // the whole secret, which would degenerate into a whole-key replace.
     const size = Math.max(1, Math.min(8, secret.length - 1));
-    const escape = function (part) { return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); };
     const windows = {};
     for (let start = 0; start + size <= secret.length; start++) windows[secret.slice(start, start + size)] = true;
     for (const fragment of Object.keys(windows)) {
       if (fragment === secret) continue;
-      message = message.replace(new RegExp(escape(fragment), "g"), "[redacted]");
+      // Case-insensitive too: a case-altered echo defeats an exact-case window match.
+      message = message.replace(new RegExp(escape(fragment), "gi"), "[redacted]");
     }
   }
   message = message.replace(/(?:Bearer\s+|\bsk-)[A-Za-z0-9_.\-]+/gi, "[redacted]");
@@ -3485,6 +3490,12 @@ function mp3Duration(bytes) {
   // plus a plausible Xing/Info inside that payload yielded a bogus duration from bytes the
   // code explicitly intends to skip. The size is a 28-bit synchsafe integer.
   if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33 && bytes.length >= 10) {
+    // A synchsafe integer has its high bit clear in every byte. If one is set the tag is
+    // malformed, the size cannot be trusted, and scanning from inside it could read a
+    // crafted sync+Xing as audio and bill a bogus duration (observed: 2612s from a tag
+    // payload). Refusing to measure is the honest answer; the caller falls back to the
+    // vendor minimum rather than inventing a length.
+    if ((bytes[6] | bytes[7] | bytes[8] | bytes[9]) & 0x80) return null;
     const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
     offset = 10 + size;
   }
@@ -4054,7 +4065,9 @@ export function listArtifacts(task) {
 export function buildContentRequest(ctx) {
   const item = artifacts({ status: "SUCCESS", data: ctx.data, action: ctx.action }).find(function (entry) { return entry.key === ctx.artifactKey; });
   if (!item) throw new Error("AutoDL: artifact not found");
-  const method = ctx.clientRequest.method;
+  // The host always supplies clientRequest; guard it so a missing one yields a diagnosis
+  // rather than a raw TypeError out of a render hook.
+  const method = object(ctx.clientRequest) ? ctx.clientRequest.method : undefined;
   if (method !== "GET" && method !== "HEAD") throw new Error("AutoDL: content only supports GET and HEAD");
   // Host validates public destinations/redirects and forwards safe Range headers.
   // Never send the AutoDL token to the dynamic result/CDN host.
@@ -4096,8 +4109,8 @@ function decode(ctx, pinnedModel) {
   request.model = model;
   // The channel-mapped workflow id means the operator already decided which
   // workflow this name runs as, so a self-chosen name is valid here even though
-  // it appears in no capability table of ours.
-  const requested = workflowForName(model);
+  // it appears in no capability table of ours. resolveWorkflow resolves the alias table
+  // itself, so the caller's name is passed through raw.
   const config = resolveWorkflow(ctx.upstreamModel, model);
   normalizeInput(config, request);
   const action = taskAction(config, request);
@@ -4130,7 +4143,7 @@ export const native = {
     if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value) && has(ctx.body.value, "content"))) throw new Error("AutoDL: MiniMax V2 requires a JSON object with model and content");
     return decodeCompatible(ctx);
   },
-  miniCreated: function (_ctx, task) { return { task_id: object(task) ? task.task_id : "" }; },
+  miniCreated: function (_ctx, task) { return { task_id: object(task) ? text(task.task_id) : "" }; },
   miniTask: function (ctx, task) {
     // A render hook that throws turns a client poll into a generic 500, so a malformed
     // or absent task record becomes a structured result instead.

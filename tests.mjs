@@ -1776,5 +1776,68 @@ test('redaction respects its minimum length and still covers split echoes', () =
     assert.ok(rendered.includes('[redacted]'), 'the credential must be replaced: ' + rendered);
   }
 });
+// The audit's third round found that a CASE-ALTERED echo of the credential survived: the
+// window match was case-sensitive, so an upstream echoing the lowercase form left a
+// 33-character token fully readable, and digit windows could fragment a mixed token before
+// the whole-value pass ran.
+test('a case-altered credential echo is redacted too', () => {
+  const secret = 'AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfG';
+  const mixed = 'AbCdEf1234567890AbCdEf1234567890';
+  const render = (key, reason) => p.native.miniTask({ apiKey: key, authHeader: 'Bearer ' + key },
+    { task_id: 't', status: 'FAILURE', fail_reason: reason }).task.error.message;
+  for (const key of [secret, mixed]) {
+    for (const reason of ['rejected ' + key, 'rejected ' + key.toLowerCase(), 'rejected ' + key.toUpperCase(),
+                          'rejected Bearer ' + key.toUpperCase(), 'rejected ' + key.slice(0, 12) + ' ' + key.slice(12)]) {
+      const rendered = render(key, reason);
+      assert.ok(!rendered.toLowerCase().includes(key.toLowerCase()), 'the credential survived: ' + rendered);
+    }
+  }
+  // The documented minimum still leaves short values (and the prose around them) intact.
+  for (const short of ['abc', 'abcdefg']) {
+    const reason = 'upstream error: ' + short + ' was rejected; retry later';
+    assert.equal(render(short, reason), reason, short.length + '-character value must be left intact');
+  }
+});
+// A synchsafe size has its high bit clear in every byte; a malformed tag must not be
+// scanned, or a crafted sync+Xing inside its payload bills a bogus duration (2612s was
+// observed) instead of falling back to the vendor minimum.
+test('a malformed ID3v2 tag is refused rather than scanned', () => {
+  const previousFetch = utils.fetch;
+  const payload = Buffer.alloc(500);
+  payload.writeUInt32BE(0xfffb9000, 0);
+  payload.write('Xing', 36, 'ascii');
+  payload.writeUInt32BE(1, 40);
+  payload.writeUInt32BE(1000, 44);
+  const tag = Buffer.alloc(10);
+  tag.write('ID3', 0, 'ascii'); tag.writeUInt8(3, 3);
+  tag[6] = 0x80; tag[7] = 0; tag[8] = 0; tag[9] = 0;   // NOT a synchsafe size
+  const service = file => request => {
+    const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range || 'bytes=0-1048575');
+    const start = Number(m[1]), end = Math.min(Number(m[2]), file.length - 1);
+    return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` }, body: file.slice(start, end + 1) };
+  };
+  try {
+    utils.fetch = service(Buffer.concat([tag, payload]));
+    const malformed = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.mp3' }, {});
+    assert.equal(malformed.seconds, 10, 'a malformed tag must fall back to the minimum, got ' + malformed.seconds);
+    // The same payload behind a WELL-FORMED tag is skipped for the same reason.
+    tag[6] = (payload.length >> 21) & 0x7f; tag[7] = (payload.length >> 14) & 0x7f;
+    tag[8] = (payload.length >> 7) & 0x7f; tag[9] = payload.length & 0x7f;
+    utils.fetch = service(Buffer.concat([tag, payload]));
+    const wellFormed = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.mp3' }, {});
+    assert.equal(wellFormed.seconds, 10, 'tag bytes must never be measured');
+  } finally { utils.fetch = previousFetch; }
+});
+// Two small guards: a missing clientRequest must produce a diagnosis rather than a raw
+// TypeError, and a non-string task id must not leak through as a non-string.
+test('render-time inputs are guarded rather than dereferenced blindly', () => {
+  const data = { code: 'Success', data: { results: [{ url: 'https://cdn.example.com/a.mp4', type: 'video', file_type: 'mp4' }] } };
+  assert.throws(() => p.buildContentRequest({ data, action: 'text_to_video', artifactKey: 'video' }),
+    /content only supports GET and HEAD/);
+  assert.equal(p.native.miniCreated({}, { task_id: 42 }).task_id, '');
+  assert.equal(p.native.miniCreated({}, { task_id: null }).task_id, '');
+});
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);
