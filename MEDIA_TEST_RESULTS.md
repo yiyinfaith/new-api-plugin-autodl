@@ -1,3 +1,15 @@
+> **v1.0.18 变更：TTS 新增 OpenAI 语音请求格式入口，并修复审计发现的计费与安全缺陷。**
+>
+> **新增：**TTS 现在有**两个**入口——OpenAI 官方**请求体格式** `POST /autodl/v1/audio/speech`（+ `GET /autodl/v1/audio/speech/{task_id}`）与 MiniMax 官方 V2 `POST /v2/video_generation`。两条路径归一化为**同一个**上游请求，因此计费完全一致（同一段文本走哪个入口费用相同）。官方字段 `input`/`response_format`/`speed`/`instructions` 与官方同名；`voice` 是官方预设音色名，AutoDL 为参考音频克隆、没有预设音色，因此**传了但不给参考音频会直接报错**，不会静默换成别的音色。AutoDL 独有、官方格式功能上确实没有的字段才额外提供：`reference_audio`、`emotion_reference_audio`（+ 别名 `emo_audio_url`）、`emotion`、`emotion_vector`、`prompt_text`。**语义差异：**官方 `/v1/audio/speech` 同步返回音频二进制，本插件返回任务对象（上游是异步任务模型），需再查 `GET /autodl/v1/audio/speech/{task_id}` 取 `url`。
+> **路径为何不是 `/v1/audio/speech`（重要）：**该路径是**宿主静态路由**（`router/relay-router.go` 注册，供其他 TTS 渠道使用），而 `SetRelayRouter` 在 `SetPluginRouter` 之前执行，因此它必然出现在插件路由快照里；`router/plugin-router.go` 的 `validatePlugin` 会拒绝任何与静态路由相交的插件，并且该拒绝是**整插件级**的——插件全部路由与模型都会退出公共路由。因此抢占 `/v1/audio/speech` 会让 **AutoDL 插件整体不可用**，而非只影响这一个接口。rc.43 也没有音频协议（只有 `openai_responses`/`openai_video`/`openai_image`），任务插件渠道无法经宿主自带语音处理器到达。故保留官方**请求体格式**、改用插件自有前缀 `/autodl/v1/audio/speech`。已加入回归断言：任何与宿主静态路由（`/v1/audio/speech`、`/v1/videos`、`/v1/responses` 等）相同或以之开头的插件路由都会让测试失败。
+>
+> **修复（第四轮审计，均已独立复现）：**
+> 1. **凭据泄露（安全）：**`miniTask` 直接回显上游 `fail_reason`，而该文本可能引用被拒的 token，导致 **AutoDL 凭据出现在失败任务的错误信息里**（OpenAI 入口一直有脱敏，MiniMax 入口没有）。现两处统一走 `safeReason`。
+> 2. **`mapEmotion` 崩溃：**未映射的私有模型名若含 `tts`/`indextts`（如 `my-tts-model`），会被按**名字正则**推断为音频却不构造 `emo_*` 规则，`emotion.mode=vector` 时解引用 `undefined` 抛裸 `TypeError`（发生在真实上游调用处）。现不再按名字猜模态（默认 video），并让缺失规则报明确错误。
+> 3. **WAV 少计费（三处）：**① 多 `data` 块只计第一块（`data(12s)+data(48s)` 的 60 秒文件只计 12 秒）；② `data` 块早于 `fmt ` 时被静默跳过（`data(30s)+fmt+data(30s)` 只计 30 秒）；③ 声明的 `data` 大小超出实际字节时按声明值计费（1 秒负载声明 3000 秒即计 3000 秒）。现改为累加全部 `data` 块、`fmt ` 前先暂存、声明值按实际可用字节夹取。
+> 4. **MP3 少计费：**帧同步扫描窗口硬编码 8 KB，而带封面的 ID3v2 标签普遍大于该值，导致**几乎所有带专辑封面的 MP3 都测不出时长**并退回 10 秒下限（实测 100 KB 封面 + 52.24 秒音频只计 10 秒）。现扫描完整探测窗口。
+> 5. **别名结算漏测：**结算按 `state.workflowId` 分支，但未解析别名；存成 `IndexTTS-2` 的状态会同时绕过实测与 10 秒下限。现与提交、轮询一致地解析别名。
+>
 > **v1.0.16 变更：TTS 改为按交付音频秒数计费。** `indextts2-v1` / `IndexTTS-2` 此前被错误地按请求次数计费，理由是"该工作流没有时长参数"。实际 AutoDL 官网该工作流的 `price_type` 为 `audio_sec_cost`（¥0.001/秒，最低 ¥0.010），秒数取自交付音频的实测长度：插件在轮询与结算各做一次受限 Range 读取，解析 WAV（RIFF 小端）与 MP3（Xing/Info 帧数）得到真实时长，失败则保留 10 秒预扣。
 >
 > 同时修正两个 bug：WAV 解析误用了 MP4 的大端读取（导致所有 WAV 都测不出时长）；轮询路径未解析别名、且对无能力表的模型名直接抛错（导致 1.0.13 支持的自定义模型名在轮询时失败）。

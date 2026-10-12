@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.16",
+  version: "1.0.18",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2568,6 +2568,21 @@ export const meta = {
   routes: [
     { method: "POST", path: "/v2/video_generation", type: "submit", decode: "miniCreate", render: "miniCreated" },
     { method: "GET", path: "/v2/query/video_generation/:task_id", type: "query", render: "miniTask" },
+    // OpenAI's speech request format, served from a plugin-owned path.
+    //
+    // It cannot live at the official /v1/audio/speech: the host registers that path
+    // statically (router/relay-router.go), SetRelayRouter runs before SetPluginRouter
+    // so it is present in the route snapshot, and router/plugin-router.go's
+    // validatePlugin rejects a plugin whose route intersects a static route. That
+    // rejection is plugin-wide -- every route and model of this plugin would leave
+    // public routing, not just this endpoint -- so claiming the official path would
+    // take AutoDL offline entirely. rc.43 has no audio protocol either (only
+    // openai_responses/openai_video/openai_image), so a task-plugin channel cannot be
+    // reached through the host's own speech handler. The body format is therefore
+    // served under this prefix, which no static route covers; point an OpenAI client
+    // at base_url "<host>/autodl/v1" and /audio/speech resolves here.
+    { method: "POST", path: "/autodl/v1/audio/speech", type: "submit", decode: "speechCreate", render: "speechCreated", models: [TTS_WORKFLOW, TTS_ALIAS] },
+    { method: "GET", path: "/autodl/v1/audio/speech/:task_id", type: "query", render: "speechTask" },
   ],
   usageSchema: REQUEST_SCHEMA,
   // The channel-mapped motion alias is a public model, so it needs its own
@@ -2658,7 +2673,17 @@ function unmappedWorkflow(workflowId) {
   return {
     workflowId: id,
     name: "Mapped AutoDL workflow",
-    type: /tts|indextts/i.test(id) ? "audio" : "video",
+    // Modality is NOT inferred from the name. A private id is just a label the
+    // operator chose; matching /tts|indextts/ against it made a video workflow called
+    // "tts-enhance-video" classify as audio (tagged text_to_audio and billed as
+    // audio), and -- because this fallback never builds the emo_* rules -- it made
+    // mapEmotion dereference a rule that does not exist and crash with a raw
+    // TypeError at the real upstream call. Without a capability table the honest
+    // answer is video, which is what every declared workflow except one is, and
+    // emotion controls are then refused by mapEmotion with a clean message instead
+    // of being half-supported. An operator whose private workflow really is audio
+    // declares it under its mapped id, which carries the real table.
+    type: "video",
     timeoutSeconds: 1800,
     // No seconds control is declared, so an unmapped workflow never advertises
     // billing seconds; pricing stays the operator's decision.
@@ -2823,7 +2848,13 @@ function mapEmotion(config, input, body) {
   if (mode === "reference" && !body.emo_ref_audio) throw new Error("AutoDL: audios[1] is required for reference emotion mode");
   for (const key of allowed) {
     if (key === "mode" || emotion[key] === undefined) continue;
+    // A missing rule means this config declares an emotion mode it never gave bounds
+    // for. Refusing is the correct answer; dereferencing it crashed with a raw
+    // TypeError, which reaches the operator as an unintelligible failure instead of
+    // a diagnosis. Every declared workflow has all ten rules, so this only guards a
+    // config that was assembled wrong.
     const rule = config.rules["emo_" + key];
+    if (!rule) throw new Error("AutoDL: emotion." + key + " is not supported by this workflow");
     if (rule.type === "boolean") {
       if (typeof emotion[key] !== "boolean") throw new Error("AutoDL: emotion.random must be boolean");
       body["emo_" + key] = emotion[key];
@@ -3117,6 +3148,123 @@ function normalizeRequest(config, input) {
 
 function normalized(ctx) { return normalizeRequest(requestWorkflow(ctx), ctx.requestBody); }
 
+// ---------------------------------------------------------------------------
+// OpenAI speech request format, served at POST /autodl/v1/audio/speech
+// ---------------------------------------------------------------------------
+// Plugin API v1 exposes only openai_responses / openai_video / openai_image as
+// protocols, so there is no audio protocol with which to claim the official
+// /v1/audio/speech -- and that path is a host static route, which a plugin route may
+// not intersect (a collision rejects this plugin from public routing entirely). The
+// official body format is therefore translated here, under a plugin-owned prefix.
+//
+// The translation targets the MiniMax content shape the TTS path already understands,
+// so validation, the 10-second vendor minimum, per-audio-second billing and settlement
+// are reused rather than reimplemented.
+const SPEECH_FORMATS = { mp3: "mp3", wav: "wav", flac: "flac", pcm: "wav" };
+// OpenAI `voice` is a fixed enum of preset speakers. AutoDL indexes zero or more
+// reference audio clips, so the name cannot be honoured and must not be invented:
+// an unmapped voice is refused rather than silently substituted.
+const SPEECH_FIELDS = ["model", "input", "voice", "response_format", "speed", "instructions", "stream_format"];
+// OpenAI fields this route accepts and ignores because AutoDL has no counterpart and
+// they carry no media: dropping them keeps an official client working.
+const SPEECH_DROPPED = ["stream_format"];
+
+// AutoDL has no OpenAI equivalent for these, so they are added on top of the official
+// shape. Each is a genuine capability the official format cannot express:
+//   reference_audio / emotion_reference_audio - the voice-cloning and emotion-reference
+//     clips. `voice` names a preset and carries no media, so without these a caller
+//     could not supply the reference AutoDL actually needs.
+//   emotion / emotion_vector - the emotion control method, which OpenAI encodes only
+//     as free-text `instructions` that AutoDL cannot act on.
+//   emo_audio_url - the emotion reference clip for reference mode.
+//   prompt_text - an optional second text slot some workflows accept.
+const SPEECH_AUTODL_FIELDS = ["reference_audio", "emotion_reference_audio", "emo_audio_url", "emotion", "emotion_vector", "prompt_text"];
+const SPEECH_EMOTION_KEYS = ["random", "afraid", "angry", "calm", "disgusted", "happy", "melancholic", "sad", "surprised"];
+
+function speechMedia(value, name) {
+  if (typeof value === "string" && value) return value;
+  if (object(value) && typeof value.url === "string" && value.url) return value.url;
+  throw new Error("AutoDL: " + name + " must be a URL string or an object with url");
+}
+
+function decodeSpeech(ctx) {
+  // A native route hands the request over as ctx.body ({kind, value}) and carries no
+  // top-level `model` -- only protocol contexts do. Reading ctx.requestBody/model here
+  // rejected every real request with "served only by IndexTTS-2", because both were
+  // undefined. The model therefore comes from the body, which is also exactly what the
+  // host's own route gate validates it against before this hook runs.
+  const jsonBody = ctx.body && ctx.body.kind === "json" && object(ctx.body.value);
+  if (!jsonBody) throw new Error("AutoDL: the speech route requires a JSON body");
+  const input = ctx.body.value;
+  const model = text(input.model) || text(ctx.model);
+  if (!model) throw new Error("AutoDL: model is required");
+  const config = workflowForName(model) || model;
+  if (config !== TTS_WORKFLOW) throw new Error("AutoDL: OpenAI speech is served only by " + TTS_ALIAS);
+  // `input` is the text to speak. OpenAI requires it; accept `text` too because
+  // AutoDL's own spelling is prompt_text and a caller may reach for either.
+  const speech = typeof input.input === "string" ? input.input : typeof input.text === "string" ? input.text : undefined;
+  if (speech === undefined) throw new Error("AutoDL: input (the text to speak) is required");
+  if (!speech) throw new Error("AutoDL: input must not be empty");
+  for (const key of Object.keys(input)) {
+    if (!SPEECH_FIELDS.includes(key) && !SPEECH_AUTODL_FIELDS.includes(key) && key !== "text") {
+      // Refuse rather than drop: a caller sending media under an unknown key would
+      // otherwise believe the voice was applied.
+      throw new Error("AutoDL: unsupported speech field " + key);
+    }
+  }
+  if (input.response_format !== undefined) {
+    if (typeof input.response_format !== "string" || !has(SPEECH_FORMATS, input.response_format)) {
+      throw new Error("AutoDL: response_format must be one of " + Object.keys(SPEECH_FORMATS).join(", "));
+    }
+  }
+  // OpenAI's `voice` names a preset speaker that only OpenAI's own models implement.
+  // AutoDL clones from a reference clip instead, so the name cannot be honoured: it is
+  // refused rather than silently ignored, because a caller who asked for a specific
+  // voice and got a clone of whatever clip was supplied would have no way to notice.
+  if (input.voice !== undefined && input.reference_audio === undefined && input.emotion_reference_audio === undefined) {
+    throw new Error("AutoDL: voice presets are not supported; supply reference_audio to clone a voice");
+  }
+  // `speed` and `instructions` are documented by OpenAI but have no AutoDL control.
+  // Accepting them keeps an official client working; they cannot change the request.
+  if (input.speed !== undefined && (typeof input.speed !== "number" || !isFinite(input.speed) || input.speed <= 0)) {
+    throw new Error("AutoDL: speed must be a positive number");
+  }
+  const content = [{ type: "text", text: speech }];
+  // Voice cloning wants exactly one reference clip; the emotion reference is a second,
+  // separate clip. Their order is what assigns prompt_simple and emo_ref_audio, so the
+  // primary reference must always be pushed first.
+  const reference = input.reference_audio !== undefined ? input.reference_audio
+    : input.emotion_reference_audio !== undefined ? input.emotion_reference_audio : undefined;
+  if (reference !== undefined) content.push({ type: "audio_url", role: "reference_audio", audio_url: { url: speechMedia(reference, "reference_audio") } });
+  const emotionClip = input.emo_audio_url !== undefined ? input.emo_audio_url
+    : input.reference_audio !== undefined && input.emotion_reference_audio !== undefined ? input.emotion_reference_audio : undefined;
+  if (emotionClip !== undefined) content.push({ type: "audio_url", role: "reference_audio", audio_url: { url: speechMedia(emotionClip, "emotion_reference_audio") } });
+  // Emotion reaches the workflow as top-level emo_* fields beside the content array,
+  // which is the shape the native MiniMax surface takes. `prompt_text` is AutoDL's
+  // separate second text slot, not a MiniMax content entry: the content array accepts
+  // exactly one text item, so sending it there was rejected.
+  const body = { model: model, content: content };
+  if (input.prompt_text !== undefined) {
+    if (typeof input.prompt_text !== "string" || !input.prompt_text) throw new Error("AutoDL: prompt_text must be a non-empty string");
+    body.prompt_text = input.prompt_text;
+  }
+  const vector = input.emotion !== undefined ? input.emotion
+    : input.emotion_vector !== undefined ? Object.assign({ mode: "vector" }, input.emotion_vector) : undefined;
+  if (vector !== undefined) {
+    if (!object(vector)) throw new Error("AutoDL: emotion must be an object");
+    for (const key of Object.keys(vector)) {
+      if (key !== "mode" && !SPEECH_EMOTION_KEYS.includes(key)) throw new Error("AutoDL: unsupported emotion field");
+    }
+    const mode = vector.mode === undefined ? "vector" : vector.mode;
+    const modes = { voice: "与音色参考音频相同", reference: "使用情感参考音频", vector: "使用情感向量控制" };
+    if (!has(modes, mode)) throw new Error("AutoDL: emotion.mode must be voice, reference or vector");
+    body.emo_control_method = modes[mode];
+    for (const key of SPEECH_EMOTION_KEYS) if (vector[key] !== undefined) body["emo_" + key] = vector[key];
+  }
+  void SPEECH_DROPPED;
+  return { kind: "submit", model: model, action: "text_to_speech", requestBody: body };
+}
+
 function credentials(ctx) {
   // authHeader may be host-generated Bearer; use the original channel key instead.
   const token = text(ctx.apiKey);
@@ -3370,6 +3518,15 @@ function wavDuration(bytes) {
   if (ascii4(bytes, 0) !== "RIFF" || ascii4(bytes, 8) !== "WAVE") return null;
   let offset = 12;
   let byteRate = 0;
+  // RIFF permits more than one `data` chunk (concatenating writers emit them) and a
+  // `data` chunk may appear before `fmt `. Every audio byte in the file is billable, so
+  // the chunks are SUMMED rather than the first one returned: returning early billed a
+  // 12s+48s file as 12s, and a chunk seen before `fmt ` was skipped outright, so a
+  // 30s+30s file billed 30s. `openData` accumulates while byteRate is still unknown and
+  // is converted once `fmt ` provides it.
+  let audioBytes = 0;
+  let openData = 0;
+  let sawData = false;
   while (offset + 8 <= bytes.length) {
     const id = ascii4(bytes, offset);
     const size = u32le(bytes, offset + 4);
@@ -3384,16 +3541,28 @@ function wavDuration(bytes) {
         const bits = u16le(bytes, data + 14);
         if (channels > 0 && rate > 0 && bits > 0) byteRate = rate * channels * (bits / 8);
       }
-    } else if (id === "data" && byteRate > 0) {
+    } else if (id === "data") {
+      sawData = true;
       // A streamed WAV uses 0xffffffff for an unknown size; fall back to what the
       // probe actually contains so the estimate stays honest instead of absurd.
-      const audioBytes = size === 0xffffffff || size === 0 ? bytes.length - data : size;
-      if (audioBytes > 0) return audioBytes / byteRate;
+      // A declared size is also clamped to the bytes present, because trusting it
+      // verbatim billed a header claiming 3000s of a 1s payload as 3000s. Clamping
+      // can only lower an inflated claim, never invent audio that is not there.
+      const available = bytes.length - data;
+      const declared = size === 0xffffffff || size === 0 ? available : Math.min(size, available);
+      if (declared > 0) {
+        if (byteRate > 0) audioBytes += declared;
+        else openData += declared;
+      }
     }
     if (size <= 0 || size === 0xffffffff) break;
     // Chunks are word-aligned: an odd size is followed by one pad byte.
     offset = data + size + (size % 2);
   }
+  if (byteRate > 0 && openData > 0) audioBytes += openData;
+  // Any `data` chunk with a usable rate is a measurement; a file whose chunks were all
+  // empty is not.
+  if (sawData && byteRate > 0 && audioBytes > 0) return audioBytes / byteRate;
   return null;
 }
 
@@ -3408,9 +3577,18 @@ function mp3Duration(bytes) {
     const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
     offset = 10 + size;
   }
-  // Locate a frame sync, skipping any leading padding.
-  let limit = Math.min(bytes.length - 4, offset + 8192);
+  // Locate a frame sync, skipping any leading padding. The scan must reach the end of
+  // the probe window, not stop 8 KB past the tag: an ID3v2 tag carrying cover art is
+  // routinely larger than that, so the sync fell outside a fixed window and every
+  // art-bearing MP3 reported as unmeasurable -- which silently settled a 52s clip at
+  // the 10s floor. The window already holds up to 1 MB of bytes, so scanning all of it
+  // costs nothing but a linear pass.
+  const limit = bytes.length - 4;
   while (offset < limit) {
+    // Also stop at a RIFF/WAVE header: a caller could hand over a file whose tag
+    // claims a size larger than the probe, and scanning from there to the end of a
+    // megabyte window to find nothing is wasted work with no measurement at the end.
+    if (bytes[offset] === 0x52 && ascii4(bytes, offset) === "RIFF") return null;
     if (bytes[offset] === 0xff && (bytes[offset + 1] & 0xe0) === 0xe0) break;
     offset++;
   }
@@ -3729,7 +3907,12 @@ export function parseTaskResult(ctx, body, response) {
       const saved = object(ctx.state) ? ctx.state : {};
       const type = config ? config.type : text(saved.type);
       if (!type) throw new Error("AutoDL: cannot determine the media type of this task");
-      const kind = config && has(WORKFLOWS, config.workflowId) ? config.workflowId : text(saved.workflowId);
+      // Resolve a saved id through the alias table too: an unmapped private name can
+      // have been saved with a public alias as its workflowId, and leaving it raw here
+      // would skip the measurement branch below (recording no measuredSeconds) even
+      // though settlement would later resolve it and expect one.
+      const savedKind = workflowForName(text(saved.workflowId)) || text(saved.workflowId);
+      const kind = config && has(WORKFLOWS, config.workflowId) ? config.workflowId : savedKind;
       const outputs = results(body, type).filter(function (item) { return item.type === type; });
       if (!outputs.length) throw new Error("AutoDL: SUCCESS response contains no expected media output");
       const parsed = { status: "SUCCESS", progress: "100%", url: outputs[0].url };
@@ -3816,7 +3999,15 @@ export function extractUsageOnComplete(task, result, body) {
   const status = completionStatus(result);
   // data.duration is processing wall time, NOT generated video seconds.
   const facts = Object.assign({}, state.facts);
-  if (status === "SUCCESS" && state.workflowId === MOTION_WORKFLOW) {
+  // Resolve the saved id through the alias table before branching on it. A state
+  // written with a public alias -- `IndexTTS-2` rather than `indextts2-v1` -- would
+  // otherwise miss both settlement branches, so the clip would never be measured and
+  // the TTS minimum would never be applied: the task would settle at whatever
+  // reservation the alias happened to carry. Aliases are resolved everywhere else
+  // (submission, polling, decoding), so settlement must not be the one place that
+  // trusts the raw id.
+  const kind = has(WORKFLOWS, state.workflowId) ? state.workflowId : (workflowForName(state.workflowId) || state.workflowId);
+  if (status === "SUCCESS" && kind === MOTION_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
     // Reuse the full probe: the head Range read alone cannot see an MP4 whose
     // moov atom sits after the first megabyte, which is common for anything but
@@ -3855,7 +4046,7 @@ export function extractUsageOnComplete(task, result, body) {
   // against the live marketplace), and a model whose price fails to render silently
   // looks free. Flooring the settled seconds is exact, so the displayed CNY 0.001/s
   // stays honest and the minimum is still charged.
-  if (status === "SUCCESS" && state.workflowId === TTS_WORKFLOW) {
+  if (status === "SUCCESS" && kind === TTS_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
     const settled = motionSecondsInRange(url ? measuredAudioDuration(url) : null)
       || motionSecondsInRange(state.measuredSeconds)
@@ -3973,7 +4164,25 @@ export const native = {
     return decodeCompatible(ctx);
   },
   miniCreated: function (_ctx, task) { return { task_id: task.task_id }; },
-  miniTask: function (_ctx, task) {
+  // OpenAI /v1/audio/speech. The submit response carries the public id and the
+  // queued status so a client can poll the speech query route.
+  speechCreate: function (ctx) { return decodeSpeech(ctx); },
+  speechCreated: function (_ctx, task) { return { id: task.task_id, status: "queued" }; },
+  speechTask: function (ctx, task) {
+    const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed" };
+    const key = text(task.status).toUpperCase();
+    const result = { id: task.task_id, status: statuses[key] || "queued" };
+    if (Number.isFinite(task.created_at)) result.created_at = task.created_at;
+    if (Number.isFinite(task.updated_at)) result.updated_at = task.updated_at;
+    if (task.status === "SUCCESS") {
+      const audio = artifacts(task).find(function (item) { return item.type === "audio"; });
+      if (audio) result.url = audio.url;
+      else result.error = { code: "audio_generation_failed", message: "AutoDL: task produced no audio output" };
+    }
+    if (task.status === "FAILURE") result.error = { code: "audio_generation_failed", message: safeReason(ctx, task.fail_reason) };
+    return result;
+  },
+  miniTask: function (ctx, task) {
     // CANCELLED/CANCELED are both terminal upstream tokens; omitting CANCELED
     // made it render as "running" so the host kept polling a dead task.
     const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed" };
@@ -3989,7 +4198,10 @@ export const native = {
         result.modality = output.type;
       }
     }
-    if (task.status === "FAILURE") result.error = { code: "video_generation_failed", message: task.fail_reason || "AutoDL: video generation failed" };
+    // The upstream fail_reason is free text that can quote the credential it rejected,
+    // so it is redacted exactly as the OpenAI surface already redacts it. This path
+    // reached the end user with the raw AutoDL token in it.
+    if (task.status === "FAILURE") result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
     // rc.41 TaskView excludes request/model/usage/private state. AutoDL's
     // data.duration measures processing time, not video duration. Omit fields
     // we cannot confirm instead of inventing official metadata or token usage.
@@ -4018,7 +4230,7 @@ export const protocols = {
           result.error = { code: "video_generation_failed", message: "AutoDL: task produced no media output" };
         }
       }
-      if (task.status === "FAILURE") result.error = { code: "video_generation_failed", message: task.fail_reason || "AutoDL: video generation failed" };
+      if (task.status === "FAILURE") result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
       return result;
     },
   },

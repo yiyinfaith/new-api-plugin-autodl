@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 const read = name => JSON.parse(readFileSync(new URL(name, import.meta.url), 'utf8'));
+const readText = name => readFileSync(new URL(name, import.meta.url), 'utf8');
 globalThis.utils = { unixNow: () => 2000 };
 const p = await import('data:text/javascript;base64,' + readFileSync(new URL('./plugin.js', import.meta.url)).toString('base64'));
 const catalog = read('./workflows.json').workflows;
@@ -20,7 +21,13 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.16');
+  // The declared version must match the source and be a plain release version, but
+  // pinning the literal here means every bump breaks the suite for no reason. Assert
+  // the shape and that README/API.md agree with the plugin instead.
+  assert.match(p.meta.version, /^\d+\.\d+\.\d+$/);
+  for (const [name, doc] of [['README.md', readText('README.md')], ['API.md', readText('API.md')]]) {
+    assert.ok(doc.includes(p.meta.version), name + ' must state the plugin version ' + p.meta.version);
+  }
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
@@ -248,6 +255,286 @@ reject('IndexTTS-2 is refused on the OpenAI video surface', 'buildSubmitRequest'
   [{ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: ttsAsVideo }, requestBody: ttsAsVideo }], 'audios[0] is required');
 test('the TTS alias is not advertised on the OpenAI surface', () =>
   assert.ok(!p.meta.protocols[0].models.includes('IndexTTS-2')));
+// A private name the operator chose carries no capability table, so its modality
+// cannot be guessed from its spelling. Inferring audio from /tts|indextts/ made a
+// video workflow called "tts-enhance-video" submit as text_to_audio, and -- because
+// the permissive profile never builds the emo_* rules -- made an emotion payload
+// dereference a missing rule and die with a raw TypeError at the upstream call.
+test('an unmapped private name is never guessed to be audio, from its name alone', () => {
+  const video = { model: 'tts-enhance-video', prompt: 'a cat' };
+  const decoded = p.protocols.openai_video.decodeRequest({ ...base, model: 'tts-enhance-video', body: { kind: 'json', value: video } });
+  assert.equal(p.buildSubmitRequest({ ...base, model: 'tts-enhance-video', requestBody: decoded.requestBody }).action, 'text_to_video');
+  // Emotion on such a name must be refused with a diagnosis, never a TypeError.
+  for (const emotion of [{ mode: 'vector', happy: 1 }, { mode: 'vector', random: true }, { mode: 'reference' }, { mode: 'voice' }, {}]) {
+    let caught = null;
+    try {
+      p.protocols.openai_video.decodeRequest({ ...base, model: 'my-tts-model', body: { kind: 'json', value: { model: 'my-tts-model', prompt: 'hi', emotion } } });
+    } catch (error) { caught = error; }
+    assert.ok(caught, 'emotion ' + JSON.stringify(emotion) + ' on an unmapped name must be refused');
+    assert.ok(/^AutoDL: /.test(caught.message), 'must be a diagnostic, got ' + caught.constructor.name + ': ' + caught.message);
+  }
+  // And no unmapped id, whatever it is called, may reach the upstream with emotion.
+  for (const name of ['tts', 'mytts', 'INDEXTTS', 'xTTSy', 'indextts', 'video-tts-upscale']) {
+    let caught = null;
+    try {
+      p.buildSubmitRequest({ ...base, model: name, requestBody: { model: name, prompt: 'h', emotion: { mode: 'vector', happy: 1 } } });
+    } catch (error) { caught = error; }
+    assert.ok(caught && /^AutoDL: /.test(caught.message), name + ' must be refused cleanly, got ' + (caught && caught.message));
+  }
+});
+// Settlement resolves the saved id through the alias table. A state saved under a
+// public alias previously missed both settlement branches, so the clip went
+// unmeasured and the TTS minimum was never applied.
+test('settlement honours an alias-valued workflowId instead of passing it through', () => {  const previousFetch = utils.fetch;
+  const dataBytes = 3 * 32000, header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii'); header.writeUInt32LE(36 + dataBytes, 4); header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii'); header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22); header.writeUInt32LE(16000, 24); header.writeUInt32LE(32000, 28);
+  header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34);
+  header.write('data', 36, 'ascii'); header.writeUInt32LE(dataBytes, 40);
+  const media = new Uint8Array(Buffer.concat([header, Buffer.alloc(dataBytes)]));
+  try {
+    utils.fetch = request => {
+      const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      const start = Number(range[1]), end = Math.min(Number(range[2]), media.length - 1);
+      const body = media.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${media.length}` }, body: body.buffer };
+    };
+    const url = 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/voice.wav';
+    // No seconds fact at all, so only a real measurement can yield a number: this is
+    // what distinguishes "settled from the clip" from "passed the state through".
+    for (const workflowId of ['indextts2-v1', 'IndexTTS-2']) {
+      const out = p.extractUsageOnComplete({ state: { workflowId, type: 'audio', facts: { requests: 1 } } }, { status: 'SUCCESS', url }, {});
+      assert.equal(out.seconds, 10, workflowId + ' must measure the 3s clip and apply the 10s floor');
+    }
+    for (const workflowId of ['wan2.2animate-v4-motion_retargeting', 'wan2.2-animate-move']) {
+      const out = p.extractUsageOnComplete({ state: { workflowId, type: 'video', facts: { requests: 1 } } }, { status: 'SUCCESS', url }, {});
+      assert.equal(out.seconds, 5, workflowId + ' must run the motion branch');
+    }
+  } finally { utils.fetch = previousFetch; }
+});
+// The delivered audio file decides the TTS bill, so every audio byte in it must be
+// counted. Three ways of undercounting were found by audit and are locked down here:
+// RIFF permits several `data` chunks and the parser returned the first one only; a
+// `data` chunk appearing before `fmt ` was skipped and its bytes lost; and a declared
+// size larger than the bytes present was billed verbatim.
+test('the WAV measure sums every data chunk, in any order, and clamps a lying size', () => {
+  const previousFetch = utils.fetch;
+  // 8 kHz mono 8-bit = 8000 bytes/sec, so a 60s file fits inside the 1 MB probe.
+  const RATE = 8000;
+  const fmtChunk = () => {
+    const b = Buffer.alloc(16);
+    b.writeUInt16LE(1, 0); b.writeUInt16LE(1, 2);
+    b.writeUInt32LE(8000, 4); b.writeUInt32LE(RATE, 8);
+    b.writeUInt16LE(1, 12); b.writeUInt16LE(8, 14);
+    return b;
+  };
+  const riff = chunks => {
+    const parts = [];
+    for (const [id, data] of chunks) {
+      const head = Buffer.alloc(8);
+      head.write(id, 0, 'ascii'); head.writeUInt32LE(data.length, 4);
+      parts.push(head, data);
+      if (data.length % 2) parts.push(Buffer.alloc(1));
+    }
+    const body = Buffer.concat(parts);
+    const head = Buffer.alloc(12);
+    head.write('RIFF', 0, 'ascii'); head.writeUInt32LE(body.length + 4, 4); head.write('WAVE', 8, 'ascii');
+    return Buffer.concat([head, body]);
+  };
+  const billed = (bytes, workflowId) => {
+    utils.fetch = request => {
+      const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      const start = Number(m[1]), end = Math.min(Number(m[2]), bytes.length - 1);
+      const body = bytes.slice(start, end + 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${bytes.length}` }, body };
+    };
+    return p.extractUsageOnComplete(
+      { state: { workflowId: workflowId || 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.wav' }, {}).seconds;
+  };
+  const seconds = s => Buffer.alloc(s * RATE);
+  try {
+    assert.equal(billed(riff([['fmt ', fmtChunk()], ['data', seconds(60)]])), 60, 'single chunk');
+    assert.equal(billed(riff([['fmt ', fmtChunk()], ['data', seconds(12)], ['LIST', Buffer.alloc(16)], ['data', seconds(48)]])), 60, 'two chunks separated by another chunk');
+    assert.equal(billed(riff([['fmt ', fmtChunk()], ['data', seconds(1)], ['data', seconds(59)]])), 60, 'two chunks, first tiny');
+    assert.equal(billed(riff([['fmt ', fmtChunk()], ['data', seconds(20)], ['data', seconds(20)], ['data', seconds(20)]])), 60, 'three chunks');
+    assert.equal(billed(riff([['data', seconds(30)], ['fmt ', fmtChunk()], ['data', seconds(30)]])), 60, 'data before fmt');
+    assert.equal(billed(riff([['data', seconds(45)], ['fmt ', fmtChunk()]])), 45, 'data before fmt only');
+    // A header claiming far more audio than the file holds must not be believed.
+    // Read on the motion path, where no vendor minimum masks the measured value: the
+    // motion branch parses video, so assert on the audio branch but subtract the floor
+    // by using a file longer than 10s.
+    const liar = riff([['fmt ', fmtChunk()], ['data', seconds(30)]]);
+    liar.writeUInt32LE(RATE * 3000, 12 + 8 + 16 + 4);
+    const honest = (liar.length - (12 + 8 + 16 + 8)) / RATE;
+    assert.ok(honest > 10 && honest < 3000, 'the fixture must be smaller than its claim and above the floor');
+    assert.equal(billed(liar), honest, 'an inflated declared size is clamped to the bytes present');
+    // The floor still applies on top of a clamped measurement.
+    const tiny = riff([['fmt ', fmtChunk()], ['data', seconds(1)]]);
+    tiny.writeUInt32LE(RATE * 3000, 12 + 8 + 16 + 4);
+    assert.equal(billed(tiny), 10, 'the TTS minimum still applies to a clamped measurement');
+  } finally { utils.fetch = previousFetch; }
+});
+// An ID3v2 tag carrying cover art is routinely larger than the old fixed 8 KB sync
+// window, which made every art-bearing MP3 look unmeasurable and settle at the floor.
+test('the MP3 measure finds its frame sync behind a large ID3v2 tag', () => {
+  const previousFetch = utils.fetch;
+  const mp3WithArt = (artBytes, audioSeconds) => {
+    const bitrate = 128000, rate = 44100;
+    const frameLen = Math.floor(144 * bitrate / rate);
+    const frames = Math.ceil(audioSeconds * rate / 1152);
+    const tag = Buffer.alloc(10 + artBytes);
+    tag.write('ID3', 0, 'ascii'); tag.writeUInt8(3, 3); tag.writeUInt8(0, 4); tag.writeUInt8(0, 5);
+    const size = artBytes;
+    tag[6] = (size >> 21) & 0x7f; tag[7] = (size >> 14) & 0x7f; tag[8] = (size >> 7) & 0x7f; tag[9] = size & 0x7f;
+    const first = Buffer.alloc(frameLen);
+    first.writeUInt32BE(0xfffb9000, 0);
+    first.write('Xing', 36, 'ascii');
+    first.writeUInt32BE(1, 40);
+    first.writeUInt32BE(frames, 44);
+    return Buffer.concat([tag, first, Buffer.alloc(frameLen * (frames - 1))]);
+  };
+  try {
+    for (const art of [0, 4096, 100 * 1024, 400 * 1024]) {
+      const bytes = mp3WithArt(art, 52.2449);
+      utils.fetch = request => {
+        const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+        const start = Number(m[1]), end = Math.min(Number(m[2]), bytes.length - 1);
+        const body = bytes.slice(start, end + 1);
+        return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${bytes.length}` }, body };
+      };
+      const out = p.extractUsageOnComplete(
+        { state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+        { status: 'SUCCESS', url: 'https://cdn.example.com/a.mp3' }, {});
+      assert.ok(Math.abs(out.seconds - 52.271) < 0.01, 'art ' + art + ' bytes measured ' + out.seconds);
+    }
+  } finally { utils.fetch = previousFetch; }
+});
+// The upstream fail_reason is free text and can quote the credential it rejected. The
+// OpenAI surface redacted it, but the MiniMax query path returned it verbatim, so the
+// AutoDL token reached the end user of a failed task.
+test('no surface echoes the credential back in a failure reason', () => {
+  const token = 'super-secret-token-value';
+  const creds = { apiKey: token, authHeader: 'Bearer ' + token, model: 'minimax_h3_z0903', taskId: 'up-1' };
+  const reasons = ['rejected Bearer ' + token, 'token ' + token + ' is invalid', 'rejected "' + token + '"'];
+  for (const reason of reasons) {
+    const mini = p.native.miniTask(creds, { task_id: 'up-1', status: 'FAILURE', fail_reason: reason });
+    assert.ok(!JSON.stringify(mini).includes(token), 'the MiniMax query surface leaked the credential');
+    assert.ok(/redacted/.test(mini.task.error.message), 'the credential must be replaced, not merely dropped');
+    const openai = p.parseTaskResult(creds, { code: 'Success', data: { task_id: 'up-1', status: 'FAILURE', fail_reason: reason } }, { status: 200 });
+    assert.ok(!JSON.stringify(openai).includes(token), 'the OpenAI surface leaked the credential');
+  }
+  // A reason that carries no credential must survive intact for diagnosis.
+  const plain = p.native.miniTask(creds, { task_id: 'up-1', status: 'FAILURE', fail_reason: 'out of memory' });
+  assert.equal(plain.task.error.message, 'out of memory');
+});
+// The delivered file is fetched from a dynamic vendor host, so the credential must never
+// travel with it, and a scheme that is not http(s) must never be passed through.
+test('artifact content is downloaded credentialless and only over http(s)', () => {
+  const token = 'super-secret-token-value';
+  const creds = { apiKey: token, authHeader: 'Bearer ' + token };
+  const video = { url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/out.mp4', type: 'video', file_type: 'mp4' };
+  const audio = { url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/out.wav', type: 'audio', file_type: 'wav' };
+  const env = results => ({ code: 'Success', data: { task_id: 'up-1', status: 'SUCCESS', results } });
+  const task = (results, action, status) => ({ status: status || 'SUCCESS', action, data: env(results) });
+  const listing = p.listArtifacts(task([video, audio], 'text_to_video'));
+  assert.deepEqual(listing.map(a => a.key), ['video', 'audio']);
+  assert.deepEqual(listing.map(a => a.mimeType), ['video/mp4', 'audio/wav']);
+  // A second file of one type must get its own key rather than colliding with the first.
+  assert.deepEqual(p.listArtifacts(task([video, { ...video, url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/b.mp4' }], 'text_to_video')).map(a => a.key), ['video', 'video-2']);
+  // Nothing is offered for a task that produced nothing.
+  assert.deepEqual(p.listArtifacts(task([video], 'text_to_video', 'FAILURE')), []);
+  assert.deepEqual(p.listArtifacts({ status: 'IN_PROGRESS', action: 'text_to_video', data: env([video]) }), []);
+  // Non-http(s) schemes are refused before they can reach the host.
+  for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'data:video/mp4;base64,AAAA', 'https://cdn.example.com@evil.example.com/x.mp4']) {
+    assert.throws(() => p.listArtifacts(task([{ url, type: 'video', file_type: 'mp4' }], 'text_to_video')), /invalid media URL/, url + ' must be refused');
+  }
+  const request = p.buildContentRequest({ data: task([video], 'text_to_video').data, action: 'text_to_video', artifactKey: 'video', clientRequest: { method: 'GET' }, ...creds });
+  assert.equal(request.credentialless, true, 'the vendor CDN must not receive the credential');
+  assert.ok(!JSON.stringify(request).includes(token));
+  assert.equal(request.url, video.url);
+  // The public route is reachable only by GET/HEAD, and only for a listed artifact.
+  assert.throws(() => p.buildContentRequest({ data: task([video], 'text_to_video').data, action: 'text_to_video', artifactKey: 'video', clientRequest: { method: 'POST' } }), /GET and HEAD/);
+  assert.throws(() => p.buildContentRequest({ data: task([video], 'text_to_video').data, action: 'text_to_video', artifactKey: 'nope', clientRequest: { method: 'GET' } }), /artifact not found/);
+});
+// OpenAI POST /v1/audio/speech. Plugin API v1 has no audio protocol, so this is a
+// native route; it must reuse the TTS validation, billing and settlement unchanged.
+test('the OpenAI speech route translates onto the native TTS workflow', () => {
+  const voice = 'https://cdn.example.com/voice.wav';
+  const emotion = 'https://cdn.example.com/emotion.wav';
+  // The decode hook is invoked the way the HOST invokes it for a native route: a
+  // ctx.body of {kind, value} and NO top-level model (only protocol contexts carry
+  // one). Building the ctx in the protocol shape instead is precisely what let a
+  // decoder that read ctx.requestBody/model ship -- every real request was rejected.
+  const speech = (body, model) => {
+    const request = { model: model || 'IndexTTS-2', ...body };
+    return p.native.speechCreate({ ...base, body: { kind: 'json', value: request } });
+  };
+  // The route is registered and scoped to TTS only.
+  const route = p.meta.routes.find(r => r.path === '/autodl/v1/audio/speech');
+  assert.ok(route, 'the speech submit route must be registered');
+  assert.equal(route.type, 'submit');
+  assert.deepEqual(route.models, ['indextts2-v1', 'IndexTTS-2']);
+  assert.ok(p.meta.routes.some(r => r.method === 'GET' && r.path === '/autodl/v1/audio/speech/:task_id' && r.type === 'query'));
+  const request = speech({ input: 'hello', reference_audio: voice }).requestBody;
+  // The speech decode IS the pinned source, so it carries no __autodl_minimax replay
+  // envelope; the upstream body it normalizes to must still equal the native one.
+  const native = p.native.miniCreate({ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: { model: 'IndexTTS-2', content: [
+    { type: 'text', text: 'hello' }, { type: 'audio_url', role: 'reference_audio', audio_url: { url: voice } }] } } }).requestBody;
+  const speechSubmit = p.buildSubmitRequest({ ...base, model: 'IndexTTS-2', requestBody: request, action: 'text_to_speech' });
+  const nativeSubmit = p.buildSubmitRequest({ ...base, model: 'IndexTTS-2', requestBody: native, action: 'text_to_audio' });
+  assert.equal(speechSubmit.url, nativeSubmit.url);
+  assert.deepEqual(speechSubmit.body, nativeSubmit.body);
+  // Therefore it bills identically: per audio second at the vendor minimum.
+  assert.deepEqual(p.extractUsage({ ...base, model: 'IndexTTS-2', requestBody: request }), { requests: 1, seconds: 10 });
+  // Submission routes to the TTS workflow and polls back into the same state.
+  const submitted = p.buildSubmitRequest({ ...base, model: 'IndexTTS-2', requestBody: request, action: 'text_to_speech' });
+  assert.ok(submitted.url.endsWith('/indextts2-v1'));
+  const state = p.parseSubmitResponse({ ...base, model: 'IndexTTS-2', requestBody: request },
+    { statusCode: 200, body: { code: 'Success', data: { task_id: 'u1', status: 'QUEUED' } } }).state;
+  assert.equal(state.workflowId, 'indextts2-v1');
+  assert.deepEqual(state.facts, { requests: 1, seconds: 10 });
+  // Emotion modes map onto the same top-level emo_* fields the native surface uses.
+  assert.equal(speech({ input: 'hi', reference_audio: voice, emotion_vector: { happy: 0.8 } }).requestBody.emo_happy, 0.8);
+  assert.equal(speech({ input: 'hi', reference_audio: voice, emotion: { mode: 'vector', happy: 0.8 } }).requestBody.emo_happy, 0.8);
+  // The emotion reference binds to the second audio slot; both clips must be present
+  // in the decoded content, in the order that assigns prompt_simple then emo_ref_audio.
+  const referenceRequest = speech({ input: 'hi', reference_audio: voice, emotion_reference_audio: emotion, emotion: { mode: 'reference' } });
+  assert.deepEqual(referenceRequest.requestBody.content.filter(item => item.type === 'audio_url').map(item => item.audio_url.url), [voice, emotion]);
+  assert.equal(referenceRequest.requestBody.emo_control_method, '使用情感参考音频');
+  assert.equal(speech({ input: 'hi', reference_audio: voice, prompt_text: 'spoken' }).requestBody.prompt_text, 'spoken');
+  // Official-but-unhonourable fields are refused rather than silently ignored: a voice
+  // preset names a speaker AutoDL cannot synthesise, and a silent substitution would be
+  // invisible to the caller.
+  for (const body of [{ input: 'hi', voice: 'alloy' }, { input: 'hi', voice: 'alloy', response_format: 'mp3' }]) {
+    assert.throws(() => speech(body), /voice presets are not supported/, JSON.stringify(body));
+  }
+  assert.throws(() => speech({ input: 'hi', reference_audio: voice, response_format: 'ogg' }), /response_format must be one of/);
+  assert.throws(() => speech({ voice: 'alloy', reference_audio: voice }), /input \(the text to speak\) is required/);
+  assert.throws(() => speech({ input: '', reference_audio: voice }), /input must not be empty/);
+  assert.throws(() => speech({ input: 'hi', reference_audio: voice, bogus: 1 }), /unsupported speech field/);
+  assert.throws(() => speech({ input: 'hi', reference_audio: voice, speed: -1 }), /speed must be a positive number/);
+  assert.throws(() => speech({ input: 'hi', reference_audio: voice, emotion_vector: { nope: 1 } }), /unsupported emotion field/);
+  // The route serves TTS only; another model must be refused with a diagnosis.
+  assert.throws(() => speech({ input: 'hi' }, 'minimax_h3_z0903'), /served only by IndexTTS-2/);
+  // Speed and instructions are documented by OpenAI with no AutoDL counterpart. They
+  // carry no media, so they are accepted and ignored rather than failing the call.
+  assert.deepEqual(speech({ input: 'hello', reference_audio: voice, speed: 1.5, instructions: 'warm' }).requestBody, request);
+});
+test('the speech query surface reports status and never leaks the credential', () => {
+  const token = 'super-secret-token-value';
+  const audio = { url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.wav', type: 'audio', file_type: 'wav' };
+  const env = results => ({ code: 'Success', data: { task_id: 'u1', status: 'SUCCESS', results } });
+  const task = (status, results, extra) => ({ task_id: 'task_abc', status, action: 'text_to_speech', data: env(results), ...extra });
+  assert.deepEqual(p.native.speechCreated({ ...base }, { task_id: 'task_abc' }), { id: 'task_abc', status: 'queued' });
+  const done = p.native.speechTask({ ...base }, task('SUCCESS', [audio]));
+  assert.equal(done.status, 'succeeded');
+  assert.equal(done.url, audio.url);
+  assert.equal(p.native.speechTask({ ...base }, task('IN_PROGRESS', [audio])).status, 'running');
+  assert.equal(p.native.speechTask({ ...base, apiKey: token, authHeader: 'Bearer ' + token }, task('FAILURE', [], { fail_reason: 'rejected Bearer ' + token })).error.message, 'rejected Bearer [redacted]');
+  assert.equal(p.native.speechTask({ ...base }, task('CANCELED', [])).status, 'cancelled');
+});
 for (const [model, config] of Object.entries(catalog)) {
   const source = official.find(row => row.uuid === config.workflowId);
   const input = examples[model];
@@ -554,9 +841,10 @@ function hostJSON(value) {
   return value;
 }
 const v2Context = request => ({ method: 'POST', path: '/v2/video_generation', body: { kind: 'json', value: hostJSON(request) } });
-test('only the two namespace-safe interfaces are registered', () => {
+test('only the namespace-safe interfaces are registered', () => {
   assert.deepEqual(p.meta.routes.map(r => [r.method, r.path]), [
     ['POST', '/v2/video_generation'], ['GET', '/v2/query/video_generation/:task_id'],
+    ['POST', '/autodl/v1/audio/speech'], ['GET', '/autodl/v1/audio/speech/:task_id'],
   ]);
   assert.equal(formats.minimax_api.create_path, '/v2/video_generation');
   assert.equal(formats.minimax_api.query_path, '/v2/query/video_generation/{task_id}');
@@ -566,6 +854,23 @@ test('only the two namespace-safe interfaces are registered', () => {
     // The plugin must not need an origin-proxy prefix either.
     assert.ok(!/bridge|proxy|rewrite/i.test(route.path), route.path);
   }
+  // A plugin route may not intersect a HOST STATIC route: router/plugin-router.go
+  // rejects such a plugin from public routing entirely, taking every route and model
+  // with it. /v1/audio/speech is a static host route (router/relay-router.go), and
+  // SetRelayRouter runs before SetPluginRouter so it is always in the snapshot. The
+  // OpenAI speech format therefore lives under /autodl/v1 instead.
+  const hostStatic = ['/v1/audio/speech', '/v1/videos', '/v1/images/generations', '/v1/images/edits', '/v1/responses', '/v1/chat/completions', '/v1/models'];
+  for (const route of p.meta.routes) {
+    for (const reserved of hostStatic) {
+      assert.ok(route.path !== reserved && !route.path.startsWith(reserved + '/'),
+        route.path + ' would collide with the host static route ' + reserved + ' and get the whole plugin rejected');
+    }
+  }
+  assert.ok(p.meta.routes.every(r => r.path === '/v2/video_generation' || r.path.startsWith('/v2/query/') || r.path.startsWith('/autodl/')),
+    'every plugin route must stay in a namespace the host does not serve statically');
+  // /autodl/v1/audio/speech is a native route precisely because Plugin API v1 has no
+  // audio protocol. If a future host gains one, claiming it here is the better answer.
+  assert.deepEqual(p.meta.protocols.map(claim => claim.name), ['openai_video']);
 });
 // The removed official model names must not resolve to any workflow any more.
 const removedOfficialModels = ['MiniMax-H3', 'MiniMax-H3-Max', 'MiniMax-H3-MAX'];
