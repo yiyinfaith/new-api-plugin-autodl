@@ -20,7 +20,7 @@ const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
 test('exact official catalog coverage', () => {
-  assert.equal(p.meta.version, '1.0.12');
+  assert.equal(p.meta.version, '1.0.13');
   assert.equal(p.meta.requiredCapabilities, undefined);
   assert.equal(official.length, 17);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
@@ -187,7 +187,24 @@ for (const field of ['metadata', 'mode', 'user', 'n', 'response_format']) fixtur
 for (const field of ['ref_image_0', 'ref_video_0', 'audio_url', 'file', 'image_settings', 'video_settings']) reject('media-shaped field ' + field + ' is refused', 'buildSubmitRequest', [ctx(model, { prompt: 'x', [field]: 'anything' })], 'unsupported request field');
 // An unrecognized object could hide media, so it is refused rather than dropped.
 for (const field of ['custom_object', 'options', 'settings']) reject('object-valued unknown field ' + field + ' is refused', 'buildSubmitRequest', [ctx(model, { prompt: 'x', [field]: { nested: 'https://cdn.example.com/a.png' } })], 'unsupported request field');
-reject('reject unknown model', 'buildSubmitRequest', [{ ...context, upstreamModel: 'unknown' }], 'unsupported model');
+// A mapped id this plugin holds no capability table for is the supported path for
+// a self-chosen model name, so it must build a correct upstream URL rather than be
+// refused. The operator's mapping also wins over the body's own model name, which
+// is what makes mapping usable at all.
+const unmapped = p.buildSubmitRequest({ ...context, upstreamModel: 'my_team_private_workflow' });
+assert.equal(unmapped.url, 'https://autodl.art/api/v1/comfyui/comfyui_workflow/my_team_private_workflow');
+const selfNamed = { model: 'my_team_private_workflow', prompt: 'x', seconds: 5 };
+for (const driver of [
+  { ...base, model: 'my_team_private_workflow', upstreamModel: 'my_team_private_workflow', body: { kind: 'json', value: selfNamed }, requestBody: selfNamed },
+  { ...base, model: 'my_team_private_workflow', body: { kind: 'json', value: selfNamed }, requestBody: selfNamed },
+  { ...base, model: model, upstreamModel: 'my_team_private_workflow', body: { kind: 'json', value: examples[model] }, requestBody: examples[model] },
+]) {
+  assert.equal(p.buildSubmitRequest(driver).url, 'https://autodl.art/api/v1/comfyui/comfyui_workflow/my_team_private_workflow', 'the mapped workflow id reaches upstream');
+}
+for (const retired of ['MiniMax-H3', 'minimax-h3-max', 'MiniMax-H3-Max']) {
+  reject(retired + ': a retired official name cannot be resurrected by channel mapping', 'buildSubmitRequest',
+    [{ ...base, model: retired, upstreamModel: retired, body: { kind: 'json', value: { model: retired, prompt: 'x', seconds: 5 } }, requestBody: { prompt: 'x', seconds: 5 } }], 'unsupported model');
+}
 reject('reject bearer vendor key', 'buildSubmitRequest', [{ ...context, apiKey: 'Bearer fake-token' }], 'without Bearer');
 reject('reject placeholder key', 'buildSubmitRequest', [{ ...context, apiKey: '__CONFIGURE_AUTODL_COMFYUI_TOKEN__' }], 'configure the channel');
 reject('reject binary upload', 'buildSubmitRequest', [{ ...context, files: [{ ref: 'f' }] }], 'binary uploads');
@@ -949,6 +966,36 @@ test('an upstream usage block is trusted only for its own seconds', () => {
     assert.equal(p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url }, { usage: { input_seconds: 9 }, duration: 196 }).seconds, 5);
     assert.equal(p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url }, { duration: 196 }).seconds, 5);
   } finally { utils.fetch = previousFetch; }
+});
+// The dangerous failure mode of accepting mapped names: if an unknown mapping
+// replaced the caller's declared table, an operator pointing a declared model at a
+// private workflow id would silently drop that model's prompt/seconds/media/
+// resolution limits and a customer could buy an out-of-range generation. Mapping
+// may change only WHERE the request runs, never WHAT is validated.
+test('a declared model keeps its own limits when mapped to an unknown workflow id', () => {
+  const seconds = 'minimax_h3_z0901', resolution = 'minimax_h3_lightx2v_no_pic';
+  for (const driver of [
+    { ...base, model: resolution, upstreamModel: 'my_team_private_workflow' },
+    { ...base, model: 'client-alias', upstreamModel: resolution },
+  ]) {
+    const withBogus = { ...examples[resolution], resolution: '9999p' };
+    assert.throws(() => p.buildSubmitRequest({ ...driver, body: { kind: 'json', value: withBogus }, requestBody: withBogus }),
+      /unsupported resolution\/orientation combination/, 'a bogus resolution label must not pass through');
+  }
+  const outOfRange = { ...examples[seconds], seconds: 99 };
+  assert.throws(() => p.buildSubmitRequest({ ...base, model: seconds, upstreamModel: 'my_team_private_workflow', body: { kind: 'json', value: outOfRange }, requestBody: outOfRange }),
+    /seconds must be an integer between 1 and 15/, 'an out-of-range seconds value must not pass through');
+  // The declared validation still applies to the media requirement. z0901 is
+  // text-only by design, so use one that genuinely requires a reference image.
+  const needsImage = 'minimax_h3_z0902';
+  const noMedia = { ...examples[needsImage] };
+  delete noMedia.input_reference; delete noMedia.images;
+  assert.throws(() => p.buildSubmitRequest({ ...base, model: needsImage, upstreamModel: 'my_team_private_workflow', body: { kind: 'json', value: noMedia }, requestBody: noMedia }),
+    /at least 1 image/, 'a required media slot must still be enforced');
+  // ...and the mapped id is still the one actually called.
+  const good = examples[resolution];
+  assert.equal(p.buildSubmitRequest({ ...base, model: resolution, upstreamModel: 'my_team_private_workflow', body: { kind: 'json', value: good }, requestBody: good }).url,
+    'https://autodl.art/api/v1/comfyui/comfyui_workflow/my_team_private_workflow');
 });
 test('safeReason redacts a credential split by intervening characters', () => {
   const secret = 'super-secret-autodl-token';

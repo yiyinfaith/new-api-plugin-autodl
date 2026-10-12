@@ -2494,11 +2494,17 @@ function usageProfile(model, publicModel) {
   return { models: [typeof publicModel === "string" ? publicModel : model], schema: schema, examples: [{ label: config.name, facts: facts }] };
 }
 
+// Removed on purpose and never coming back: the official model names this adapter
+// used to auto-route. An operator mapping a channel could otherwise resurrect one
+// by accident and silently restore routing that was deliberately deleted, so these
+// stay refused even though arbitrary mapped names are now accepted.
+const RETIRED_MODELS = ["minimax-h3", "minimax-h3-max"];
+
 export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.12",
+  version: "1.0.13",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2566,6 +2572,97 @@ function workflow(model) {
   if (!has(WORKFLOWS, model)) throw new Error("AutoDL: unsupported model; select one of the 17 declared models");
   return WORKFLOWS[model];
 }
+// Deployment reality the protocol tables cannot express: an operator may map any
+// self-chosen model name onto an AutoDL workflow inside their own channel, so the
+// workflow id can be one we hold no capability table for. Declared models never
+// reach this path and keep their strict per-model validation; the fallback covers
+// only the ids we cannot describe, and validates what is knowable without a
+// capability table (the body is an object, media is well formed, no unknown or
+// prototype key rides along) while leaving capability limits -- prompt slots,
+// second ranges, reference counts, resolution labels -- to the workflow upstream
+// actually runs. Rejecting instead would make every mapped name unusable.
+function unmappedWorkflow(workflowId) {
+  const id = text(workflowId);
+  if (!id) throw new Error("AutoDL: model is required");
+  if (RETIRED_MODELS.includes(id.toLowerCase())) throw new Error("AutoDL: unsupported model; select one of the 17 declared models");
+  // Generic slots so reference media still reaches upstream; the real workflow
+  // binds whatever names it expects, and an unmatched extra slot is ignored there.
+  const images = [], audios = [], videos = [];
+  for (let index = 0; index < 16; index++) images.push("ref_image" + (index ? "_" + index : ""));
+  for (let index = 0; index < 8; index++) audios.push("ref_audio" + (index ? "_" + index : ""));
+  for (let index = 0; index < 4; index++) videos.push("ref_video" + (index ? "_" + index : ""));
+  const rules = {};
+  for (const field of images) rules[field] = { type: "image", required: false };
+  for (const field of audios) rules[field] = { type: "audio", required: false };
+  for (const field of videos) rules[field] = { type: "video", required: false };
+  // A generic text slot so a mapped workflow can still receive its prompt. The
+  // declared workflows keep their own exact prompt field and character limits;
+  // without a capability table the only honest bound is "non-empty string".
+  rules.prompt = { type: "string", min_length: 1, max_length: 4096 };
+  // Likewise a generic duration slot: a mapped workflow that accepts a length gets
+  // it, and the wide 1..3600 bound (the same sanity bound motion settlement uses)
+  // stands in for the per-workflow range we cannot know.
+  rules.duration = { type: "integer", required: false, default: 5, min: 1, max: 3600 };
+  rules.audio_duration = { type: "integer", required: false, default: 5, min: 1, max: 3600 };
+  rules.resolution = { type: "string", required: false, default: "adaptive" };
+  rules.ratio = { type: "string", required: false };
+  rules.seed = { type: "integer", required: false };
+  return {
+    workflowId: id,
+    name: "Mapped AutoDL workflow",
+    type: /tts|indextts/i.test(id) ? "audio" : "video",
+    timeoutSeconds: 1800,
+    // No seconds control is declared, so an unmapped workflow never advertises
+    // billing seconds; pricing stays the operator's decision.
+    promptField: "prompt",
+    secondsField: "duration",
+    input_reference: images,
+    audios: audios,
+    videos: videos,
+    // A pass-through entry whose `upstream` equals any input label, so a mapped
+    // workflow's own resolution spelling reaches it unchanged. Declared workflows
+    // map their labelled enums exactly; this one has no labels to map.
+    resolutions: [{ resolution: "adaptive", orientation: "adaptive", upstream: "adaptive", passthrough: true }],
+    rules: rules,
+    unmapped: true,
+  };
+}
+// Resolve the workflow a request runs as, and the upstream id it is sent to.
+//
+// Validation and the upstream id are decided separately, and that separation is
+// the whole point:
+//   * If the caller named a declared workflow, THAT workflow's capability table
+//     validates the request, whatever the channel mapped it to. Otherwise an
+//     operator mapping a declared model to a private id would silently strip the
+//     declared model's prompt/seconds/media/resolution limits, and a customer
+//     could buy an out-of-range generation.
+//   * The upstream id is the mapped one when the host resolved a mapping, because
+//     that is where the operator's request should actually run; otherwise it is
+//     the declared name itself.
+//   * Only when the caller's name is undeclared -- a self-chosen name we hold no
+//     table for -- does the permissive profile validate, against the mapped id.
+function resolveWorkflow(mappedModel, requestedModel) {
+  // Validation follows a declared table whenever one of the two names has one.
+  // The caller's own name is preferred because it is what the request was written
+  // against; the operator's mapped id is next, since mapping onto a declared
+  // workflow means that workflow's rules are the ones the generation must satisfy.
+  // Only when neither is declared -- a self-chosen name with no table -- does the
+  // permissive profile apply.
+  const declared = [requestedModel, mappedModel].reduce(function (found, candidate) {
+    return found || (typeof candidate === "string" && has(WORKFLOWS, candidate) ? WORKFLOWS[candidate] : null);
+  }, null);
+  const upstream = text(typeof mappedModel === "string" && mappedModel ? mappedModel : requestedModel);
+  if (declared) {
+    // The id actually called is the mapped one when the host resolved a mapping,
+    // even onto a workflow we do not declare; otherwise the declared name itself.
+    // When both agree this is the shared table entry unchanged, so the common path
+    // allocates nothing.
+    return upstream === declared.workflowId
+      ? declared
+      : Object.assign({}, declared, { workflowId: upstream });
+  }
+  return unmappedWorkflow(upstream);
+}
 
 function numberValue(value, rule, name) {
   if (typeof value !== "number" && (typeof value !== "string" || !/^-?\d+(?:\.\d+)?$/.test(value))) throw new Error("AutoDL: " + name + " must be numeric");
@@ -2601,6 +2698,10 @@ function mapResolution(config, input) {
   }
   quality = quality === undefined ? defaults.resolution : quality;
   orientation = orientation === undefined ? defaults.orientation : orientation;
+  // An unmapped workflow has no label table, so the caller's own resolution and
+  // orientation spellings pass through verbatim; the workflow upstream validates
+  // them. This is why the profile carries a passthrough entry at all.
+  if (defaults.passthrough) return { resolution: quality, orientation: orientation, upstream: quality };
   const selected = config.resolutions.find(function (entry) { return entry.resolution === quality && entry.orientation === orientation; });
   if (!selected) throw new Error("AutoDL: unsupported resolution/orientation combination for this workflow; check workflows.json");
   return selected;
@@ -2823,7 +2924,11 @@ function requestWorkflow(ctx) {
     if (model !== config.workflowId) throw new Error("AutoDL: internal MiniMax workflow identity conflicts");
     return config;
   }
-  return workflow(model);
+  // Past this point the request already carries a resolved workflow id. Validation
+  // still follows the model the caller named, so a declared model keeps its own
+  // capability table even when a channel mapped it to a private id; only a name
+  // with no table -- a self-chosen one -- falls back to the permissive profile.
+  return resolveWorkflow(text(ctx.upstreamModel), text(ctx.model));
 }
 
 function normalizeMiniMax(config, input) {
@@ -3596,7 +3701,11 @@ function decode(ctx, pinnedModel) {
   const model = pinnedModel || text(request.model);
   if (!model) throw new Error("AutoDL: model is required");
   request.model = model;
-  const config = workflow(ctx.upstreamModel || (model === MOTION_ALIAS ? MOTION_WORKFLOW : model));
+  // The channel-mapped workflow id means the operator already decided which
+  // workflow this name runs as, so a self-chosen name is valid here even though
+  // it appears in no capability table of ours.
+  const requested = model === MOTION_ALIAS ? MOTION_WORKFLOW : model;
+  const config = resolveWorkflow(ctx.upstreamModel, requested);
   normalizeInput(config, request);
   const action = taskAction(config, request);
   return { kind: "submit", model: model, action: action, requestBody: request };
@@ -3610,8 +3719,9 @@ function decodeCompatible(ctx, pinnedModel) {
   const model = pinnedModel || text(request.model);
   if (!model) throw new Error("AutoDL: model is required");
   request.model = model;
-  // The channel decides the workflow; the caller names the AutoDL workflow id.
-  const config = workflow(ctx.upstreamModel || model);
+  // The channel decides the workflow; the caller names the AutoDL workflow id or
+  // a name the operator mapped to one in their own channel.
+  const config = resolveWorkflow(ctx.upstreamModel, model);
   // Key/value pairs keep the host's recursive usage preflight from reading a
   // generated resolution enum label as a billing enum value. Facts stay explicit.
   const normalizedBody = normalizeMiniMax(config, request);
