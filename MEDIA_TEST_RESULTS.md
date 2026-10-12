@@ -1,10 +1,12 @@
+> **v1.0.20 变更：仅规范化行尾，插件行为与 1.0.19 完全一致。**仓库的 `.gitattributes` 声明 `eol=lf`，但本机 `core.autocrlf=true` 使工作区是 CRLF 而 git/GitHub 存 LF，导致 `SHA256SUMS.txt` 记录的是 CRLF 文件的哈希，与**已发布**的 `plugin.js` 字节不符，任何人都无法用它校验下载文件。现已把工作区统一为 LF 并按 LF 重新生成校验清单（自校验通过），1.0.20 因此与 GitHub 发布字节、VPS 运行字节三者完全一致。插件逻辑未变。
+>
 > **v1.0.19 变更：两处修正（自身审计发现，均已复现）。**
 > 1. **TTS 结算下限改为无条件生效。**结算分支原先写作「有测量值则取 max(测量值,10)，否则仅在原值**非法**时重置为 10」，因此一条存成 `seconds: 5` 的记录（合法、为正、在范围内）会按 5 秒结算，低于官方最低计费 ¥0.010。提交写入 10、轮询下限也是 10，所以低于 10 的存量值只可能是脏数据；现在无论来源一律抬到 10，测量值高于 10 时仍按实测计费。
 > 2. **`prompt_text` 更正为 `input` 的同义拼写。**上游 TTS 的 `promptField` 就是 `prompt_text`，即**唯一的**文本字段，因此不存在「第二段文本」这种能力。此前把它写成额外扩展字段，实际会让请求被上游以 `unsupported or mixed MiniMax field prompt_text` 拒绝（不是静默丢弃，是直接报错）。现在 `input`/`text`/`prompt_text` 三者都指同一字段，同时给多个时必须取值一致，否则报错而不是静默取其一。
 >
 > **v1.0.18 变更：TTS 新增 OpenAI 语音请求格式入口，并修复审计发现的计费与安全缺陷。**
 >
-> **新增：**TTS 现在有**两个**入口——OpenAI 官方**请求体格式** `POST /autodl/v1/audio/speech`（+ `GET /autodl/v1/audio/speech/{task_id}`）与 MiniMax 官方 V2 `POST /v2/video_generation`。两条路径归一化为**同一个**上游请求，因此计费完全一致（同一段文本走哪个入口费用相同）。官方字段 `input`/`response_format`/`speed`/`instructions` 与官方同名；`voice` 是官方预设音色名，AutoDL 为参考音频克隆、没有预设音色，因此**传了但不给参考音频会直接报错**，不会静默换成别的音色。AutoDL 独有、官方格式功能上确实没有的字段才额外提供：`reference_audio`、`emotion_reference_audio`（+ 别名 `emo_audio_url`）、`emotion`、`emotion_vector`（`prompt_text` 见 1.0.19，是 `input` 的同义拼写而非额外槽位）。**语义差异：**官方 `/v1/audio/speech` 同步返回音频二进制，本插件返回任务对象（上游是异步任务模型），需再查 `GET /autodl/v1/audio/speech/{task_id}` 取 `url`。
+> **新增：**TTS 现在有**两个**入口——OpenAI 官方**请求体格式** `POST /autodl/v1/audio/speech`（+ `GET /autodl/v1/audio/speech/{task_id}`）与 MiniMax 官方 V2 `POST /v2/video_generation`。两条路径归一化为**同一个**上游请求，因此计费完全一致（同一段文本走哪个入口费用相同）。官方字段 `input`/`response_format`/`speed`/`instructions` 与官方同名；`voice` 是官方预设音色名，AutoDL 为参考音频克隆、没有预设音色，因此**传了但不给参考音频会直接报错**，不会静默换成别的音色。AutoDL 独有、官方格式功能上确实没有的字段才额外提供：`reference_audio`、`emotion_reference_audio`（+ 别名 `emo_audio_url`）、`emotion`、`emotion_vector`（`prompt_text` 见 1.0.20，是 `input` 的同义拼写而非额外槽位）。**语义差异：**官方 `/v1/audio/speech` 同步返回音频二进制，本插件返回任务对象（上游是异步任务模型），需再查 `GET /autodl/v1/audio/speech/{task_id}` 取 `url`。
 > **路径为何不是 `/v1/audio/speech`（重要）：**该路径是**宿主静态路由**（`router/relay-router.go` 注册，供其他 TTS 渠道使用），而 `SetRelayRouter` 在 `SetPluginRouter` 之前执行，因此它必然出现在插件路由快照里；`router/plugin-router.go` 的 `validatePlugin` 会拒绝任何与静态路由相交的插件，并且该拒绝是**整插件级**的——插件全部路由与模型都会退出公共路由。因此抢占 `/v1/audio/speech` 会让 **AutoDL 插件整体不可用**，而非只影响这一个接口。rc.43 也没有音频协议（只有 `openai_responses`/`openai_video`/`openai_image`），任务插件渠道无法经宿主自带语音处理器到达。故保留官方**请求体格式**、改用插件自有前缀 `/autodl/v1/audio/speech`。已加入回归断言：任何与宿主静态路由（`/v1/audio/speech`、`/v1/videos`、`/v1/responses` 等）相同或以之开头的插件路由都会让测试失败。
 >
 > **修复（第四轮审计，均已独立复现）：**
