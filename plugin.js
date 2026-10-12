@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.20",
+  version: "1.0.21",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -3231,9 +3231,11 @@ function decodeSpeech(ctx) {
     }
   }
   // OpenAI's `voice` names a preset speaker that only OpenAI's own models implement.
-  // AutoDL clones from a reference clip instead, so the name cannot be honoured: it is
-  // refused rather than silently ignored, because a caller who asked for a specific
-  // voice and got a clone of whatever clip was supplied would have no way to notice.
+  // AutoDL clones from a reference clip instead. With NO reference there is nothing to
+  // clone from, so the request cannot be honoured at all and is refused rather than
+  // quietly synthesised in a voice the caller did not ask for. When a reference IS
+  // supplied the clone target is explicit and the preset name is inert, so it is
+  // ignored -- the caller's own clip already decides the voice.
   if (input.voice !== undefined && input.reference_audio === undefined && input.emotion_reference_audio === undefined) {
     throw new Error("AutoDL: voice presets are not supported; supply reference_audio to clone a voice");
   }
@@ -3255,14 +3257,23 @@ function decodeSpeech(ctx) {
   // Emotion reaches the workflow as top-level emo_* fields beside the content array,
   // which is the shape the native MiniMax surface takes.
   const body = { model: model, content: content };
-  const vector = input.emotion !== undefined ? input.emotion
-    : input.emotion_vector !== undefined ? Object.assign({ mode: "vector" }, input.emotion_vector) : undefined;
+  const vector = input.emotion !== undefined
+    ? input.emotion
+    : input.emotion_vector !== undefined
+      ? Object.assign({ mode: "vector" }, object(input.emotion_vector) ? input.emotion_vector : null)
+      : undefined;
   if (vector !== undefined) {
     if (!object(vector)) throw new Error("AutoDL: emotion must be an object");
     for (const key of Object.keys(vector)) {
       if (key !== "mode" && !SPEECH_EMOTION_KEYS.includes(key)) throw new Error("AutoDL: unsupported emotion field");
     }
-    const mode = vector.mode === undefined ? "vector" : vector.mode;
+    // `emotion_vector` implies vector mode; a bare `emotion` object does not. Defaulting
+    // it to vector classified `emotion: {}` as "vector control" with no vector at all,
+    // while the native surface emits voice mode for the same no-emotion intent -- the two
+    // entry points then sent different control values for identical requests.
+    if (input.emotion_vector !== undefined && !object(input.emotion_vector)) throw new Error("AutoDL: emotion_vector must be an object");
+    const fallback = input.emotion_vector !== undefined ? "vector" : "voice";
+    const mode = vector.mode === undefined ? fallback : vector.mode;
     const modes = { voice: "与音色参考音频相同", reference: "使用情感参考音频", vector: "使用情感向量控制" };
     if (!has(modes, mode)) throw new Error("AutoDL: emotion.mode must be voice, reference or vector");
     body.emo_control_method = modes[mode];
@@ -3520,9 +3531,17 @@ function u32le(bytes, offset) {
   return bytes[offset] + bytes[offset + 1] * 0x100 + bytes[offset + 2] * 0x10000 + bytes[offset + 3] * 0x1000000;
 }
 
-function wavDuration(bytes) {
+function wavDuration(bytes, totalBytes) {
   if (!bytes || bytes.length < 12) return null;
   if (ascii4(bytes, 0) !== "RIFF" || ascii4(bytes, 8) !== "WAVE") return null;
+  // `bytes` is a fixed probe WINDOW, not the file. Clamping a declared size to
+  // `bytes.length` therefore truncated every WAV larger than the window: a 3600s file
+  // measured 65.53325s (the window minus the header, over the byte rate), and because
+  // that result is non-null the caller's tail read -- which exists precisely for files
+  // bigger than the window -- never ran. The true size is the Content-Range total, so
+  // the clamp uses that; when the total is unknown the declared size is taken at face
+  // value, which is what a WAV header is for and what the vendor itself charges from.
+  const total = typeof totalBytes === "number" && isFinite(totalBytes) && totalBytes > 0 ? totalBytes : null;
   let offset = 12;
   let byteRate = 0;
   // RIFF permits more than one `data` chunk (concatenating writers emit them) and a
@@ -3550,13 +3569,15 @@ function wavDuration(bytes) {
       }
     } else if (id === "data") {
       sawData = true;
-      // A streamed WAV uses 0xffffffff for an unknown size; fall back to what the
-      // probe actually contains so the estimate stays honest instead of absurd.
-      // A declared size is also clamped to the bytes present, because trusting it
-      // verbatim billed a header claiming 3000s of a 1s payload as 3000s. Clamping
-      // can only lower an inflated claim, never invent audio that is not there.
-      const available = bytes.length - data;
-      const declared = size === 0xffffffff || size === 0 ? available : Math.min(size, available);
+      const windowBytes = Math.max(bytes.length - data, 0);
+      // A streamed WAV uses 0xffffffff (or 0) for an unknown size, meaning "to the end
+      // of the file"; otherwise the header states it. Either way the honest upper bound
+      // is how much file remains after this chunk header, computed from the TOTAL when
+      // it is known. Clamping can only lower an inflated claim, never invent audio.
+      const remaining = total !== null ? Math.max(total - data, 0) : windowBytes;
+      const declared = size === 0xffffffff || size === 0
+        ? remaining
+        : (total !== null ? Math.min(size, remaining) : size);
       if (declared > 0) {
         if (byteRate > 0) audioBytes += declared;
         else openData += declared;
@@ -3584,45 +3605,55 @@ function mp3Duration(bytes) {
     const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
     offset = 10 + size;
   }
-  // Locate a frame sync, skipping any leading padding. The scan must reach the end of
-  // the probe window, not stop 8 KB past the tag: an ID3v2 tag carrying cover art is
-  // routinely larger than that, so the sync fell outside a fixed window and every
-  // art-bearing MP3 reported as unmeasurable -- which silently settled a 52s clip at
-  // the 10s floor. The window already holds up to 1 MB of bytes, so scanning all of it
-  // costs nothing but a linear pass.
+  // Locate a frame carrying Xing/Info. The scan must NOT stop at the first byte pair
+  // that merely looks like a sync: an encoder may put the header on a later frame, and
+  // 0xFF 0xE0 pairs occur inside ordinary payloads, so stopping there found no Xing/Info,
+  // returned null and made the whole file unmeasurable -- a 78s MP3 settled at the 10s
+  // floor. Every candidate is tried and the scan continues until one yields a frame
+  // count. The scan must also reach the end of the probe window, not stop 8 KB past the
+  // tag: an ID3v2 tag carrying cover art is routinely larger than that.
   const limit = bytes.length - 4;
   while (offset < limit) {
-    // Also stop at a RIFF/WAVE header: a caller could hand over a file whose tag
-    // claims a size larger than the probe, and scanning from there to the end of a
-    // megabyte window to find nothing is wasted work with no measurement at the end.
+    // A RIFF header means this is not an MP3 at all; stop rather than scan a megabyte
+    // to find nothing.
     if (bytes[offset] === 0x52 && ascii4(bytes, offset) === "RIFF") return null;
-    if (bytes[offset] === 0xff && (bytes[offset + 1] & 0xe0) === 0xe0) break;
+    if (bytes[offset] !== 0xff || (bytes[offset + 1] & 0xe0) !== 0xe0) { offset++; continue; }
+    const versionBits = (bytes[offset + 1] >> 3) & 0x03;   // 3 = MPEG1
+    const channelMode = (bytes[offset + 3] >> 6) & 0x03;   // 3 = mono
+    const sampleRates = versionBits === 3 ? [44100, 48000, 32000] : versionBits === 2 ? [22050, 24000, 16000] : versionBits === 0 ? [11025, 12000, 8000] : null;
+    const sampleRate = sampleRates ? sampleRates[(bytes[offset + 2] >> 2) & 0x03] : undefined;
+    if (sampleRate) {
+      const sideInfo = versionBits === 3 ? (channelMode === 3 ? 17 : 32) : (channelMode === 3 ? 9 : 17);
+      const xing = offset + 4 + sideInfo;
+      if (xing + 12 <= bytes.length) {
+        const tag = ascii4(bytes, xing);
+        if (tag === "Xing" || tag === "Info") {
+          const flags = u32(bytes, xing + 4);
+          // No frame count means no dependable length; try the next candidate rather
+          // than giving up, since a later frame may carry one.
+          if (flags & 0x01) {
+            const frames = u32(bytes, xing + 8);
+            if (frames > 0) {
+              const samplesPerFrame = versionBits === 3 ? 1152 : 576;
+              return frames * samplesPerFrame / sampleRate;
+            }
+          }
+        }
+      }
+    }
     offset++;
   }
-  if (offset >= limit) return null;
-  const versionBits = (bytes[offset + 1] >> 3) & 0x03;   // 3 = MPEG1
-  const channelMode = (bytes[offset + 3] >> 6) & 0x03;   // 3 = mono
-  const sampleRates = versionBits === 3 ? [44100, 48000, 32000] : [22050, 24000, 16000];
-  const sampleRate = sampleRates[(bytes[offset + 2] >> 2) & 0x03];
-  if (!sampleRate) return null;
-  const sideInfo = versionBits === 3 ? (channelMode === 3 ? 17 : 32) : (channelMode === 3 ? 9 : 17);
-  const xing = offset + 4 + sideInfo;
-  if (xing + 12 > bytes.length) return null;
-  const tag = ascii4(bytes, xing);
-  if (tag !== "Xing" && tag !== "Info") return null;
-  const flags = u32(bytes, xing + 4);
-  if (!(flags & 0x01)) return null;                      // no frame count present
-  const frames = u32(bytes, xing + 8);
-  if (!(frames > 0)) return null;
-  const samplesPerFrame = versionBits === 3 ? 1152 : 576;
-  return frames * samplesPerFrame / sampleRate;
+  return null;
 }
 
 // Dispatch on the container rather than the URL extension, because signed CDN
 // links routinely carry no usable suffix and a wrong guess would misbill.
-function parseAudioDuration(bytes) {
+// `totalBytes` is the real resource size when the server reported one; a WAV needs it
+// because the probe is only a window and a declared chunk size must be measured against
+// the file, not against the window.
+function parseAudioDuration(bytes, totalBytes) {
   if (!bytes || bytes.length === 0) return null;
-  const wav = wavDuration(bytes);
+  const wav = wavDuration(bytes, totalBytes);
   if (Number.isFinite(wav) && wav > 0) return wav;
   const mp3 = mp3Duration(bytes);
   return Number.isFinite(mp3) && mp3 > 0 ? mp3 : null;
@@ -3686,17 +3717,21 @@ function measuredAudioDuration(url) {
   if (typeof url !== "string" || !url) return null;
   try {
     const head = mediaRange(url, 0, MEDIA_PROBE_END);
-    let seconds = parseAudioDuration(head.bytes);
-    if (seconds !== null) return motionSecondsInRange(seconds);
+    // Establish the true size BEFORE parsing. The WAV parser needs it to clamp a declared
+    // chunk size against the FILE rather than against the probe window, and doing this
+    // first means the clamp is correct even when the server sent no Content-Range and the
+    // size has to come from a HEAD.
     let total = head.total;
     if (!Number.isSafeInteger(total)) {
       const response = utils.fetch({ url: url, method: "HEAD", responseType: "bytes" });
       const value = response && response.headers && Number(response.headers["Content-Length"]);
       total = Number.isSafeInteger(value) ? value : undefined;
     }
+    let seconds = parseAudioDuration(head.bytes, total);
+    if (seconds !== null) return motionSecondsInRange(seconds);
     if (Number.isSafeInteger(total) && total > MEDIA_PROBE_BYTES) {
       const tail = mediaRange(url, total - MEDIA_PROBE_BYTES, total - 1);
-      seconds = parseAudioDuration(tail.bytes);
+      seconds = parseAudioDuration(tail.bytes, total);
     }
     return motionSecondsInRange(seconds);
   } catch (_) {
@@ -4082,7 +4117,9 @@ export function extractUsageOnComplete(task, result, body) {
 }
 
 function artifacts(task) {
-  if (task.status !== "SUCCESS") return [];
+  // Compared case-insensitively, matching the status tables in the render hooks. A
+  // lowercase "success" from any writer would otherwise list no media at all.
+  if (!object(task) || text(task.status).toUpperCase() !== "SUCCESS") return [];
   const items = results(task.data, task.action === "text_to_audio" ? "audio" : "video");
   const counts = {};
   return items.map(function (item) {
@@ -4179,35 +4216,45 @@ export const native = {
     if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value) && has(ctx.body.value, "content"))) throw new Error("AutoDL: MiniMax V2 requires a JSON object with model and content");
     return decodeCompatible(ctx);
   },
-  miniCreated: function (_ctx, task) { return { task_id: task.task_id }; },
+  miniCreated: function (_ctx, task) { return { task_id: object(task) ? task.task_id : "" }; },
   // OpenAI /v1/audio/speech. The submit response carries the public id and the
   // queued status so a client can poll the speech query route.
   speechCreate: function (ctx) { return decodeSpeech(ctx); },
-  speechCreated: function (_ctx, task) { return { id: task.task_id, status: "queued" }; },
+  speechCreated: function (_ctx, task) { return { id: object(task) ? task.task_id : "", status: "queued" }; },
   speechTask: function (ctx, task) {
+    if (!object(task)) return { status: "failed", error: { code: "audio_generation_failed", message: "AutoDL: task record is missing" } };
     const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed" };
     const key = text(task.status).toUpperCase();
     const result = { id: task.task_id, status: statuses[key] || "queued" };
     if (Number.isFinite(task.created_at)) result.created_at = task.created_at;
     if (Number.isFinite(task.updated_at)) result.updated_at = task.updated_at;
-    if (task.status === "SUCCESS") {
-      const audio = artifacts(task).find(function (item) { return item.type === "audio"; });
+    if (key === "SUCCESS") {
+      let audio = null;
+      try { audio = artifacts(task).find(function (item) { return item.type === "audio"; }); } catch (_) { audio = null; }
       if (audio) result.url = audio.url;
       else result.error = { code: "audio_generation_failed", message: "AutoDL: task produced no audio output" };
     }
-    if (task.status === "FAILURE") result.error = { code: "audio_generation_failed", message: safeReason(ctx, task.fail_reason) };
+    if (key === "FAILURE") result.error = { code: "audio_generation_failed", message: safeReason(ctx, task.fail_reason) };
     return result;
   },
   miniTask: function (ctx, task) {
+    // A render hook that throws turns a client poll into a generic 500, so a malformed
+    // or absent task record becomes a structured result instead.
+    if (!object(task)) return { task: { status: "failed", error: { code: "video_generation_failed", message: "AutoDL: task record is missing" } } };
     // CANCELLED/CANCELED are both terminal upstream tokens; omitting CANCELED
     // made it render as "running" so the host kept polling a dead task.
     const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed" };
+    // Branch on the SAME case-insensitive key the table is read with. Testing the raw
+    // spelling meant a lowercase "success" rendered as succeeded with no media attached.
     const key = text(task.status).toUpperCase();
     const result = { id: task.task_id, status: statuses[key] || "running", task_type: "generation", modality: "video" };
     if (Number.isFinite(task.created_at)) result.created_at = task.created_at;
     if (Number.isFinite(task.updated_at)) result.updated_at = task.updated_at;
-    if (task.status === "SUCCESS") {
-      const outputs = artifacts(task);
+    if (key === "SUCCESS") {
+      // `artifacts` throws on a success with an empty or malformed results list; that must
+      // not abort the poll, and there is no media to report either way.
+      let outputs = [];
+      try { outputs = artifacts(task); } catch (_) { outputs = []; }
       const output = outputs.find(function (item) { return item.type === "video"; }) || outputs.find(function (item) { return item.type === "audio"; });
       if (output) {
         result.content = { url: output.url };
@@ -4217,7 +4264,7 @@ export const native = {
     // The upstream fail_reason is free text that can quote the credential it rejected,
     // so it is redacted exactly as the OpenAI surface already redacts it. This path
     // reached the end user with the raw AutoDL token in it.
-    if (task.status === "FAILURE") result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
+    if (key === "FAILURE") result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
     // rc.41 TaskView excludes request/model/usage/private state. AutoDL's
     // data.duration measures processing time, not video duration. Omit fields
     // we cannot confirm instead of inventing official metadata or token usage.

@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.20**。OpenAI Videos、OpenAI Speech 与 MiniMax 官方 V2 三套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.21**。OpenAI Videos、OpenAI Speech 与 MiniMax 官方 V2 三套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 

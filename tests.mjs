@@ -584,6 +584,132 @@ test('the TTS floor applies even to a saved value below the minimum', () => {
     assert.equal(out.seconds, 30, 'a measured 30s clip must bill 30s');
   } finally { utils.fetch = previousFetch; }
 });
+// The probe is a fixed window, not the file. Clamping a declared WAV data size to the
+// WINDOW capped every file larger than 1 MB at ~65.5s, and because that value is
+// non-null the tail read (which exists for exactly those files) never ran: a 3600s clip
+// settled at 65.53s. The clamp must use the true resource size.
+test('a WAV larger than the probe window measures its true length', () => {
+  const previousFetch = utils.fetch;
+  const RATE = 16000; // 8 kHz mono 16-bit
+  const wav = seconds => {
+    const dataBytes = Math.round(seconds * RATE);
+    const header = Buffer.alloc(44);
+    header.write('RIFF', 0, 'ascii'); header.writeUInt32LE(36 + dataBytes, 4); header.write('WAVE', 8, 'ascii');
+    header.write('fmt ', 12, 'ascii'); header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22); header.writeUInt32LE(8000, 24); header.writeUInt32LE(RATE, 28);
+    header.writeUInt16LE(1, 32); header.writeUInt16LE(16, 34);
+    header.write('data', 36, 'ascii'); header.writeUInt32LE(dataBytes, 40);
+    return Buffer.concat([header, Buffer.alloc(dataBytes)]);
+  };
+  const billed = file => {
+    utils.fetch = request => {
+      const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+      const start = Number(m[1]), end = Math.min(Number(m[2]), file.length - 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` }, body: file.slice(start, end + 1) };
+    };
+    return p.extractUsageOnComplete(
+      { state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.wav' }, {}).seconds;
+  };
+  try {
+    // 66s and up are all beyond the 1 MB window at this byte rate.
+    for (const seconds of [10, 60, 66, 150, 300, 900, 3600]) {
+      const measured = billed(wav(seconds));
+      assert.equal(measured, seconds, seconds + 's file measured as ' + measured);
+    }
+    // A declared size larger than the file is still clamped when the true size is known.
+    const liar = wav(20);
+    liar.writeUInt32LE(RATE * 3000, 40);
+    assert.equal(billed(liar), 20, 'an inflated declared size must be clamped to the file');
+  } finally { utils.fetch = previousFetch; }
+});
+// The MP3 scan must not stop at the first sync-like byte pair. A header on a later frame
+// (or a stray 0xFF 0xE0 in a payload) made the file unmeasurable, so a 78s clip settled
+// at the 10s floor.
+test('an MP3 whose frame header is not the first frame still measures', () => {
+  const previousFetch = utils.fetch;
+  const BITRATE = 128000, RATE = 44100, FRAME = Math.floor(144 * BITRATE / RATE);
+  const build = (infoFrame, stray) => {
+    const frames = Math.ceil(78.37 * RATE / 1152);
+    const parts = [];
+    for (let i = 0; i < frames; i++) {
+      const buf = Buffer.alloc(FRAME);
+      buf.writeUInt32BE(0xfffb9000, 0);
+      if (stray && i === 0) { buf[200] = 0xff; buf[201] = 0xe0; }
+      if (i === infoFrame) { buf.write('Info', 36, 'ascii'); buf.writeUInt32BE(1, 40); buf.writeUInt32BE(frames, 44); }
+      parts.push(buf);
+    }
+    return Buffer.concat(parts);
+  };
+  try {
+    for (const [label, infoFrame, stray] of [['frame 0', 0, false], ['frame 1', 1, false], ['frame 1 + stray sync', 1, true], ['frame 5', 5, false]]) {
+      const file = build(infoFrame, stray);
+      utils.fetch = request => {
+        const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range);
+        const start = Number(m[1]), end = Math.min(Number(m[2]), file.length - 1);
+        return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` }, body: file.slice(start, end + 1) };
+      };
+      const out = p.extractUsageOnComplete(
+        { state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+        { status: 'SUCCESS', url: 'https://cdn.example.com/a.mp3' }, {});
+      assert.ok(Math.abs(out.seconds - 78.39) < 0.1, label + ' measured ' + out.seconds);
+    }
+  } finally { utils.fetch = previousFetch; }
+});
+// A render hook that throws turns a client poll into a generic 500. A malformed or absent
+// task record, a success with no media, and a status whose case differs from the table
+// must all produce structured results instead.
+test('the query and submit renderers survive malformed task records', () => {
+  const audio = { url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.wav', type: 'audio', file_type: 'wav' };
+  const env = results => ({ code: 'Success', data: { task_id: 'u1', status: 'SUCCESS', results } });
+  for (const value of [null, undefined]) {
+    assert.equal(p.native.speechTask(base, value).status, 'failed');
+    assert.equal(p.native.miniTask(base, value).task.status, 'failed');
+    assert.equal(p.native.speechCreated(base, value).id, '');
+    assert.equal(p.native.miniCreated(base, value).task_id, '');
+  }
+  for (const data of [undefined, null, 'junk', { code: 'Success', data: {} }]) {
+    const out = p.native.speechTask(base, { task_id: 't', status: 'SUCCESS', action: 'text_to_speech', data });
+    assert.ok(out.error, 'a success with no usable output must report an error, got ' + JSON.stringify(out));
+  }
+  // Case-insensitive status must still deliver the media, including through artifacts().
+  const lower = { task_id: 't', status: 'success', action: 'text_to_speech', data: env([audio]) };
+  assert.equal(p.native.speechTask(base, lower).url, audio.url);
+  assert.deepEqual(p.listArtifacts(lower).map(a => a.type), ['audio']);
+  assert.equal(p.native.miniTask(base, { ...lower, action: 'text_to_audio' }).task.content.url, audio.url);
+  assert.equal(p.native.miniTask(base, { task_id: 't', status: 'failure', fail_reason: 'boom' }).task.error.message, 'boom');
+});
+// Both TTS entry points must send the SAME upstream request for the same intent,
+// including the emotion control value, so neither can bill or render differently.
+test('the speech and native TTS entry points agree on the upstream emotion control', () => {
+  const voice = 'https://cdn.example.com/voice.wav';
+  const emo = 'https://cdn.example.com/emotion.wav';
+  const speechBody = body => p.native.speechCreate({ ...base, body: { kind: 'json', value: { model: 'IndexTTS-2', input: 'hi', reference_audio: voice, ...body } } });
+  const nativeBody = extra => p.native.miniCreate({ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: { model: 'IndexTTS-2', content: [
+    { type: 'text', text: 'hi' }, { type: 'audio_url', role: 'reference_audio', audio_url: { url: voice } }], ...extra } } });
+  const upstream = decoded => p.buildSubmitRequest({ ...base, model: 'IndexTTS-2', requestBody: decoded.requestBody, action: decoded.action }).body;
+  const canonical = value => JSON.stringify(value, Object.keys(value).sort());
+  const pairs = [
+    ['no emotion', {}, {}],
+    ['empty emotion object', { emotion: {} }, {}],
+    ['emotion_vector', { emotion_vector: { happy: 0.5 } }, { emo_control_method: '使用情感向量控制', emo_happy: 0.5 }],
+    ['vector with mode', { emotion: { mode: 'vector', happy: 0.5 } }, { emo_control_method: '使用情感向量控制', emo_happy: 0.5 }],
+    ['explicit voice', { emotion: { mode: 'voice' } }, { emo_control_method: '与音色参考音频相同' }],
+  ];
+  for (const [label, speechExtra, nativeExtra] of pairs) {
+    assert.equal(canonical(upstream(speechBody(speechExtra))), canonical(upstream(nativeBody(nativeExtra))),
+      label + ' must produce the same upstream body on both entry points');
+  }
+  // An empty object must select the default (voice/clone), not vector with no vector.
+  assert.equal(upstream(speechBody({ emotion: {} })).emo_control_method, '与音色参考音频相同');
+  assert.equal(upstream(speechBody({ emotion_vector: { happy: 0.5 } })).emo_control_method, '使用情感向量控制');
+  // A non-object vector cannot be silently ignored.
+  assert.throws(() => speechBody({ emotion_vector: 5 }), /emotion_vector must be an object/);
+  assert.throws(() => speechBody({ emotion: { mode: 'bogus' } }), /emotion.mode must be/);
+  assert.throws(() => speechBody({ emotion: [] }), /emotion must be an object/);
+  // Reference mode still binds the second clip on both entry points.
+  assert.equal(upstream(speechBody({ emotion_reference_audio: emo, emotion: { mode: 'reference' } })).emo_ref_audio, emo);
+});
 for (const [model, config] of Object.entries(catalog)) {
   const source = official.find(row => row.uuid === config.workflowId);
   const input = examples[model];
