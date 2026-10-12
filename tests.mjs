@@ -1611,5 +1611,170 @@ for (const [model, config] of Object.entries(catalog)) if (config.secondsField) 
     fixture(model + ': omitted duration uses official default in ' + name, 'extractUsage', [context], { ...facts, seconds: config.rules[config.secondsField].default });
   }
 }
+// ---------------------------------------------------------------------------
+// Third-round audit regressions. Each of these fails against the code as it was.
+// ---------------------------------------------------------------------------
+const serveBytes = file => request => {
+  const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range || 'bytes=0-1048575');
+  const start = Number(m[1]), end = Math.min(Number(m[2]), file.length - 1);
+  return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` }, body: file.slice(start, end + 1) };
+};
+// The OpenAI retrieve renderer referenced `ctx` while its own parameter was named `_ctx`,
+// so every failure threw a ReferenceError and a caller polling a dead task got a 500
+// instead of the reason -- exactly when the message matters most.
+test('the OpenAI retrieve renderer reports failures instead of throwing', () => {
+  const token = 'sk-live-ABCDEFGHIJKLMNOPQRSTUVWX';
+  const out = p.protocols.openai_video.render({ apiKey: token, authHeader: 'Bearer ' + token },
+    { task_id: 't1', status: 'FAILURE', fail_reason: 'upstream rejected ' + token });
+  assert.ok(out && out.error, 'a failure must render an error, got ' + JSON.stringify(out));
+  assert.equal(out.error.code, 'video_generation_failed');
+  assert.ok(!JSON.stringify(out).includes(token), 'the credential must be redacted');
+  // A missing or unusable record must not throw either, and a success with no media is an
+  // error rather than a crash.
+  for (const value of [null, undefined, 42, 'junk']) {
+    assert.ok(p.protocols.openai_video.render({}, value).error, 'record ' + JSON.stringify(value));
+  }
+  assert.ok(p.protocols.openai_video.render({}, { status: 'SUCCESS', action: 'text_to_video', data: { code: 'Success', data: { results: [] } } }).error);
+});
+// Settlement and listing must agree with every other status check on what "done" means.
+// An exact "SUCCESS" comparison skipped BOTH the measurement and the vendor minimum, so a
+// task reported as "success" settled its bare reservation.
+test('settlement treats every success spelling alike', () => {
+  const previousFetch = utils.fetch;
+  const RATE = 8000, dataBytes = 30 * RATE;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii'); header.writeUInt32LE(36 + dataBytes, 4); header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii'); header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22); header.writeUInt32LE(8000, 24); header.writeUInt32LE(RATE, 28);
+  header.writeUInt16LE(1, 32); header.writeUInt16LE(8, 34);
+  header.write('data', 36, 'ascii'); header.writeUInt32LE(dataBytes, 40);
+  const file = Buffer.concat([header, Buffer.alloc(dataBytes)]);
+  try {
+    for (const status of ['SUCCESS', 'success', 'Success', 'SUCCEEDED', 'succeeded', 'COMPLETED', 'completed']) {
+      utils.fetch = serveBytes(file);
+      const measured = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+        { status, url: 'https://cdn.example.com/a.wav' }, {});
+      assert.equal(measured.seconds, 30, status + ' must measure the delivered clip');
+      // With nothing measurable, the vendor minimum still applies.
+      const floored = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1, seconds: 5 } } },
+        { status }, {});
+      assert.equal(floored.seconds, 10, status + ' must floor at the vendor minimum');
+    }
+  } finally { utils.fetch = previousFetch; }
+});
+// No media is an empty list, not an exception -- but an entry with a forbidden URL scheme
+// must still be refused, never downgraded to an empty list.
+test('artifact listing is empty for no media yet refuses unsafe URLs', () => {
+  const env = results => ({ code: 'Success', data: { results } });
+  const task = data => ({ status: 'SUCCESS', action: 'text_to_video', data });
+  for (const data of [env([]), { code: 'Success', data: {} }, null, 42, 'junk']) {
+    assert.deepEqual(p.listArtifacts(task(data)), [], 'data=' + JSON.stringify(data));
+  }
+  for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'data:video/mp4;base64,AAAA']) {
+    assert.throws(() => p.listArtifacts(task(env([{ url, type: 'video', file_type: 'mp4' }]))), /invalid media URL/, url);
+  }
+  // A success spelling other than the literal must still list the media, and a dead task
+  // must list none.
+  const video = { url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4', type: 'video', file_type: 'mp4' };
+  for (const status of ['SUCCESS', 'success', 'SUCCEEDED', 'COMPLETED', 'completed']) {
+    assert.deepEqual(p.listArtifacts({ status, action: 'text_to_video', data: env([video]) }).map(a => a.type), ['video'], status);
+  }
+  for (const status of ['EXPIRED', 'FAILURE', 'running']) {
+    assert.deepEqual(p.listArtifacts({ status, action: 'text_to_video', data: env([video]) }), [], status);
+  }
+});
+test('a dead or completed task never renders as running', () => {
+  for (const status of ['EXPIRED', 'expired', 'Expired']) {
+    assert.equal(p.native.miniTask(base, { task_id: 't', status }).task.status, 'failed', status);
+  }
+  for (const status of ['SUCCEEDED', 'COMPLETED', 'succeeded', 'completed']) {
+    assert.equal(p.native.miniTask(base, { task_id: 't', status }).task.status, 'succeeded', status);
+  }
+  for (const status of ['CANCELED', 'cancelled', 'TIMEOUT', 'error']) {
+    assert.ok(['cancelled', 'failed'].includes(p.native.miniTask(base, { task_id: 't', status }).task.status), status);
+  }
+});
+// `ascii4` returns four characters, so comparing it to the three-character "ID3" was never
+// true: the whole tag payload was scanned as audio, and a sync+Xing inside cover art gave a
+// bogus duration instead of the floor.
+test('an MP3 ID3v2 tag is skipped rather than scanned as audio', () => {
+  const previousFetch = utils.fetch;
+  const payload = Buffer.alloc(500);
+  payload.writeUInt32BE(0xfffb9000, 0);
+  payload.write('Xing', 36, 'ascii');
+  payload.writeUInt32BE(1, 40);
+  payload.writeUInt32BE(1000, 44);   // 1000 frames would read as ~26s if the tag were scanned
+  const tag = Buffer.alloc(10);
+  tag.write('ID3', 0, 'ascii'); tag.writeUInt8(3, 3);
+  tag[6] = (payload.length >> 21) & 0x7f; tag[7] = (payload.length >> 14) & 0x7f;
+  tag[8] = (payload.length >> 7) & 0x7f; tag[9] = payload.length & 0x7f;
+  const file = Buffer.concat([tag, payload]);
+  try {
+    utils.fetch = serveBytes(file);
+    const out = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.mp3' }, {});
+    assert.equal(out.seconds, 10, 'tag bytes must not be measured as audio (got ' + out.seconds + ')');
+  } finally { utils.fetch = previousFetch; }
+});
+// The protection bit shifts the side information by two bytes; ignoring it missed Xing and
+// left a CRC-protected file billed at the vendor minimum.
+test('a CRC-protected MP3 frame is still measured', () => {
+  const previousFetch = utils.fetch;
+  const BITRATE = 128000, RATE = 44100, FRAME = Math.floor(144 * BITRATE / RATE);
+  const frames = Math.ceil(60 * RATE / 1152);
+  const first = Buffer.alloc(FRAME);
+  first.writeUInt32BE(0xfffa9000, 0);      // protection bit 0 => 2-byte CRC follows
+  const xing = 4 + 2 + 32;                 // header + CRC + MPEG1 stereo side info
+  first.write('Xing', xing, 'ascii');
+  first.writeUInt32BE(1, xing + 4);
+  first.writeUInt32BE(frames, xing + 8);
+  const file = Buffer.concat([first, Buffer.alloc(FRAME * (frames - 1))]);
+  try {
+    utils.fetch = serveBytes(file);
+    const out = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', facts: { requests: 1 } } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/a.mp3' }, {});
+    assert.ok(Math.abs(out.seconds - 60) < 0.1, 'CRC-protected frame measured ' + out.seconds);
+  } finally { utils.fetch = previousFetch; }
+});
+// A removed official name must stay removed whether it arrives as the caller's model or as
+// the operator's mapped id; checking only the permissive fallback let a mapping resurrect
+// one, and could even send that id upstream.
+test('a retired model name is refused through a channel mapping too', () => {
+  for (const retired of ['minimax-h3', 'Minimax-H3-Max', 'MINIMAX-H3']) {
+    assert.throws(() => p.buildSubmitRequest({ ...base, model: retired, upstreamModel: 'minimax_h3_lightx2v', requestBody: examples.minimax_h3_lightx2v }),
+      /unsupported model/, retired + ' must not be resurrected by a mapping');
+    assert.throws(() => p.buildSubmitRequest({ ...base, model: 'minimax_h3_lightx2v', upstreamModel: retired, requestBody: examples.minimax_h3_lightx2v }),
+      /unsupported model/, retired + ' must not be sent upstream');
+    assert.throws(() => p.native.miniCreate({ ...base, model: retired, upstreamModel: 'minimax_h3_lightx2v',
+      body: { kind: 'json', value: { model: retired, content: [{ type: 'text', text: 'hi' }], resolution: '768P', duration: 5, ratio: '16:9' } } }),
+      /unsupported model/, retired + ' on the MiniMax surface');
+  }
+});
+// Mapping a private name onto a public alias must resolve the alias: otherwise the request
+// got the permissive profile (skipping the workflow's own rules) and the alias was sent
+// upstream as the workflow id, which AutoDL does not know.
+test('mapping onto a public alias resolves to the real workflow', () => {
+  let refused = null;
+  try { p.buildSubmitRequest({ ...base, model: 'my-private', upstreamModel: 'IndexTTS-2', requestBody: { prompt: 'hi' } }); }
+  catch (error) { refused = error; }
+  assert.ok(refused, 'a text-only request must be refused: the TTS workflow needs a reference clip');
+  assert.match(refused.message, /audios\[0\] is required/);
+});
+// Redaction must honour its documented minimum (a short value would shred prose) while
+// still covering echoes split across quotes or line breaks.
+test('redaction respects its minimum length and still covers split echoes', () => {
+  const render = (secret, reason) => p.native.miniTask({ apiKey: secret, authHeader: 'Bearer ' + secret },
+    { task_id: 't', status: 'FAILURE', fail_reason: reason }).task.error.message;
+  for (const short of ['abc', 'abcdefg']) {
+    const reason = 'rejected credential ' + short + ' during handshake';
+    assert.equal(render(short, reason), reason, short.length + '-character credential must be left intact');
+  }
+  const long = 'sk-live-ABCDEFGHIJKLMNOPQRSTUVWX';
+  for (const reason of ['rejected ' + long, 'rejected "' + long + '"', 'rejected ' + long.slice(0, 12) + ' ' + long.slice(12)]) {
+    const rendered = render(long, reason);
+    assert.ok(!rendered.includes(long), 'the credential survived: ' + rendered);
+    assert.ok(rendered.includes('[redacted]'), 'the credential must be replaced: ' + rendered);
+  }
+});
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

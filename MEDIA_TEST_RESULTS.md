@@ -1,4 +1,15 @@
-> **v1.0.22 变更：移除 OpenAI 语音格式入口，TTS 只保留 MiniMax V2。**按要求删除 1.0.18 新增的 `/autodl/v1/audio/speech`（含查询路由与全部语音编解码代码），现在 TTS与其余模型一样只通过 `POST /v2/video_generation` + `GET /v2/query/video_generation/{task_id}` 调用；插件路由回到两条，native 回到 `miniCreate`/`miniCreated`/`miniTask`。未来若需重新支持 OpenAI 语音格式，必须解决根因：rc.43 没有音频协议，且 `/v1/audio/speech` 是宜主静态路由，插件路由与其相交会被**整插件级拒绝**。本次只删除功能，不改动计费、实测与结算逻辑（两个严重少计费修复保留）。
+> **v1.0.23 变更：第三轮独立审计发现的缺陷修复（全部先复现、后修复）。**
+> 1. **【严重】OpenAI `/v1/videos` 取回路径上每个失败任务都抛 `ReferenceError`。**`protocols.openai_video.render` 的参数名为 `_ctx`，函数体却引用 `ctx`（脱敏修复时遗留），导致用户轮询失败任务时得到 500 而非错误说明。现已改用本钩子自己的 `ctx`，并同步加上缺失任务记录与无媒体返回的保护。
+> 2. **结算只认字面 `"SUCCESS"`。**其余状态判断均已大小写不敏感，只有结算与 `artifacts()` 用精确匹配，一旦宿主回传 `"success"` / `"succeeded"` 就会同时跳过**实测与厂商最低价**，按预扣结算。现统一走 `successStatus()`（涵盖 SUCCESS / SUCCEEDED / COMPLETED，大小写不敏感）。
+> 3. **MP3 的 ID3v2 跳过是死代码。**`ascii4()` 返回 4 个字符，永远不等于 3 字符的 `"ID3"`，因此整个标签（常为封面图）被当作音频扫描；标签内恰好出现伪同步+Xing 时会得到错误时长。现按 3 字节正确识别并跳过。同时补上**帧保护位（CRC）**偏移：含 CRC 的帧会多 2 字节，此前会找不到 Xing/Info 而退回最低计费。
+> 4. **已退役模型名可被渠道映射复活。**`RETIRED_MODELS` 此前只在兜底分支检查，只要任一名字在能力表内就不会拒绝，甚至会把 `minimax-h3` 当作上游 id 发出；与文档承诺（不可复活）不符。现对请求名与映射名**两边都检查**。
+> 5. **别名表未应用于映射名。**渠道把模型映射到 `IndexTTS-2` 时会走宽松校验、且把别名本身当作上游 id 发出（AutoDL 不认识）。现两侧先经别名表解析。
+> 6. `listArtifacts` 在 SUCCESS 但无媒体时抛错（`miniTask` 已有保护），现返回空列表；但**不合法网址（`file://` / `javascript:` / `data:`）仍然拒绝**，不会被降级为空列表。
+> 7. `miniTask` 状态表补齐 `EXPIRED`（此前渲染为 running，宿主会对死任务轮询到超时）与 `SUCCEEDED`/`COMPLETED`。
+> 8. 脱敏的窗口扫描会连带 `Bearer ` 前缀一起取窗，使 7 字符密钥经由 14 字符的请求头绕过了“最短 8 字符才脱敏”的规则并吞掉相邻文字；现按凭证本体取窗。
+> **已排除的一项：**审计提出 `mp4Duration` 只在 `mdia` 下读 `hdlr`、而真实编码器会放到 `minf`。用实际 AutoDL 产出的 MP4 验证：`hdlr` 就在 `/moov/trak/mdia/hdlr`，与代码假设一致，测得 1 秒与文件自述的 mvhd/mdhd 完全相符，因此该提法不成立。
+>
+> **v1.0.22 变更：移除 OpenAI 语音格式入口，TTS 只保留 MiniMax V2。**按要求删除 1.0.18 新增的 `/autodl/v1/audio/speech`（含查询路由与全部语音编解码代码），现在 TTS与其余模型一样只通过 `POST /v2/video_generation` + `GET /v2/query/video_generation/{task_id}` 调用；插件路由回到两条，native 回到 `miniCreate`/`miniCreated`/`miniTask`。未来若需重新支持 OpenAI 语音格式，必须解决根因：rc.43 没有音频协议，且 `/v1/audio/speech` 是宿主静态路由，插件路由与其相交会被**整插件级拒绝**。本次只删除功能，不改动计费、实测与结算逻辑（两个严重少计费修复保留）。
 >
 > **v1.0.21 变更：修复两个严重少计费缺陷与四处健壮性问题（独立审计发现，均已复现）。**
 > 1. **【严重】超过探测窗口的 WAV 全部被截断为 65.53 秒。**上一版把声明的 `data` 大小夹取到**探测窗口**（1 MB）而不是**文件本身**，而该值非 null，所以专为大文件存在的尾部 Range 读取永远不会执行：实测 3600 秒的 WAV 只计 65.53 秒（少计 98%），66/150/300/900 秒同样全部计作 65.53 秒。现以 Content-Range 的**真实总长**作为夹取上限（且在解析前先确定总长，必要时走 HEAD）；总长未知时按声明值计（WAV 头本就是用来声明长度的），不再截断。
@@ -14,7 +25,7 @@
 >
 > **v1.0.18 变更：TTS 新增 OpenAI 语音请求格式入口，并修复审计发现的计费与安全缺陷。**
 >
-> **新增：**TTS 现在有**两个**入口——OpenAI 官方**请求体格式** `POST /autodl/v1/audio/speech`（+ `GET /autodl/v1/audio/speech/{task_id}`）与 MiniMax 官方 V2 `POST /v2/video_generation`。两条路径归一化为**同一个**上游请求，因此计费完全一致（同一段文本走哪个入口费用相同）。官方字段 `input`/`response_format`/`speed`/`instructions` 与官方同名；`voice` 是官方预设音色名，AutoDL 为参考音频克隆、没有预设音色，因此**传了但不给参考音频会直接报错**，不会静默换成别的音色。AutoDL 独有、官方格式功能上确实没有的字段才额外提供：`reference_audio`、`emotion_reference_audio`（+ 别名 `emo_audio_url`）、`emotion`、`emotion_vector`（`prompt_text` 见 1.0.20，是 `input` 的同义拼写而非额外槽位）。**语义差异：**官方 `/v1/audio/speech` 同步返回音频二进制，本插件返回任务对象（上游是异步任务模型），需再查 `GET /autodl/v1/audio/speech/{task_id}` 取 `url`。
+> **新增：**（注：其中 OpenAI 语音入口**已于 1.0.22 删除**，以下为该版本当时的行为记录）TTS 现在有**两个**入口——OpenAI 官方**请求体格式** `POST /autodl/v1/audio/speech`（+ `GET /autodl/v1/audio/speech/{task_id}`）与 MiniMax 官方 V2 `POST /v2/video_generation`。两条路径归一化为**同一个**上游请求，因此计费完全一致（同一段文本走哪个入口费用相同）。官方字段 `input`/`response_format`/`speed`/`instructions` 与官方同名；`voice` 是官方预设音色名，AutoDL 为参考音频克隆、没有预设音色，因此**传了但不给参考音频会直接报错**，不会静默换成别的音色。AutoDL 独有、官方格式功能上确实没有的字段才额外提供：`reference_audio`、`emotion_reference_audio`（+ 别名 `emo_audio_url`）、`emotion`、`emotion_vector`（`prompt_text` 见 1.0.20，是 `input` 的同义拼写而非额外槽位）。**语义差异：**官方 `/v1/audio/speech` 同步返回音频二进制，本插件返回任务对象（上游是异步任务模型），需再查 `GET /autodl/v1/audio/speech/{task_id}` 取 `url`。
 > **路径为何不是 `/v1/audio/speech`（重要）：**该路径是**宿主静态路由**（`router/relay-router.go` 注册，供其他 TTS 渠道使用），而 `SetRelayRouter` 在 `SetPluginRouter` 之前执行，因此它必然出现在插件路由快照里；`router/plugin-router.go` 的 `validatePlugin` 会拒绝任何与静态路由相交的插件，并且该拒绝是**整插件级**的——插件全部路由与模型都会退出公共路由。因此抢占 `/v1/audio/speech` 会让 **AutoDL 插件整体不可用**，而非只影响这一个接口。rc.43 也没有音频协议（只有 `openai_responses`/`openai_video`/`openai_image`），任务插件渠道无法经宿主自带语音处理器到达。故保留官方**请求体格式**、改用插件自有前缀 `/autodl/v1/audio/speech`。已加入回归断言：任何与宿主静态路由（`/v1/audio/speech`、`/v1/videos`、`/v1/responses` 等）相同或以之开头的插件路由都会让测试失败。
 >
 > **修复（第四轮审计，均已独立复现）：**

@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.22",
+  version: "1.0.23",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2570,15 +2570,14 @@ export const meta = {
     { method: "GET", path: "/v2/query/video_generation/:task_id", type: "query", render: "miniTask" },
   ],
   usageSchema: REQUEST_SCHEMA,
-  // The channel-mapped motion alias is a public model, so it needs its own
-  // profile: motion transfer bills per second of the delivered clip, exactly
-  // like the workflow it resolves to. Without this the host priced the alias
-  // from usageSchema alone (requests only) and its per-second expression had no
-  // seconds value to read, so per-second billing silently degraded to per-request.
-  // Both public aliases advertise their own profile so each can be priced
-  // separately. Motion inherits the workflow's per-second shape; TTS has no
-  // seconds field at all, so its alias is per-request exactly like the workflow
-  // it resolves to, and the shared usageProfile keeps that automatic.
+  // Both public aliases advertise their own usage profile so each can be priced
+  // separately, and each inherits the shape of the workflow it resolves to. Motion
+  // bills per second of the delivered clip. TTS bills per delivered AUDIO second
+  // against the vendor's minimum, so its profile carries `seconds` too -- describing it
+  // as per-request would put it back on a price the vendor does not charge. Without these
+  // profiles the host priced an alias from usageSchema alone (requests only) and its
+  // per-second expression had no seconds value to read, so per-second billing silently
+  // degraded to per-request.
   usageProfiles: Object.keys(WORKFLOWS).map(usageProfile)
     .concat([usageProfile(MOTION_WORKFLOW, MOTION_ALIAS), usageProfile(TTS_WORKFLOW, TTS_ALIAS)]),
 };
@@ -2700,16 +2699,37 @@ function unmappedWorkflow(workflowId) {
 //   * Only when the caller's name is undeclared -- a self-chosen name we hold no
 //     table for -- does the permissive profile validate, against the mapped id.
 function resolveWorkflow(mappedModel, requestedModel) {
+  // Callers pass the RAW names. Resolving the alias inside (rather than at every call site)
+  // is what lets the retirement check below see the caller's actual model: a caller that
+  // named a removed official model arrived here as `undefined` once the alias table had been
+  // consulted, so the retired name was never examined and a channel mapping could run it.
+  const requestedRaw = text(requestedModel);
+  const mappedRaw = text(mappedModel);
+  // A retired official name is refused whether it arrives as the caller's model or as the
+  // operator's mapped id. Checking it only on the permissive fallback let a channel mapping
+  // resurrect a deliberately removed name -- and could even send that id upstream -- while
+  // the documented contract and this file's own comment promise it stays refused.
+  for (const candidate of [requestedRaw, mappedRaw]) {
+    if (candidate && RETIRED_MODELS.includes(candidate.toLowerCase())) {
+      throw new Error("AutoDL: unsupported model; select one of the 17 declared models");
+    }
+  }
+  // BOTH names are resolved through the alias table. Applying it only to the caller's name
+  // meant an operator who mapped onto a public alias (say `IndexTTS-2`) got the permissive
+  // profile with the TTS audio requirement skipped, and the alias itself was sent upstream
+  // as the workflow id, which AutoDL does not know.
+  const requested = text(workflowForName(requestedRaw) || requestedRaw);
+  const mapped = text(workflowForName(mappedRaw) || mappedRaw);
   // Validation follows a declared table whenever one of the two names has one.
   // The caller's own name is preferred because it is what the request was written
   // against; the operator's mapped id is next, since mapping onto a declared
   // workflow means that workflow's rules are the ones the generation must satisfy.
   // Only when neither is declared -- a self-chosen name with no table -- does the
   // permissive profile apply.
-  const declared = [requestedModel, mappedModel].reduce(function (found, candidate) {
-    return found || (typeof candidate === "string" && has(WORKFLOWS, candidate) ? WORKFLOWS[candidate] : null);
+  const declared = [requested, mapped].reduce(function (found, candidate) {
+    return found || (candidate && has(WORKFLOWS, candidate) ? WORKFLOWS[candidate] : null);
   }, null);
-  const upstream = text(typeof mappedModel === "string" && mappedModel ? mappedModel : requestedModel);
+  const upstream = text(mapped || requested);
   if (declared) {
     // The id actually called is the mapped one when the host resolved a mapping,
     // even onto a workflow we do not declare; otherwise the declared name itself.
@@ -3004,7 +3024,7 @@ function requestWorkflow(ctx) {
   // capability table even when a channel mapped it to a private id; a public alias
   // resolves to the workflow it names; only a name with no table at all -- a
   // self-chosen one -- falls back to the permissive profile.
-  return resolveWorkflow(text(ctx.upstreamModel), text(workflowForName(ctx.model)));
+  return resolveWorkflow(text(ctx.upstreamModel), text(ctx.model));
 }
 
 function normalizeMiniMax(config, input) {
@@ -3178,13 +3198,21 @@ const MIN_REDACTABLE_SECRET = 8;
 
 function safeReason(ctx, value) {
   let message = text(value) || "AutoDL: workflow generation failed";
-  for (const secret of [ctx.apiKey, ctx.authHeader]) {
-    if (typeof secret !== "string" || !secret) continue;
+  for (const candidate of [ctx.apiKey, ctx.authHeader]) {
+    if (typeof candidate !== "string" || !candidate) continue;
+    // The auth header carries a scheme prefix that is NOT part of the credential. Window
+    // the credential itself: windowing the whole header produced fragments containing
+    // "Bearer " plus a character or two of the key, which matched ordinary diagnostic text
+    // and redacted it -- a 7-character key was redacted through its 14-character header
+    // despite the documented minimum below, eating the space around it.
+    const secret = candidate.replace(/^\s*Bearer\s+/i, "");
     // Only redact a credential long enough that its occurrence is unambiguous. A
     // short key (a misconfigured channel) would otherwise match ordinary words
     // and shred the diagnostic an operator needs, e.g. "error" inside
     // "upstream error: ...". Real AutoDL tokens are far longer than this.
     if (secret.length < MIN_REDACTABLE_SECRET) continue;
+    // Redact the credential as sent (header form) and bare.
+    message = message.split(candidate).join("[redacted]");
     message = message.split(secret).join("[redacted]");
     // An upstream may echo the credential split across escapes, quotes or line
     // breaks, which defeats a contiguous match, and the split can fall at any
@@ -3451,7 +3479,12 @@ function wavDuration(bytes, totalBytes) {
 function mp3Duration(bytes) {
   if (!bytes || bytes.length < 4) return null;
   let offset = 0;
-  if (ascii4(bytes, 0) === "ID3" && bytes.length >= 10) {
+  // Skip the ID3v2 tag. `ascii4` always returns FOUR characters, so comparing it to the
+  // three-character "ID3" was never true: the branch was dead, `offset` stayed 0, and the
+  // entire tag payload -- a cover image, typically -- was scanned for a frame sync. A sync
+  // plus a plausible Xing/Info inside that payload yielded a bogus duration from bytes the
+  // code explicitly intends to skip. The size is a 28-bit synchsafe integer.
+  if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33 && bytes.length >= 10) {
     const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
     offset = 10 + size;
   }
@@ -3474,7 +3507,12 @@ function mp3Duration(bytes) {
     const sampleRate = sampleRates ? sampleRates[(bytes[offset + 2] >> 2) & 0x03] : undefined;
     if (sampleRate) {
       const sideInfo = versionBits === 3 ? (channelMode === 3 ? 17 : 32) : (channelMode === 3 ? 9 : 17);
-      const xing = offset + 4 + sideInfo;
+      // The protection bit (LSB of the second header byte) is 0 when the frame carries a
+      // 2-byte CRC, which sits between the header and the side information. Ignoring it
+      // looked for Xing/Info two bytes early, found nothing, and left a CRC-protected file
+      // unmeasurable -- and therefore billed at the vendor minimum.
+      const crc = (bytes[offset + 1] & 0x01) === 0 ? 2 : 0;
+      const xing = offset + 4 + crc + sideInfo;
       if (xing + 12 <= bytes.length) {
         const tag = ascii4(bytes, xing);
         if (tag === "Xing" || tag === "Info") {
@@ -3703,6 +3741,17 @@ function failureStatus(value) {
   return FAILURE_STATUSES.includes(status);
 }
 
+// Terminal-SUCCESS detection, case-insensitive and tolerant of the spellings a renderer
+// may hand back. Settlement and rendering must agree on what "done" means: gating
+// settlement on the exact literal "SUCCESS" meant a task reported as "success" skipped
+// BOTH the measurement and the vendor floor and settled its bare reservation, while
+// every other status check in this file was already case-insensitive.
+const SUCCESS_STATUSES = ["SUCCESS", "SUCCEEDED", "COMPLETED"];
+function successStatus(value) {
+  const status = text(value).toUpperCase();
+  return SUCCESS_STATUSES.includes(status);
+}
+
 const STATUSES = { QUEUED: "QUEUED", RUNNING: "IN_PROGRESS", SUCCESS: "SUCCESS", FAILED: "FAILURE", CANCELLED: "FAILURE", CANCELED: "FAILURE", completed: "SUCCESS" };
 // Case-insensitive so 'Canceled', 'cancelled' and 'Failed' are terminal too;
 // an exact-match lookup sent them to UNKNOWN and polled to the deadline.
@@ -3889,6 +3938,9 @@ export function extractUsageOnComplete(task, result, body) {
   const state = task && task.state;
   if (!object(state) || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
   const status = completionStatus(result);
+  // One tolerant predicate for both branches below. Comparing the raw spelling to
+  // "SUCCESS" skipped the measurement and the vendor floor for "success"/"succeeded".
+  const succeeded = successStatus(status);
   // data.duration is processing wall time, NOT generated video seconds.
   const facts = Object.assign({}, state.facts);
   // Resolve the saved id through the alias table before branching on it. A state
@@ -3899,7 +3951,7 @@ export function extractUsageOnComplete(task, result, body) {
   // (submission, polling, decoding), so settlement must not be the one place that
   // trusts the raw id.
   const kind = has(WORKFLOWS, state.workflowId) ? state.workflowId : (workflowForName(state.workflowId) || state.workflowId);
-  if (status === "SUCCESS" && kind === MOTION_WORKFLOW) {
+  if (succeeded && kind === MOTION_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
     // Reuse the full probe: the head Range read alone cannot see an MP4 whose
     // moov atom sits after the first megabyte, which is common for anything but
@@ -3938,7 +3990,7 @@ export function extractUsageOnComplete(task, result, body) {
   // against the live marketplace), and a model whose price fails to render silently
   // looks free. Flooring the settled seconds is exact, so the displayed CNY 0.001/s
   // stays honest and the minimum is still charged.
-  if (status === "SUCCESS" && kind === TTS_WORKFLOW) {
+  if (succeeded && kind === TTS_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
     const settled = motionSecondsInRange(url ? measuredAudioDuration(url) : null)
       || motionSecondsInRange(state.measuredSeconds)
@@ -3967,9 +4019,18 @@ export function extractUsageOnComplete(task, result, body) {
 }
 
 function artifacts(task) {
-  // Compared case-insensitively, matching the status tables in the render hooks. A
-  // lowercase "success" from any writer would otherwise list no media at all.
-  if (!object(task) || text(task.status).toUpperCase() !== "SUCCESS") return [];
+  // Compared through the shared tolerant predicate, matching the render hooks and
+  // settlement. A lowercase "success" -- or a "succeeded" handed back by a renderer --
+  // would otherwise list no media at all.
+  if (!object(task) || !successStatus(task.status)) return [];
+  // "No media" is a normal empty list, not an exception: a malformed envelope, an absent
+  // or empty results array, or a response that never carried one all mean there is nothing
+  // to list, and the render hooks report that as such. Anything the strict parser rejects
+  // BEYOND that -- a listed entry whose URL is a file://, javascript: or data: URL -- must
+  // still throw, so a caller is never handed a scheme the host will then fetch.
+  let payload;
+  try { payload = envelope(task.data); } catch (_) { return []; }
+  if (!Array.isArray(payload.data.results) || payload.data.results.length === 0) return [];
   const items = results(task.data, task.action === "text_to_audio" ? "audio" : "video");
   const counts = {};
   return items.map(function (item) {
@@ -3980,6 +4041,9 @@ function artifacts(task) {
 }
 
 export function listArtifacts(task) {
+  // Deliberately NOT wrapped in a catch-all: `artifacts` already returns an empty list for
+  // a success with no media, while still refusing an entry with a forbidden URL scheme.
+  // Swallowing every error here would silently hand a caller a file:// or javascript: URL.
   return artifacts(task).map(function (item) {
     const result = { key: item.key, type: item.type };
     if (item.mimeType) result.mimeType = item.mimeType;
@@ -4034,7 +4098,7 @@ function decode(ctx, pinnedModel) {
   // workflow this name runs as, so a self-chosen name is valid here even though
   // it appears in no capability table of ours.
   const requested = workflowForName(model);
-  const config = resolveWorkflow(ctx.upstreamModel, requested);
+  const config = resolveWorkflow(ctx.upstreamModel, model);
   normalizeInput(config, request);
   const action = taskAction(config, request);
   return { kind: "submit", model: model, action: action, requestBody: request };
@@ -4050,7 +4114,7 @@ function decodeCompatible(ctx, pinnedModel) {
   request.model = model;
   // The channel decides the workflow; the caller names the AutoDL workflow id, a
   // name the operator mapped to one in their own channel, or a public alias.
-  const config = resolveWorkflow(ctx.upstreamModel, workflowForName(model));
+  const config = resolveWorkflow(ctx.upstreamModel, model);
   // Key/value pairs keep the host's recursive usage preflight from reading a
   // generated resolution enum label as a billing enum value. Facts stay explicit.
   const normalizedBody = normalizeMiniMax(config, request);
@@ -4072,15 +4136,17 @@ export const native = {
     // or absent task record becomes a structured result instead.
     if (!object(task)) return { task: { status: "failed", error: { code: "video_generation_failed", message: "AutoDL: task record is missing" } } };
     // CANCELLED/CANCELED are both terminal upstream tokens; omitting CANCELED
-    // made it render as "running" so the host kept polling a dead task.
-    const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed" };
+    // made it render as "running" so the host kept polling a dead task. EXPIRED is
+    // terminal for the same reason, and SUCCEEDED/COMPLETED are success spellings a
+    // renderer may hand back -- all three previously rendered as "running".
+    const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", SUCCEEDED: "succeeded", COMPLETED: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed", EXPIRED: "failed" };
     // Branch on the SAME case-insensitive key the table is read with. Testing the raw
     // spelling meant a lowercase "success" rendered as succeeded with no media attached.
     const key = text(task.status).toUpperCase();
     const result = { id: task.task_id, status: statuses[key] || "running", task_type: "generation", modality: "video" };
     if (Number.isFinite(task.created_at)) result.created_at = task.created_at;
     if (Number.isFinite(task.updated_at)) result.updated_at = task.updated_at;
-    if (key === "SUCCESS") {
+    if (successStatus(key)) {
       // `artifacts` throws on a success with an empty or malformed results list; that must
       // not abort the poll, and there is no media to report either way.
       let outputs = [];
@@ -4105,15 +4171,24 @@ export const native = {
 export const protocols = {
   openai_video: {
     decodeRequest: function (ctx) { return decodeCompatible(ctx, ctx.model); },
-    render: function (_ctx, task) {
+    render: function (ctx, task) {
+      // A render hook that throws turns a client poll into a generic 500, so a missing or
+      // malformed record becomes a structured result. `ctx` is this hook's own parameter
+      // and is needed for credential redaction: naming it `_ctx` while referencing `ctx`
+      // below threw a ReferenceError on EVERY failure rendered through the OpenAI
+      // retrieve path, which is exactly when a caller most needs the message.
+      if (!object(task)) return { error: { code: "video_generation_failed", message: "AutoDL: task record is missing" } };
       // The host supplies standard public ID/model/status/progress/timestamps.
       const result = {};
-      if (task.status === "SUCCESS") {
+      if (successStatus(task.status)) {
         // The render view carries no `action`, so it cannot know the modality.
         // Prefer a video artifact, but fall back to whatever the task actually
         // produced: filtering to video alone and then dereferencing [0] threw on
-        // every audio-only task and wiped the results list.
-        const items = artifacts(task);
+        // every audio-only task and wiped the results list. ListArtifacts-style
+        // guarding applies here too: a success with no usable media is reported as
+        // an error, not as a crash.
+        let items = [];
+        try { items = artifacts(task); } catch (_) { items = []; }
         const videos = items.filter(function (item) { return item.type === "video"; });
         const outputs = videos.length ? videos : items;
         if (outputs.length) {
@@ -4123,7 +4198,7 @@ export const protocols = {
           result.error = { code: "video_generation_failed", message: "AutoDL: task produced no media output" };
         }
       }
-      if (task.status === "FAILURE") result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
+      if (failureStatus(task.status)) result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
       return result;
     },
   },

@@ -1,0 +1,39 @@
+{
+  "plugin_version": "1.0.23",
+  "model": "IndexTTS-2",
+  "route": "/v2/video_generation",
+  "expectation": "audio produced upstream; billed from measured audio seconds at CNY 0.001/s, minimum CNY 0.010",
+  "rate_cny_per_second": 0.001,
+  "minimum_cny": 0.01,
+  "paid_submissions": 1,
+  "temporary_api_key_id": 57,
+  "request_fields": [
+    "content",
+    "emo_control_method",
+    "model"
+  ],
+  "reference_audio_bytes": 32078,
+  "create_http_status": 200,
+  "task_id": "task_5AKndszU0GZLlOzvgI6MBAKZqDbSghpn",
+  "final_status": "SUCCESS",
+  "has_media": false,
+  "media_url_host": null,
+  "reported_usage": {},
+  "quota_used": 5000,
+  "charged_cny": 0.01,
+  "charged_derived": {
+    "seconds_if_rate_applied": 10.0,
+    "minimum_applied": true,
+    "per_request_charge_would_be": 0.5
+  },
+  "task_quota": "5000",
+  "task_quota_cny": 0.01,
+  "temporary_api_key_removed": true,
+  "final_status_source": "authoritative tasks row (the harness poller vocabulary does not match the query endpoint)",
+  "delivered_artifact": {
+    "alias": "final_audio",
+    "file_type": "wav",
+    "present_in_task_data": true
+  },
+  "charge_verdict": "charged the vendor minimum: quota 5000 = CNY 0.0100, matching the floor applied to a delivered clip shorter than 10 seconds"
+}
