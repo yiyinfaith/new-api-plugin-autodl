@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.26**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.27**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -287,7 +287,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 | `callback_url` | string | 可选，接受后忽略 | MiniMax 官方回调字段；宿主的后台轮询已负责任务状态，本适配器不转发回调，传了也不会失败。 |
 | `extra` | object | 可选，接受后忽略 | MiniMax H3-Max 的 `prompt_expansion_mode` 等选项；AutoDL 上游没有对应控制，忽略。 |
 
-文本上限按工作流（TTS 按 prompt_text 的 1–2048 字符）；duration 另可写十进制字符串。无 duration 控制的工作流拒绝 duration，TTS 也拒绝 resolution/ratio；`callback_url`、`extra` 等官方控制字段接受并忽略，但未知的媒体型字段或未知对象字段仍报错，避免静默丢失素材。
+文本上限按工作流（TTS 按 `prompt` 的 1–2048 字符，上游写入 `prompt_text`）；duration 另可写十进制字符串。无 duration 控制的工作流拒绝 duration，TTS 也拒绝 resolution/ratio；`callback_url`、`extra` 等官方控制字段接受并忽略，但未知的媒体型字段或未知对象字段仍报错，避免静默丢失素材。
 
 | `content[].type`（必填 string） | 必需内容字段 / 类型 | `role` / 默认 | 校验与映射 |
 |---|---|---|---|
@@ -426,7 +426,7 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 
 ## 工作流目录与能力边界
 
-**17 个工作流**，官网定义于 2026-10-08 复核。两种接口都按工作流严格校验媒体数量（上游另有业务校验）。通常图片依序 ref_image_0…N、音频 ref_audio_0…N；首尾帧为 first_frame/last_frame；动作迁移为 1 图+1 视频；TTS 为 1–2 段参考音频（音色/情感）。H3 文本为必需非空 prompt，TTS 为 prompt_text；表中给最大字符数。H3 可控时长是整数、默认 **5 秒**；动作迁移仅声明计费时长，TTS 无视频秒数字段。
+**17 个工作流**，官网定义于 2026-10-08 复核。两种接口都按工作流严格校验媒体数量（上游另有业务校验）。通常图片依序 ref_image_0…N、音频 ref_audio_0…N；首尾帧为 first_frame/last_frame；动作迁移为 1 图+1 视频；TTS 为 1–2 段参考音频（音色/情感）。H3 文本为必需非空 `prompt`，TTS 调用方同样用 `prompt`（`prompt_text` 是上游槽位名）；表中给最大字符数。表中「时长字段」一列若写 `audio_duration`，那是该工作流的**上游承接字段**，调用方仍必须传 `duration`。H3 可控时长是整数、默认 **5 秒**；动作迁移仅声明计费时长，TTS 无视频秒数字段。
 
 | Workflow ID / 官网名称 | 媒体数量 | 时长字段 / 范围 | 分辨率组 | 文本上限 | 默认 seed |
 |---|---|---|---|---|---|
@@ -442,12 +442,62 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 | `minimax_h3_image_audio_to_video_v2_15s`<br>H3多图多音频生视频15秒 | 图 0–9；音 0–3 | `duration` 1–15 | F | ≤10000 | `731242627237534` |
 | `minimax_h3_lightx2v_v5_15s`<br>H3多图生视频15秒 | 图 1–9 | `duration` 1–15 | G | ≤500000 | `212238359716024` |
 | `minimax_h3_image_audio_to_video_v2`<br>H3多图多音频生视频 | 图 0–9；音 0–3 | `duration` 1–10 | H | ≤10000 | `731242627237534` |
-| `minimax_h3_image_audio_to_video`<br>H3图生视频-音频同步(自动对口型) | 图 1；音 1 | `audio_duration` 1–15 | H | 无 | 无 |
+| `minimax_h3_image_audio_to_video`<br>H3图生视频-音频同步(自动对口型) | 图 1；音 1 | 调用方 `duration` 1–15<br>（上游承接 `audio_duration`） | H | 无 | 无 |
 | `minimax_h3_lightx2v_v5`<br>H3多图参考生视频 | 图 1–9 | `duration` 1–10 | I | ≤500000 | `212238359716024` |
 | `minimax_h3_lightx2v_no_pic`<br>H3文生视频 | 无媒体 | `duration` 1–15 | G | ≤200000 | 无 |
 | `minimax_h3_lightx2v`<br>H3首尾帧生成视频 | 图 2 | `duration` 1–15 | G | ≤2000000 | `479044338007328` |
 | `indextts2-v1`<br>indextts2<br>别名 `IndexTTS-2` | 音 1–2 | 无（秒数取自成片实测） | — | ≤2048 | 无 |
 
+### 调用方字段与数量上限速查
+
+下表是**调用方实际填写的字段名**与每个模型的媒体数量范围：少于下限或多于上限都报错，
+**不补齐、不截断、不忽略**。数字取自插件自身的校验表，并逐项实测（见下方「文档断言」）。
+
+| 模型（调用名） | 图片 `input_reference` | 音频 `audios` | 视频 `videos` | 文本 `prompt` | 时长（秒） |
+|---|---|---|---|---|---|
+| `minimax_h3_z0903` | 1–6 | 1–3 | — | 1–10000 | 1–15 |
+| `minimax_h3_z0902` | 1–6 | — | — | 1–10000 | 1–15 |
+| `minimax_h3_z0901` | — | — | — | 1–10000 | 1–15 |
+| `minimax_h3_zm_u24` | 1–9 | 0–3（可选） | — | 1–10000 | 1–15 |
+| `minimax_h3_zm_u08` | 1–9 | 0–3（可选） | — | 1–10000 | 1–15 |
+| `minimax_h3_b99_002` | 2（必填） | — | — | 1–10000 | 1–15 |
+| `minimax_h3_b99_001` | — | — | — | 1–10000 | 1–15 |
+| `minimax_h3_b99_003_12s` | 1–9 | — | — | 1–10000 | 1–12 |
+| `wan2.2animate-v4-motion_retargeting`<br>别名 `wan2.2-animate-move` | 1（必填） | — | 1（必填） | —（拒绝文本） | 可选 1–3600<br>（仅预扣） |
+| `minimax_h3_image_audio_to_video_v2_15s` | 0–9（可选） | 0–3（可选） | — | 1–10000 | 1–15 |
+| `minimax_h3_lightx2v_v5_15s` | 1–9 | — | — | 1–500000 | 1–15 |
+| `minimax_h3_image_audio_to_video_v2` | 0–9（可选） | 0–3（可选） | — | 1–10000 | 1–10 |
+| `minimax_h3_image_audio_to_video` | 1（必填） | 1（必填） | — | —（拒绝文本） | 1–15 |
+| `minimax_h3_lightx2v_v5` | 1–9 | — | — | 1–500000 | 1–10 |
+| `minimax_h3_lightx2v_no_pic` | — | — | — | 1–200000 | 1–15 |
+| `minimax_h3_lightx2v` | 2（必填） | — | — | 1–2000000 | 1–15 |
+| `indextts2-v1`<br>别名 `IndexTTS-2` | — | 1–2 | — | 1–2048 | —（按实测） |
+
+「必填」= 必须提供，缺一个就报错；TTS 的 2 段音频依序为**音色参考**（上游 `prompt_simple`）
+与**情感参考**（上游 `emo_ref_audio`），最少 1 段（音色参考）。
+
+**字段名陷阱（最容易踩）：**目录表里的 `audio_duration`、`prompt_text`、`ref_image_0`/`ref_audio_0`、
+`first_frame`/`last_frame`、`prompt_simple` 都是**上游槽位名**，不是调用方字段名。调用方一律用下面的写法：
+
+| 你要传的东西 | 调用方字段 | 不要写 | 写错的后果 |
+|---|---|---|---|
+| 时长 | `duration`（等价别名 `seconds`） | `audio_duration` | 报 `unsupported request field audio_duration` |
+| 文本 | `prompt`（TTS 也是） | `prompt_text` | 该字段被忽略，最终报 `prompt must contain 1 to N characters` |
+| 图片 | `input_reference`（别名 `images`，二者只能选一个） | `ref_image_0` | 报 `unsupported request field ref_image_0` |
+| 音频 | `audios`（URL 数组） | `prompt_simple`、`ref_audio_0` | 报 `unsupported request field ...` |
+| 视频 | `videos`（URL 数组） | `ref_video` | 报 `unsupported request field ref_video` |
+
+`duration` 与 `seconds` 等价，同时传且取值不一致会报 `seconds and duration conflict`。
+
+**两条接口对未知字段的严格程度不同（实测）：**
+
+| 情况 | OpenAI `/v1/videos` | MiniMax V2 `/v2/video_generation` |
+|---|---|---|
+| 未知非媒体字段（如 `bogus: 1`） | **接受并忽略**（不报错，也不转发上游） | **拒绝**：`unsupported or mixed MiniMax field bogus` |
+| 未知媒体型字段名（如 `ref_image_0`、`file`） | 拒绝 | 拒绝 |
+| 未知对象字段 | 拒绝 | 拒绝 |
+
+因此用 OpenAI 格式时，非媒体字段**拼错不会报错、只是不生效**；想尽早发现拼写错误，可先用 MiniMax V2 格式自测。
 ### 分辨率、方向与精确 size
 
 | 组 | 档位及可用方向 | 官网默认 resolution | 精确 size |
