@@ -1,6 +1,9 @@
 > **v1.0.27 变更：API 文档补齐「每个模型能输入什么、最多输入多少」的调用方速查表（纯文档，逻辑未改）。**
 > 1. **新增《调用方字段与数量上限速查》：**一张表给出 17 个模型 + 2 个别名的图片/音频/视频**数量区间**（含必填下限，如 `1–6`、`2`、`—`）、文本上限与时长范围。数字全部由插件自身的校验表生成，并逐项实测「下限−1 拒绝、下限通过、上限通过、上限+1 拒绝」共 **203 项检查**（已接入发布 gate，文档与插件不一致就发不出去）。
-> 2. **修掉两处真实的文档陷阱（原文档把「上游槽位名」写成了「调用方字段名」）：**目录表曾把 `minimax_h3_image_audio_to_video` 的时长字段写作 `audio_duration`，而**直接传 `audio_duration` 会被拒绝**（`unsupported request field`），调用方必须传 `duration`；原第 429 行也曾写「TTS 为 prompt_text」，而调用方用的是 `prompt`（`prompt_text` 是上游字段）。现已分别标注为「上游承接字段」，并新增一张对照表列出 `audio_duration`/`prompt_text`/`ref_image_0`/`ref_audio_0`/`prompt_simple`/`ref_video` 的正确写法与写错后的报错。
+> 2. **修掉文档把「上游槽位名」当成「调用方字段名」的问题，并纠正随后的过度概括。**原目录表把 `minimax_h3_image_audio_to_video` 的时长字段写作 `audio_duration`，原第 429 行写「TTS 为 prompt_text」。首次修正时把规则概括成了「一律用 `duration`／`prompt`」，**这对 MiniMax V2 端是错的**（外部评审按 `examples.json` 的请求体核对解码器时发现）。经逐项实测，正确规则是**两种接口字段名不同**：
+>    - **OpenAI 格式**用统一名：文本 `prompt`、时长 `duration`（别名 `seconds`）、图片 `input_reference`（别名 `images`）、`audios`、`videos`；上游名（`audio_duration`、`prompt_text`、`ref_image_0` 等）在这里会被拒绝。
+>    - **MiniMax V2**用上游原始名：**媒体与文本都写在 `content` 里**（顶层 `prompt`/`prompt_text` 被拒绝），时长用该工作流的上游字段名——多数是 `duration`，**只有音频同步工作流是 `audio_duration`**（此时传 `duration` 会报 `this workflow does not support duration`）。
+>    现已在 API.md 新增**两接口字段名对照表**与**写错后果表**，并把这两条规则接入发布 gate（12 项新检查），避免再次写歪。
 > 3. **补文档化两条接口对未知字段的严格程度差异（实测）：**OpenAI `/v1/videos` 对**未知非媒体字段**（如 `bogus: 1`）**接受并忽略**，而 MiniMax V2 `/v2/video_generation` 会**拒绝**（`unsupported or mixed MiniMax field`）；未知媒体型字段名与未知对象字段两边都拒绝。因此用 OpenAI 格式时字段拼错是「哑失败」，文档建议先用 MiniMax 格式自测。
 > **说明：**本版只改文档与版本号，**插件行为与 1.0.26 完全一致**（计费、实测、路由均未改动）。
 >
