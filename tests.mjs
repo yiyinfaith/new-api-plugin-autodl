@@ -1256,12 +1256,21 @@ test('the measured reference length is cached so later polls do not re-read it',
     assert.equal(fetches, 1, 'the second submission reused the cached measurement');
   } finally { utils.fetch = previousFetch; }
 });
-test('motion settlement bills the measured reference length when the output cannot be read', () => {
+test('motion settlement does NOT bill the reference length when the output cannot be read', () => {
+  // The reference clip's length was once billed here, on the theory that motion transfer
+  // renders one output second per input second. It does not: the workflow renders the
+  // detected person track, so a long reference routinely yields a shorter clip, and
+  // billing the reference over-charged by the difference. The reservation must stand
+  // instead. (Found by the 1.0.25 audit; this test previously asserted the over-charge.)
   const previousFetch = utils.fetch;
   try {
     utils.fetch = () => { throw new Error('output host blocks range reads'); };
     const facts = p.extractUsageOnComplete({ state: { ...settlementState(undefined), inputSeconds: 2.5 } }, { status: 'SUCCESS', url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/blocked.mp4' });
-    assert.equal(facts.seconds, 2.5);
+    // MOTION_DEFAULT_SECONDS is the plugin's own 5-second reservation, which is what
+    // submission wrote and therefore what must stand when nothing could be measured.
+    assert.equal(facts.seconds, 5,
+      'an unmeasurable output must settle at the reservation, not the reference length');
+    assert.notEqual(facts.seconds, 2.5, 'the reference length must never be billed');
     assert.equal(facts.requests, 1);
   } finally { utils.fetch = previousFetch; }
 });
@@ -2009,6 +2018,78 @@ test('the fetch budget resets between host hook calls', () => {
       'the second hook must measure too, got ' + parsed.state.measuredSeconds + ' (fetches so far ' + calls + ')');
     assert.ok(calls > afterFirst, 'the second hook must have been allowed to read');
   } finally { utils.fetch = previousFetch; }
+});
+// A failed delivered-clip probe must NOT fall back to the reference clip's length. The
+// reference is not evidence about the output: motion transfer renders only the detected
+// person track, so a 60s reference routinely yields a much shorter clip, and billing the
+// reference over-charged by the difference.
+test('a motion settlement never bills the reference clip length', () => {
+  const reference = 60, delivered = 3;
+  const ctx = {
+    state: {
+      workflowId: 'wan2.2animate-v4-motion_retargeting',
+      type: 'video',
+      facts: { requests: 1, seconds: 5 },
+      inputSeconds: reference,          // written when the reference was measured
+    },
+  };
+  const previousFetch = utils.fetch;
+  // Every probe fails, so the delivered clip cannot be measured.
+  utils.fetch = () => { throw new Error('cdn unreachable'); };
+  try {
+    const settled = p.extractUsageOnComplete(ctx, { status: 'SUCCESS', url: 'https://cdn.example.com/out.mp4' }, {});
+    assert.ok(settled.seconds <= 5.001,
+      'a 60s reference against a ' + delivered + 's clip must not bill 60s, billed ' + settled.seconds);
+    assert.ok(settled.seconds > 0, 'the reservation must stand rather than billing zero');
+  } finally { utils.fetch = previousFetch; }
+  // With the delivered clip measurable, its own length is what gets billed.
+  utils.fetch = () => { throw new Error('cdn unreachable'); };
+  try {
+    const measured = p.extractUsageOnComplete(
+      { state: { workflowId: 'wan2.2animate-v4-motion_retargeting', type: 'video', facts: { requests: 1, seconds: 5 }, measuredSeconds: 42, inputSeconds: reference } },
+      { status: 'SUCCESS', url: 'https://cdn.example.com/out.mp4' }, {});
+    assert.ok(Math.abs(measured.seconds - 42) < 0.01, 'a recorded delivered measurement wins, got ' + measured.seconds);
+  } finally { utils.fetch = previousFetch; }
+});
+// A measurement longer than the ceiling must be CLAMPED, not discarded. Discarding it
+// settled a real 3601s clip at the 10s vendor floor -- a refund of the whole task.
+test('a measurement above the ceiling is clamped rather than refunded', () => {
+  const previousFetch = utils.fetch;
+  const RATE = 8000;
+  const wavFor = seconds => {
+    const body = Buffer.alloc(Math.round(seconds * RATE));
+    const fmt = Buffer.alloc(16);
+    fmt.writeUInt16LE(1, 0); fmt.writeUInt16LE(1, 2); fmt.writeUInt32LE(RATE, 4);
+    fmt.writeUInt32LE(RATE, 8); fmt.writeUInt16LE(1, 12); fmt.writeUInt16LE(16, 14);
+    const chunk = (id, payload) => {
+      const head = Buffer.alloc(8);
+      head.write(id, 0, 'ascii'); head.writeUInt32LE(payload.length, 4);
+      return Buffer.concat([head, payload, payload.length % 2 ? Buffer.alloc(1) : Buffer.alloc(0)]);
+    };
+    const payload = Buffer.concat([chunk('fmt ', fmt), chunk('data', body)]);
+    const head = Buffer.alloc(12);
+    head.write('RIFF', 0, 'ascii'); head.writeUInt32LE(payload.length + 4, 4); head.write('WAVE', 8, 'ascii');
+    return Buffer.concat([head, payload]);
+  };
+  for (const [seconds, expected] of [[600, 600], [3600, 3600], [3601, 3600], [7200, 3600]]) {
+    const file = wavFor(seconds);
+    utils.fetch = request => {
+      if (request.method === 'HEAD') return { status: 200, headers: { 'Content-Length': String(file.length) }, body: null };
+      const m = /^bytes=(\d+)-(\d+)$/.exec(request.headers.Range || 'bytes=0-1048575');
+      const start = Number(m[1]), end = Math.min(Number(m[2]), file.length - 1);
+      return { status: 206, headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` }, body: file.slice(start, end + 1) };
+    };
+    let billed = null;
+    try {
+      billed = p.extractUsageOnComplete({ state: { workflowId: 'indextts2-v1', type: 'audio', facts: { requests: 1 } } },
+        { status: 'SUCCESS', url: 'https://cdn.example.com/a.wav' }, {}).seconds;
+    } finally { utils.fetch = previousFetch; }
+    assert.ok(Math.abs(billed - expected) < 0.01,
+      'a ' + seconds + 's clip must bill ' + expected + 's, billed ' + billed + 's');
+    assert.ok(billed > 10, 'a ' + seconds + 's clip must not be refunded to the floor');
+  }
+  // The clamp is a ceiling on the bill, so it must never exceed it either.
+  assert.equal(p.meta && typeof p.extractUsageOnComplete, 'function');
 });
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);

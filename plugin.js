@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.25",
+  version: "1.0.26",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -3656,7 +3656,7 @@ function measuredOutputDuration(url) {
       const tail = mediaRange(url, start, total - 1);
       seconds = parseVideoDuration(tail.bytes);
     }
-    return motionSecondsInRange(seconds);
+    return measuredSecondsInRange(seconds);
   } catch (_) {
     return null;
   }
@@ -3691,15 +3691,15 @@ function measuredAudioDuration(url) {
         try { return mediaRange(url, start, end); } catch (_) { return null; }
       });
       if (!walked || !walked.sawData || !(walked.byteRate > 0) || !(walked.audioBytes > 0)) return null;
-      return motionSecondsInRange(walked.audioBytes / walked.byteRate);
+      return measuredSecondsInRange(walked.audioBytes / walked.byteRate);
     }
     let seconds = parseAudioDuration(head.bytes, total);
-    if (seconds !== null) return motionSecondsInRange(seconds);
+    if (seconds !== null) return measuredSecondsInRange(seconds);
     if (Number.isSafeInteger(total) && total > MEDIA_PROBE_BYTES && fetchesLeft() > 0) {
       const tail = mediaRange(url, total - MEDIA_PROBE_BYTES, total - 1);
       seconds = parseAudioDuration(tail.bytes, total);
     }
-    return motionSecondsInRange(seconds);
+    return measuredSecondsInRange(seconds);
   } catch (_) {
     return null;
   }
@@ -3992,10 +3992,27 @@ function completionStatus(result) {
   return "";
 }
 
+// The longest clip the vendor's own pricing can plausibly describe (one hour).
+// Used to CLAMP a measurement that exceeds it rather than discard it: a real
+// 3601-second deliverable is a real cost, and rejecting the measurement refunded
+// the whole task down to the vendor minimum. Clamping keeps the bill plausible
+// and bounded while never charging for more than was delivered.
+const MAX_BILLABLE_SECONDS = 3600;
+
 // The plugin runtime only reports usable numbers to strict typeof comparisons,
-// so bound candidates without Number.isFinite.
+// so bound candidates without Number.isFinite. This is a VALIDATION test: it
+// answers "is this a usable duration at all", and a value outside the plausible
+// range is rejected rather than silently reinterpreted.
 function motionSecondsInRange(value) {
-  return typeof value === "number" && value > 1e-9 && value <= 3600 ? value : null;
+  return typeof value === "number" && value > 1e-9 && value <= MAX_BILLABLE_SECONDS ? value : null;
+}
+
+// A measurement is evidence about a real file, so an implausibly large one is
+// clamped to the ceiling instead of being thrown away. Only a value that is not a
+// usable number at all yields null.
+function measuredSecondsInRange(value) {
+  if (typeof value !== "number" || !(value > 1e-9)) return null;
+  return Math.min(value, MAX_BILLABLE_SECONDS);
 }
 
 // MiniMax's official query response carries an authoritative usage block:
@@ -4071,9 +4088,8 @@ export function extractUsageOnComplete(task, result, body) {
     // polling, then the reference clip the caller submitted, and only last the
     // upstream's own usage block. A measurement always wins because it
     // describes the file that was actually delivered.
-    const settled = motionSecondsInRange(seconds)
-      || motionSecondsInRange(state.measuredSeconds)
-      || motionSecondsInRange(state.inputSeconds)
+    const settled = measuredSecondsInRange(seconds)
+      || measuredSecondsInRange(state.measuredSeconds)
       || upstreamDeclaredSeconds(body);
     // The delivered file is authoritative. The caller's declaration is only the
     // pre-charge reservation and deliberately does NOT cap the bill: motion
@@ -4082,6 +4098,14 @@ export function extractUsageOnComplete(task, result, body) {
     // submit a ten-second reference clip and pay a tenth of the price. A
     // declaration still acts as the reservation, so nothing here bills zero:
     // when no candidate measured anything, the reservation stands.
+    //
+    // The REFERENCE CLIP's length must NOT appear in this chain. It was measured
+    // only to show the caller what was submitted, and it is not evidence about the
+    // output: motion transfer renders the detected person track, so a 60-second
+    // reference routinely yields a much shorter clip. Billing the reference length
+    // when the delivered probe failed over-charged by the difference (a 60-second
+    // reference against a 3-second clip billed 60 seconds). Falling through to the
+    // reservation is the honest answer when the delivered file cannot be measured.
     if (settled !== null) facts.seconds = settled;
     else if (motionSecondsInRange(facts.seconds) === null) facts.seconds = MOTION_DEFAULT_SECONDS;
   }
@@ -4101,8 +4125,8 @@ export function extractUsageOnComplete(task, result, body) {
   // stays honest and the minimum is still charged.
   if (succeeded && kind === TTS_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
-    const settled = motionSecondsInRange(url ? measuredAudioDuration(url) : null)
-      || motionSecondsInRange(state.measuredSeconds)
+    const settled = measuredSecondsInRange(url ? measuredAudioDuration(url) : null)
+      || measuredSecondsInRange(state.measuredSeconds)
       || upstreamDeclaredSeconds(body);
     if (settled !== null) facts.seconds = Math.max(settled, TTS_DEFAULT_SECONDS);
     else {
