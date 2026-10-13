@@ -13,7 +13,7 @@
 支持：
 
 - OpenAI Video 接口（`POST /v1/videos`，16 个视频工作流，另含 `wan2.2-animate-move` 渠道别名）
-- MiniMax 官方 V2 路径和请求格式（`POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`，17 个工作流 ID 直接作为 `model`）
+- MiniMax 官方 V2 路径和请求格式（`POST /v2/video_generation`、`GET /v2/query/video_generation/{task_id}`，17 个工作流 ID 直接作为 `model`，动作迁移别名 `wan2.2-animate-move` 同样可用）
 - 通过 New API 管理全部 17 个工作流的异步任务
 - AutoDL ComfyUI 异步任务
 - OpenAI、MiniMax V2 两种请求格式
@@ -88,7 +88,7 @@ URL 安装不会自动配置渠道或导入模型价格。请完成上述渠道�
 
 调用端的 `Authorization: Bearer <NEW_API_KEY>` 是 New API 密钥；插件访问 AutoDL 使用 `Authorization: <AUTODL_TOKEN>`，直接读取渠道 `ctx.apiKey`。访问媒体 CDN 时不发送 AutoDL 或 New API 密钥。不要将 Token 写入插件、仓库或示例文件。
 
-两种格式的 `model` 都使用官网完整工作流 ID，例如 `minimax_h3_lightx2v_no_pic`。OpenAI 格式另外保留 `wan2.2-animate-move` 渠道别名：渠道需加入该模型名，并用模型映射指向 `wan2.2animate-v4-motion_retargeting`，再按动作迁移的计费表达式单独配置价格（例如 `billing_setting.plugin_billing_expr` 中的 `autodl::wan2.2-animate-move`），避免影响其他插件。**动作迁移按成片秒数计费**：1.0.7 起别名自带 `seconds` usage profile，价格页会出现「视频生成单价」输入；请确认别名与 workflow ID 的价格表达式都包含 `u("seconds")`。MiniMax V2 不接受该别名，请直接填工作流 ID。rc.41 允许多个插件共享模型名，选择 AutoDL 渠道时由 AutoDL 执行；如其他插件也声明同名模型，请用渠道分组等现有设置控制调用渠道。
+两种格式的 `model` 都使用官网完整工作流 ID，例如 `minimax_h3_lightx2v_no_pic`。动作迁移另有公开别名 `wan2.2-animate-move`，**两种格式都能直接填**（插件自行解析到 `wan2.2animate-v4-motion_retargeting`，发往上游的 `model` 始终是实际 ID）。渠道也可以再加一条同名映射指向该工作流，那是等价路径、不是前提；请按**请求实际使用的 model 名**单独配置价格（例如 `billing_setting.plugin_billing_expr` 中的 `autodl::wan2.2-animate-move`），避免影响其他插件。**动作迁移按成片秒数计费**：1.0.7 起别名自带 `seconds` usage profile，价格页会出现「视频生成单价」输入；请确认别名与 workflow ID 的价格表达式都包含 `u("seconds")`。rc.41 允许多个插件共享模型名，选择 AutoDL 渠道时由 AutoDL 执行；如其他插件也声明同名模型，请用渠道分组等现有设置控制调用渠道。
 
 ## 两种请求格式与入口
 OpenAI 格式用统一字段（`prompt` / `seconds` / `size` / `input_reference` / `audios` / `videos` / `seed`）；MiniMax V2 格式用 `content` 数组加 `role` 标注媒体用途。
@@ -130,7 +130,7 @@ OpenAI 格式用统一字段（`prompt` / `seconds` / `size` / `input_reference`
 
 当前实例使用 CNY 展示、`USDExchangeRate=1`，表达式直接填官网数值，不做换汇加价；既有用户组倍率仍由 New API 叠加。价格快照取自 2026-10-08，官网后续调价不会自动同步。
 
-### 动作迁移与渠道别名
+### 动作迁移与别名
 
 动作迁移官网价为期 08:00–24:00 ¥0.04/成片秒、00:00–08:00 ¥0.03/成片秒，与分辨率无关，表达式见下一节模板 B。它按**实测成片秒数**结算，调用方声明的秒数只决定预扣。
 
@@ -140,7 +140,7 @@ OpenAI 格式使用别名时，需要在渠道里配置模型映射：
 {"wan2.2-animate-move":"wan2.2animate-v4-motion_retargeting"}
 ```
 
-别名是**独立的模型名**，必须单独配置价格；它只在 OpenAI 格式下有效，MiniMax V2 请直接使用 workflow ID。详见 [API 文档](API.md) 的《动作迁移与 wan2.2-animate-move 渠道别名》。
+别名是**独立的模型名**，必须按请求使用的名字单独配置价格；**两种格式都能用**（MiniMax V2 也接受该别名，无需先做渠道映射）。详见 [API 文档](API.md) 的《动作迁移与 wan2.2-animate-move 别名》。
 
 ## 在 New API 中配置按秒计费（表达式教程）
 插件只负责**把真实的生成秒数报给 New API**（通过用量字段），**具体单价由你在 New API 里配置**。不配价格时调用会返回 `model_price_error`。这一节是完整操作步骤。

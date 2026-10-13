@@ -112,7 +112,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" \
 | 单图生视频（也可多图） | `minimax_h3_lightx2v_v5` | prompt + 1–9 图；1–10 秒；480p/768p/1080p。 |
 | 图+音频生视频 | `minimax_h3_image_audio_to_video_v2` | prompt，可带 0–9 图、0–3 音频；图+音频场景各传至少 1 个；1–10 秒。 |
 | 首尾帧 | `minimax_h3_lightx2v` | prompt + 恰好 2 图；1–15 秒；480p/768p。 |
-| 动作迁移 | `wan2.2animate-v4-motion_retargeting` | 1 图+1 视频；无 prompt/可控时长；计费秒数可选（结算以实测成片时长为准）；只有 OpenAI 格式可用渠道映射别名 `wan2.2-animate-move`。 |
+| 动作迁移 | `wan2.2animate-v4-motion_retargeting` | 1 图+1 视频；无 prompt/可控时长；计费秒数可选（结算以实测成片时长为准）；两种格式都可直接用公开别名 `wan2.2-animate-move`，插件自行解析到该工作流。 |
 
 OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。上表是工作流能力，不能把不同协议字段混写；全部 17 项默认值、媒体范围与分辨率在后面的[工作流参数表](#工作流目录与能力边界)。
 
@@ -129,7 +129,7 @@ OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。�
 以下保留完整字段、响应、工作流能力、计费和技术说明，可在本文件内继续查阅。
 
 
-[配置](#基本配置) · [接口](#接口速查) · [输入媒体](#输入媒体url-与-data-url) · [OpenAI](#openai-videos-api) · [MiniMax](#minimax-官方-v2-api) · [工作流参数](#工作流目录与能力边界) · [动作迁移](#动作迁移与-wan22-animate-move-渠道别名) · [错误与计费](#错误轮询和计费)
+[配置](#基本配置) · [接口](#接口速查) · [输入媒体](#输入媒体url-与-data-url) · [OpenAI](#openai-videos-api) · [MiniMax](#minimax-官方-v2-api) · [工作流参数](#工作流目录与能力边界) · [动作迁移](#动作迁移与-wan22-animate-move-别名) · [错误与计费](#错误轮询和计费)
 
 ## 基本配置
 
@@ -195,7 +195,7 @@ audio = data_url("reference.wav", "audio/wav")
 video = data_url("motion.mp4", "video/mp4")
 ```
 
-**输出只返回公网 URL**；两种接口的 URL/Data URL 输入已付费验证。内联输入受宿主请求体/JS 资源限制，大文件优先 URL；动作迁移另有[秒数声明说明](#动作迁移与-wan22-animate-move-渠道别名)。
+**输出只返回公网 URL**；两种接口的 URL/Data URL 输入已付费验证。内联输入受宿主请求体/JS 资源限制，大文件优先 URL；动作迁移另有[秒数声明说明](#动作迁移与-wan22-animate-move-别名)。
 
 ## OpenAI Videos API
 
@@ -205,7 +205,7 @@ video = data_url("motion.mp4", "video/mp4")
 
 | 字段 | 类型 | 必填 / 省略行为 | 可选值、范围与映射 |
 |---|---|---|---|
-| `model` | string | 必填，无默认 | 16 个视频 workflow ID；渠道映射后的动作迁移别名 `wan2.2-animate-move` 也可用。 |
+| `model` | string | 必填，无默认 | 16 个视频 workflow ID；动作迁移的公开别名 `wan2.2-animate-move` 也可直接用（插件解析到 `wan2.2animate-v4-motion_retargeting`，无需渠道映射）。 |
 | `prompt` | string | 有文本槽位时必填，无默认 | 非空；H3 按工作流文本上限。音频同步/动作迁移没有文本槽位、拒绝此字段。 |
 | `seconds` | number 或十进制字符串 | 均可选：H3 默认 5，动作迁移默认 5（仅预扣） | 映射 duration 或 audio_duration；工作流范围为 1–10/12/15，详见能力表。H3 非整数/超范围拒绝。动作迁移可小数，1 <= seconds <= 3600，仅预扣；结算以实测成片时长为准。 |
 | `resolution` | string | 可选，用工作流默认档位 | 全部统一档位为 480p/464p/736p/768p/832p/1080p/1088p/1440p；具体允许项见工作流分辨率组，不是每个模型都支持全部值。 |
@@ -269,7 +269,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 |---|---|
 | **AutoDL workflow ID**，如 `minimax_h3_z0901 / minimax_h3_lightx2v / minimax_h3_zm_u08` | 固定执行指定工作流，按其能力校验；保留 1 秒、扩展分辨率、音频与动作迁移能力。 |
 
-1.0.5 起移除了按 MiniMax 官方模型名自动选择工作流的能力（含其大小写兼容别名）：填官方模型名会因找不到工作流而报错，请改填 workflow ID。渠道按请求 model 配置价格与分组；`wan2.2-animate-move` 是 OpenAI 格式的渠道映射别名，本格式请写实际 workflow ID。
+1.0.5 起移除了按 MiniMax 官方模型名自动选择工作流的能力（含其大小写兼容别名）：填官方模型名会因找不到工作流而报错，请改填 workflow ID。注意这与**插件自己声明的公开别名**不同：`wan2.2-animate-move` 是动作迁移的公开别名，**本格式同样可用**（插件把它解析到 `wan2.2animate-v4-motion_retargeting`，上游请求里写的是实际 workflow ID），渠道映射只是另一条等价路径；渠道按请求 model 配置价格与分组，用别名调用就要给别名单独配价。
 
 ### 请求结构
 
@@ -357,7 +357,7 @@ ratio 可用 adaptive/21:9/16:9/4:3/1:1/3:4/9:16：横向映横，3:4/9:16 映�
 
 `indextts2-v1`（上游开源模型 `IndexTTS-2`，B站 IndexTeam 出品）用 MiniMax content 音频扩展（emo_* 等扩展字段写在 body 顶层），只通过 `/v2/video_generation` 调用，不传 duration/resolution/ratio。text 映射 prompt_text（1–2048 字符），第 1 条 reference_audio→必需 prompt_simple（音色），第 2 条→可选 emo_ref_audio（情感），共 1–2 段。
 
-**`IndexTTS-2` 是 `indextts2-v1` 的公开别名，与 `wan2.2-animate-move` 同理：两个名字都可用，`model` 填哪个都行，上游请求始终是 `indextts2-v1`，两者共享同一套能力表和同一个按交付音频秒数计费的模板，各自独立配价。**别名同样只在 `/v2/video_generation` 可用——TTS 不走 OpenAI 视频入口。
+**`IndexTTS-2` 是 `indextts2-v1` 的公开别名，与 `wan2.2-animate-move` 同一机制：两个名字都可用，`model` 填哪个都行，上游请求始终是 `indextts2-v1`，两者共享同一套能力表和同一个按交付音频秒数计费的模板，各自独立配价。**区别在于可用范围：动作迁移的别名两个入口都能用，而 TTS 只存在于 `/v2/video_generation`——TTS 是音频工作流，不在 OpenAI 视频入口（`/v1/videos`）的模型列表里，所以 `IndexTTS-2` 与 `indextts2-v1` 都只在 `/v2` 可用。
 
 ```json
 {"model":"indextts2-v1","content":[{"type":"text","text":"你好，这是音色参考合成示例。"},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://media.example.com/voice.wav"}}],"emo_control_method":"与音色参考音频相同"}
@@ -545,7 +545,7 @@ seed 上限 **999999999999999**，下限 **1**（zm_u24/zm_u08 为 **0**），�
 
 **模型名与渠道路径映射：**两种格式的 `model` 都可以是**你自己在渠道里配置的映射名**，不限于插件声明的 17 个工作流 ID。解析规则是：
 
-1. 若 `model` 是插件声明的工作流 ID（或 OpenAI 格式的动作迁移别名 `wan2.2-animate-move`），就用**该工作流自己的能力表**严格校验；
+1. 若 `model` 是插件声明的工作流 ID（或动作迁移的公开别名 `wan2.2-animate-move`），就用**该工作流自己的能力表**严格校验；
 2. 若 `model` 不在声明表里，插件不再直接拒绝，而是**按渠道映射实际指向的 workflow ID** 发往 AutoDL，校验退化为「未知工作流」级别的宽松校验；
 3. 无论哪种情况，**校验永远跟随调用方填写的已声明模型**：把一个已声明模型经渠道映射到私有 workflow ID，该模型自己的 prompt/秒数/媒体数量/分辨率上限**依然生效**，不会因为映射而放宽；
 4. 已明确移除的官方模型名（`MiniMax-H3`、`MiniMax-H3-Max`）**不可被映射复活**，仍按不支持拒绝。
@@ -554,15 +554,15 @@ seed 上限 **999999999999999**，下限 **1**（zm_u24/zm_u08 为 **0**），�
 
 **映射名还需要单价。**插件只负责把请求送到正确的 workflow；价格由 New API 的价格配置决定。私有映射名没有价格表达式时，宿主无法计费，请求会失败——所以除了配渠道映射，还要为该名字配置单价（按秒的模型用 `u("seconds")`，按次的用 `u("requests")`）。同理，插件不会为未声明的名字生成 `usageProfile`，该名字的秒数用量能否参与计费取决于你给它的价格表达式。
 
-## 动作迁移与 wan2.2-animate-move 渠道别名
+## 动作迁移与 wan2.2-animate-move 别名
 
-`wan2.2animate-v4-motion_retargeting`（动作迁移）：1 图+1 视频，不传 prompt/text/audio_duration，也没有可控时长字段；OpenAI `seconds` 与 MiniMax `duration` 都可省略，只用于预扣，结算以实测成片时长为准。`model` 可填实际 workflow ID；OpenAI 格式也可用渠道把外部别名 `wan2.2-animate-move` 映射到该工作流。渠道需允许请求模型，并按请求 model 配置价格。
+`wan2.2animate-v4-motion_retargeting`（动作迁移）：1 图+1 视频，不传 prompt/text/audio_duration，也没有可控时长字段；OpenAI `seconds` 与 MiniMax `duration` 都可省略，只用于预扣，结算以实测成片时长为准。**`model` 可填实际 workflow ID，也可填公开别名 `wan2.2-animate-move`——两种格式都可用。** 该别名和其他模型一样由插件声明（出现在 `meta.models` 里），插件自行把它解析到 `wan2.2animate-v4-motion_retargeting`，发往上游的 `model` 始终是实际 workflow ID；你无需先做渠道映射，在渠道里再加一条同名映射也只是等价路径。渠道需允许请求模型，并按**请求使用的那个 model 名**配置价格（用别名调用就给别名配价，用 ID 调用就给 ID 配价）。
 
 **动作迁移按成片秒数计费（含别名）。** 别名 `wan2.2-animate-move` 现在自带 `seconds` usage profile（1.0.7 修复；此前该别名只继承 `usageSchema` 的 `requests`，价格页缺少秒数输入，按秒计费会静默退化为按次），价格页与工作流 ID 一样有「视频生成单价」输入。别名与 workflow ID 各自配置价格表达式，两者都必须包含 `u("seconds")` 才会按秒结算。
 
 动作迁移只有 E 组两个档位：竖 `832p`（官网标签 `464*832px(竖版)`，默认）与横 `464p`（`832*464px(横版)`）；没有精确 size。
 
-OpenAI（此例用实际 ID；改用 wan2.2-animate-move 时须先配置上述渠道映射）：
+OpenAI（用实际 ID 或别名 `wan2.2-animate-move` 均可）：
 
 ```json
 {"model":"wan2.2animate-v4-motion_retargeting","seconds":5,"input_reference":{"image_url":"https://media.example.com/person.png"},"videos":["https://media.example.com/motion.mp4"]}
@@ -595,7 +595,7 @@ MiniMax（提交到 `/v2/video_generation`）：
 
 ### 价格与用量
 
-**2026-10-08 官网快照**，每格高峰/低峰 **人民币元/秒**；北京 08:00–24:00 高峰、00:00–08:00 低峰。官网对应 workflow 整数价÷1000；安装不导入价格，用户组倍率影响实扣。动作迁移价格见[动作迁移](#动作迁移与-wan22-animate-move-渠道别名)一节。
+**2026-10-08 官网快照**，每格高峰/低峰 **人民币元/秒**；北京 08:00–24:00 高峰、00:00–08:00 低峰。官网对应 workflow 整数价÷1000；安装不导入价格，用户组倍率影响实扣。动作迁移价格见[动作迁移](#动作迁移与-wan22-animate-move-别名)一节。
 
 | 模型 | 480p | 768p | 1080p |
 |---|---|---|---|
