@@ -724,13 +724,54 @@ reject('legacy duration conflict', 'extractUsage', [ctx(model, { prompt: 'x', se
 reject('unsupported 720p size', 'extractUsage', [ctx(model, { prompt: 'x', size: '1280x720' })], 'unsupported size');
 reject('size resolution conflict', 'extractUsage', [ctx(model, { prompt: 'x', size: '864x480', resolution: '768p' })], 'size, resolution and orientation conflict');
 reject('reject blank prompt', 'buildSubmitRequest', [ctx(model, { prompt: ' ' })], 'prompt must');
-// Unknown junk is ignored, but a media-shaped or object field is refused rather
+// Unknown scalar junk is ignored, but a media-shaped, object or array field is refused rather
 // than dropped so a caller cannot lose an input silently.
 for (const field of ['seedx', 'prompt_weight']) fixture('tolerated scalar field ' + field, 'extractUsage', [ctx(model, { prompt: 'x', [field]: 3 })], { requests: 1, seconds: 5, resolution: '768p', orientation: 'portrait' });
 for (const field of ['metadata', 'mode', 'user', 'n', 'response_format']) fixture('official OpenAI field ' + field + ' is ignored, not fatal', 'extractUsage', [ctx(model, { prompt: 'x', [field]: field === 'n' ? 1 : 'value' })], { requests: 1, seconds: 5, resolution: '768p', orientation: 'portrait' });
 for (const field of ['ref_image_0', 'ref_video_0', 'audio_url', 'file', 'image_settings', 'video_settings']) reject('media-shaped field ' + field + ' is refused', 'buildSubmitRequest', [ctx(model, { prompt: 'x', [field]: 'anything' })], 'unsupported request field');
 // An unrecognized object could hide media, so it is refused rather than dropped.
 for (const field of ['custom_object', 'options', 'settings']) reject('object-valued unknown field ' + field + ' is refused', 'buildSubmitRequest', [ctx(model, { prompt: 'x', [field]: { nested: 'https://cdn.example.com/a.png' } })], 'unsupported request field');
+// Unknown arrays can hide reference media even when their names do not resemble media.
+for (const field of ['reference_images', 'references', 'attachments', 'frames']) {
+  for (const value of [[], ['https://cdn.example.com/a.png'], [{ image_url: 'https://cdn.example.com/a.png' }], [['https://cdn.example.com/a.png']]]) {
+    const body = { prompt: 'x', [field]: value };
+    for (const hook of ['buildSubmitRequest', 'extractUsage']) {
+      reject('unknown array ' + field + ' ' + JSON.stringify(value) + ' rejected by ' + hook,
+        hook, [ctx(model, body)], 'unsupported request field');
+    }
+    test('decoder refuses unknown array ' + field + ' ' + JSON.stringify(value), () => {
+      assert.throws(() => p.protocols.openai_video.decodeRequest({ model, body: { kind: 'json', value: body } }),
+        /unsupported request field/);
+    });
+  }
+}
+for (const field of ['metadata', 'mode', 'callback_url', 'extra', 'user', 'n', 'response_format', 'fps', 'width', 'height']) {
+  fixture('explicitly ignored compatibility array ' + field, 'extractUsage',
+    [ctx(model, { prompt: 'x', [field]: ['compatibility-value'] })], p.extractUsage(ctx(model, { prompt: 'x' })));
+}
+test('declared media arrays survive decoding and submission', () => {
+  for (const [mediaModel, config] of Object.entries(catalog)) {
+    if (config.type === 'audio') continue;
+    for (const imageField of ['input_reference', 'images']) {
+      const body = { ...examples[mediaModel] };
+      if (body.input_reference !== undefined) {
+        const references = referenceValues(body.input_reference);
+        delete body.input_reference;
+        body[imageField] = references;
+      }
+      const intent = p.protocols.openai_video.decodeRequest({ model: mediaModel, body: { kind: 'json', value: body } });
+      for (const requestBody of [body, intent.requestBody]) {
+        const submitted = p.buildSubmitRequest(ctx(mediaModel, requestBody));
+        for (const [kind, slots] of [[imageField, config.input_reference], ['audios', config.audios], ['videos', config.videos]]) {
+          for (const [index, value] of referenceValues(body[kind]).entries()) {
+            assert.equal(submitted.body[slots[index]], kind === imageField ? value.image_url : value,
+              mediaModel + ': ' + kind + '[' + index + ']');
+          }
+        }
+      }
+    }
+  }
+});
 // A mapped id this plugin holds no capability table for is the supported path for
 // a self-chosen model name, so it must build a correct upstream URL rather than be
 // refused. The operator's mapping also wins over the body's own model name, which
@@ -1017,7 +1058,13 @@ for (const [model, request] of Object.entries(workflowMiniMax)) {
 for (const body of [{ kind: 'none' }, { kind: 'form', fields: {} }, { kind: 'json', value: [] }, { kind: 'json', value: { model: 'minimax_h3_z0901', prompt: 'test' } }]) nativeFixture('V2 rejects non-content request ' + JSON.stringify(body), 'miniCreate', [{ path: '/v2/video_generation', body }], null, 'requires a JSON object with model and content');
 nativeFixture('V2 create response is the official task_id object', 'miniCreated', [{}, { task_id: 'task_public', data: envelope('QUEUED') }], { task_id: 'task_public' });
 const v2QueryContext = { method: 'GET', path: '/v2/query/video_generation/task_public', params: { task_id: 'task_public' } };
-for (const [status, external] of Object.entries({ NOT_START: 'queued', SUBMITTED: 'queued', QUEUED: 'queued', IN_PROGRESS: 'running', UNKNOWN: 'running', CANCELLED: 'cancelled' })) nativeFixture('V2 pending status ' + status, 'miniTask', [v2QueryContext, { task_id: 'task_public', status, created_at: 10, updated_at: 11 }], { task: { id: 'task_public', status: external, task_type: 'generation', modality: 'video', created_at: 10, updated_at: 11 } });
+for (const [status, external] of Object.entries({ NOT_START: 'queued', SUBMITTED: 'queued', QUEUED: 'queued', IN_PROGRESS: 'running', UNKNOWN: 'running' })) nativeFixture('V2 pending status ' + status, 'miniTask', [v2QueryContext, { task_id: 'task_public', status, created_at: 10, updated_at: 11 }], { task: { id: 'task_public', status: external, task_type: 'generation', modality: 'video', created_at: 10, updated_at: 11 } });
+for (const status of ['FAILURE', 'FAILED', 'ERROR', 'TIMEOUT', 'EXPIRED', 'CANCELLED', 'CANCELED', 'failed']) {
+  nativeFixture('V2 terminal status retains reason ' + status, 'miniTask',
+    [v2QueryContext, { task_id: 'task_public', status, fail_reason: 'upstream timeout', created_at: 10, updated_at: 11 }],
+    { task: { id: 'task_public', status: status.startsWith('CANCEL') ? 'cancelled' : 'failed', task_type: 'generation',
+      modality: 'video', created_at: 10, updated_at: 11, error: { code: 'video_generation_failed', message: 'upstream timeout' } } });
+}
 nativeFixture('V2 success returns official task content URL without invented metadata', 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'SUCCESS', created_at: 10, updated_at: 11, data: envelope('SUCCESS', [{ type: 'video', url: 'https://cdn.example.com/result.mp4' }], { duration: 196 }) }], { task: { id: 'task_public', status: 'succeeded', task_type: 'generation', modality: 'video', created_at: 10, updated_at: 11, content: { url: 'https://cdn.example.com/result.mp4' } } });
 nativeFixture('V2 failure includes official task error structure', 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'FAILURE', fail_reason: 'mock failure' }], { task: { id: 'task_public', status: 'failed', task_type: 'generation', modality: 'video', error: { code: 'video_generation_failed', message: 'mock failure' } } });
 for (const type of ['video', 'audio']) nativeFixture('V2 ignores auxiliary image before ' + type, 'miniTask', [v2QueryContext, { task_id: 'task_public', status: 'SUCCESS', data: envelope('SUCCESS', [{ type: 'image', url: 'https://cdn.example.com/preview.png' }, { type, url: 'https://cdn.example.com/output.' + (type === 'video' ? 'mp4' : 'wav') }]) }], { task: { id: 'task_public', status: 'succeeded', task_type: 'generation', modality: type, content: { url: 'https://cdn.example.com/output.' + (type === 'video' ? 'mp4' : 'wav') } } });
@@ -1701,6 +1748,36 @@ test('a dead or completed task never renders as running', () => {
   }
   for (const status of ['CANCELED', 'cancelled', 'TIMEOUT', 'error']) {
     assert.ok(['cancelled', 'failed'].includes(p.native.miniTask(base, { task_id: 't', status }).task.status), status);
+  }
+});
+for (const token of ['FAILURE', 'FAILED', 'ERROR', 'TIMEOUT', 'EXPIRED', 'CANCELLED', 'CANCELED']) {
+  for (const status of [token, token.toLowerCase()]) {
+    test('MiniMax ' + status + ' preserves the failure reason, redacts credentials and refunds', () => {
+      const reason = 'upstream timeout caused failure';
+      const task = p.native.miniTask(base, { task_id: 't', status, fail_reason: reason }).task;
+      assert.equal(task.status, /CANCEL/.test(token) ? 'cancelled' : 'failed');
+      assert.deepEqual(task.error, { code: 'video_generation_failed', message: reason });
+      const secret = 'sk-live-ABCDEFGHIJKLMNOPQRSTUVWX';
+      const redacted = p.native.miniTask({ apiKey: secret, authHeader: 'Bearer ' + secret },
+        { task_id: 't', status, fail_reason: 'upstream rejected Bearer ' + secret }).task.error.message;
+      assert.ok(redacted.includes('[redacted]'));
+      assert.ok(!redacted.includes(secret));
+      const missingReason = p.native.miniTask(base, { task_id: 't', status }).task.error;
+      assert.equal(missingReason.code, 'video_generation_failed');
+      assert.ok(missingReason.message.length > 0);
+      for (const persisted of [status, task.status]) {
+        const usage = p.extractUsageOnComplete({ state: settlementState(undefined) }, { status: persisted }, {});
+        assert.equal(usage.requests, 0);
+        assert.equal(usage.seconds, 0);
+      }
+    });
+  }
+}
+test('MiniMax pending and successful tasks do not acquire failure errors', () => {
+  for (const status of ['NOT_START', 'SUBMITTED', 'QUEUED', 'IN_PROGRESS', 'UNKNOWN', 'SUCCESS', 'SUCCEEDED', 'COMPLETED']) {
+    for (const spelling of [status, status.toLowerCase()]) {
+      assert.equal(p.native.miniTask(base, { task_id: 't', status: spelling, fail_reason: 'stale reason' }).task.error, undefined);
+    }
   }
 });
 // `ascii4` returns four characters, so comparing it to the three-character "ID3" was never

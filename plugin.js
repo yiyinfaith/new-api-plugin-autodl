@@ -2545,7 +2545,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.0.27",
+  version: "1.0.28",
   author: { name: "Yiyin" },
   description: { en: "All 17 AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 17 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2887,7 +2887,7 @@ function normalizeInput(config, input) {
     if (key === "__proto__" || key === "constructor" || key === "prototype") throw new Error("AutoDL: unsupported request field " + key);
     // A media-shaped field this adapter cannot place is refused rather than
     // dropped, so a caller never pays for a generation that lost its input.
-    if (/^(image|images|input_ref|audio|video|ref_|file)/i.test(key) || object(input[key])) throw new Error("AutoDL: unsupported request field " + key + "; use input_reference, audios and videos for media");
+    if (/^(image|images|input_ref|audio|video|ref_|file)/i.test(key) || object(input[key]) || Array.isArray(input[key])) throw new Error("AutoDL: unsupported request field " + key + "; use input_reference, audios and videos for media");
   }
   const body = {}, facts = { requests: 1 };
   if (config.promptField) {
@@ -4303,7 +4303,7 @@ export const native = {
     // The upstream fail_reason is free text that can quote the credential it rejected,
     // so it is redacted exactly as the OpenAI surface already redacts it. This path
     // reached the end user with the raw AutoDL token in it.
-    if (key === "FAILURE") result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
+    if (failureStatus(key)) result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
     // rc.41 TaskView excludes request/model/usage/private state. AutoDL's
     // data.duration measures processing time, not video duration. Omit fields
     // we cannot confirm instead of inventing official metadata or token usage.

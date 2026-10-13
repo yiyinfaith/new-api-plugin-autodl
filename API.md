@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.0.27**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.0.28**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -218,7 +218,7 @@ video = data_url("motion.mp4", "video/mp4")
 | `duration` | integer 或数字字符串 | 可选，全部工作流 | `seconds` 的兼容别名（New API 字段名）；两者同时传必须一致，否则报错。 |
 | `images` | string[] | 可选，兼容别名 | **已废弃，请改用 `input_reference`。** New API Sora 风格的参考图数组，与 `input_reference` 等价并映射到同一批 ref_image_* 槽位；与 `input_reference` 同时出现报错。 |
 
-`input_reference` 与 `images` 等价，二者只能选一个；`input_reference` 是推荐写法。OpenAI 官方 `/videos` 只定义单张 `input_reference` 对象，对象数组是 AutoDL 多图/首尾帧工作流所需的扩展。`metadata`、`mode`、`user`、`n`、`response_format` 等非媒体字段会被接受并忽略（上游没有对应能力）。未知的媒体型字段名（如 `ref_image_0`、`file`）或任何未知对象字段会明确报错，不会被静默丢弃，以免用户以为传了图却发出纯文生视频请求。`__proto__`、`constructor`、`prototype` 一律拒绝。
+`input_reference` 与 `images` 等价，二者只能选一个；`input_reference` 是推荐写法。OpenAI 官方 `/videos` 只定义单张 `input_reference` 对象，对象数组是 AutoDL 多图/首尾帧工作流所需的扩展。`metadata`、`mode`、`user`、`n`、`response_format` 等非媒体字段会被接受并忽略（上游没有对应能力）。未知的媒体型字段名（如 `ref_image_0`、`file`）或任何未知对象、数组字段会明确报错，包括空数组，不会被静默丢弃，以免用户以为传了图却发出纯文生视频请求。例如 `reference_images`、`references`、`attachments`、`frames` 数组均不受支持，请使用已声明的 `input_reference` / `images`、`audios`、`videos`。明确忽略的兼容字段仍接受数组值。`__proto__`、`constructor`、`prototype` 一律拒绝。
 
 H3 秒数及种子的数字字符串会转换为数值，仍须满足安全整数及工作流上下限；boolean、空字符串和科学计数法字符串不是有效秒数/种子。省略媒体不表示可绕过必需数量。
 
@@ -342,6 +342,8 @@ ratio 可用 adaptive/21:9/16:9/4:3/1:1/3:4/9:16：横向映横，3:4/9:16 映�
 ### 创建、查询和下载
 
 创建 `{"task_id":"<task_id>"}`；查询 task 状态 queued/running/succeeded/failed/cancelled（UNKNOWN→running）。运行无 content，成功 content.url，失败 error；时间仅宿主提供时返回。
+
+`FAILURE`、`FAILED`、`ERROR`、`TIMEOUT`、`EXPIRED` 以及 `CANCELLED` / `CANCELED`（均不区分大小写）都会返回 `task.error`，保留经过凭据脱敏的失败原因；取消状态仍为 `cancelled`。缺少原因时返回通用失败说明，失败与取消的退款规则不变。
 
 ```json
 {"task":{"id":"<task_id>","status":"succeeded","task_type":"generation","modality":"video","created_at":1785125529,"updated_at":1785125589,"content":{"url":"https://media.example.com/result.mp4"}}}
@@ -496,7 +498,7 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 | 写法 | 结果 |
 |---|---|
 | OpenAI 传 `audio_duration` | `unsupported request field audio_duration; use input_reference, audios and videos for media` |
-| OpenAI 传 `ref_image_0` / `file` / 未知对象字段 | `unsupported request field …` |
+| OpenAI 传 `ref_image_0` / `file` / 未知对象或数组字段 | `unsupported request field …` |
 | MiniMax 给音频同步工作流传 `duration` | `this workflow does not support duration` |
 | MiniMax 给其他工作流传 `audio_duration` | `this workflow does not support audio_duration` |
 | MiniMax 顶层传 `prompt` 或 `prompt_text` | `unsupported or mixed MiniMax field prompt`（文本要放 `content` 里） |
@@ -506,9 +508,10 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 
 | 情况 | OpenAI `/v1/videos` | MiniMax V2 `/v2/video_generation` |
 |---|---|---|
-| 未知非媒体字段（如 `bogus: 1`） | **接受并忽略**（不报错，也不转发上游） | **拒绝**：`unsupported or mixed MiniMax field bogus` |
+| 未知非媒体标量字段（如 `bogus: 1`） | **接受并忽略**（不报错，也不转发上游） | **拒绝**：`unsupported or mixed MiniMax field bogus` |
 | 未知媒体型字段名（如 `ref_image_0`、`file`） | 拒绝 | 拒绝 |
 | 未知对象字段 | 拒绝 | 拒绝 |
+| 未知数组字段（包括空数组） | 拒绝 | 拒绝 |
 
 因此用 OpenAI 格式时，非媒体字段**拼错不会报错、只是不生效**；想尽早发现拼写错误，可先用 MiniMax V2 格式自测。
 
