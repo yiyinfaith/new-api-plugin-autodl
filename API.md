@@ -1,6 +1,6 @@
 # AutoDL New API 插件 API 参考
 
-版本 **1.1.0**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
+版本 **1.1.1**。OpenAI Videos 与 MiniMax 官方 V2 两套接口的参数、示例、响应与计费规则均在本文件；示例地址需替换为真实媒体。
 
 ## 5 分钟快速开始
 
@@ -8,8 +8,8 @@
 
 | 接口 | 适用场景 | 模型与输入结构 |
 |---|---|---|
-| **OpenAI** `POST /v1/videos` | 已使用 OpenAI Videos 风格客户端；统一提示词、秒数、尺寸与参考媒体。 | 16 个视频 workflow ID（含动作迁移）；`prompt / seconds / size / input_reference / audios / videos`。 |
-| **MiniMax** `POST /v2/video_generation` | MiniMax V2 客户端；需要 content 多媒体结构。 | 全部 17 个 AutoDL workflow ID；`content / resolution / duration / ratio`。 |
+| **OpenAI** `POST /v1/videos` | 已使用 OpenAI Videos 风格客户端；统一提示词、秒数、尺寸与参考媒体。 | 26 个视频 workflow ID（含动作迁移）；`prompt / seconds / size / input_reference / audios / videos`。 |
+| **MiniMax** `POST /v2/video_generation` | MiniMax V2 客户端；需要 content 多媒体结构。 | 全部 27 个 AutoDL workflow ID；`content / resolution / duration / ratio`。 |
 
 ### 先准备
 
@@ -112,9 +112,11 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" \
 | 单图生视频（也可多图） | `minimax_h3_lightx2v_v5` | prompt + 1–9 图；1–10 秒；480p/768p/1080p。 |
 | 图+音频生视频 | `minimax_h3_image_audio_to_video_v2` | prompt，可带 0–9 图、0–3 音频；图+音频场景各传至少 1 个；1–10 秒。 |
 | 首尾帧 | `minimax_h3_lightx2v` | prompt + 恰好 2 图；1–15 秒；480p/768p。 |
+| 九图高画质 | `minimax_h3_801` / `802` / `804` | prompt + 0–9 图（801 至少 1 图）；1–15 秒；480p–1440p；`mode` 或 `style_preset`。 |
+| 角色替换 | `minimax_h3_zm_titi` / `minimax_h3_zm_titim` | 1 视频 + 角色图，prompt 可省略；5–25 秒；768p。 |
 | 动作迁移 | `wan2.2animate-v4-motion_retargeting` | 1 图+1 视频；无 prompt/可控时长；计费秒数可选（结算以实测成片时长为准）；两种格式都可直接用公开别名 `wan2.2-animate-move`，插件自行解析到该工作流。 |
 
-OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。上表是工作流能力，不能把不同协议字段混写；全部 17 项默认值、媒体范围与分辨率在后面的[工作流参数表](#工作流目录与能力边界)。
+OpenAI 用 prompt/seconds 等统一字段，MiniMax 用 content/duration 等。上表是工作流能力，不能把不同协议字段混写；全部 27 项默认值、媒体范围与分辨率在后面的[工作流参数表](#工作流目录与能力边界)。
 
 ### 快速错误排查
 
@@ -170,7 +172,7 @@ curl "$NEW_API_BASE_URL/v1/videos" \
 | OpenAI Videos | `/v1/videos` | `/v1/videos/{task_id}` | `url / results`；`GET /v1/videos/{task_id}/content` 下载视频 |
 | MiniMax V2 | `/v2/video_generation` | `/v2/query/video_generation/{task_id}` | `task.content.url` |
 
-路径决定格式，`model` 决定工作流。宿主检查密钥、归属、渠道和价格；始终用创建返回的 **New API 公开 task ID** 查询，不用上游私有 ID。16 个视频模型可用 **OpenAI Videos** 与 **MiniMax V2**；TTS（`IndexTTS-2` / `indextts2-v1`）**只用 MiniMax V2**（`POST /v2/video_generation`）。
+路径决定格式，`model` 决定工作流。宿主检查密钥、归属、渠道和价格；始终用创建返回的 **New API 公开 task ID** 查询，不用上游私有 ID。26 个视频模型可用 **OpenAI Videos** 与 **MiniMax V2**；TTS（`IndexTTS-2` / `indextts2-v1`）**只用 MiniMax V2**（`POST /v2/video_generation`）。
 
 ## 输入媒体：URL 与 Data URL
 
@@ -201,24 +203,25 @@ video = data_url("motion.mp4", "video/mp4")
 
 ### 请求参数
 
-`POST /v1/videos` 支持 16 个视频 workflow ID（15 个 H3 工作流 + 动作迁移）；不提供 TTS，也不接受 MiniMax 官方模型名。范围、默认、必需媒体与尺寸见[本文件参数表](#工作流目录与能力边界)。
+`POST /v1/videos` 支持 26 个视频 workflow ID（25 个 H3 工作流 + 动作迁移）；不提供 TTS，也不接受 MiniMax 官方模型名。范围、默认、必需媒体与尺寸见[本文件参数表](#工作流目录与能力边界)。
 
 | 字段 | 类型 | 必填 / 省略行为 | 可选值、范围与映射 |
 |---|---|---|---|
-| `model` | string | 必填，无默认 | 16 个视频 workflow ID；动作迁移的公开别名 `wan2.2-animate-move` 也可直接用（插件解析到 `wan2.2animate-v4-motion_retargeting`，无需渠道映射）。 |
-| `prompt` | string | 有文本槽位时必填，无默认 | 非空；H3 按工作流文本上限。音频同步/动作迁移没有文本槽位、拒绝此字段。 |
+| `model` | string | 必填，无默认 | 26 个视频 workflow ID；动作迁移的公开别名 `wan2.2-animate-move` 也可直接用（插件解析到 `wan2.2animate-v4-motion_retargeting`，无需渠道映射）。 |
+| `prompt` | string | 有文本槽位时必填（角色替换 titi/titim 可省略），无默认 | 非空；H3 按工作流文本上限。音频同步/动作迁移没有文本槽位、拒绝此字段。 |
 | `seconds` | number 或十进制字符串 | 均可选：H3 默认 5，动作迁移默认 5（仅预扣） | 映射 duration 或 audio_duration；工作流范围为 1–10/12/15，详见能力表。H3 非整数/超范围拒绝。动作迁移可小数，1 <= seconds <= 3600，仅预扣；结算以实测成片时长为准。 |
 | `resolution` | string | 可选，用工作流默认档位 | 全部统一档位为 480p/464p/736p/768p/832p/1080p/1088p/1440p；具体允许项见工作流分辨率组，不是每个模型都支持全部值。 |
 | `orientation` | string | 可选，用默认方向 | portrait/landscape/square；档位与方向必须存在对应组合。 |
 | `size` | string | 可选，无独立默认 | 精确 `宽x高`（小写 x），只接受尺寸表中该工作流已确认的值；与显式 resolution/orientation 冲突报错。 |
 | `input_reference` | object / object[] / string / string[] | 按工作流必需数量；无自动补图 | **推荐字段**。每个引用为 `{"image_url":"…"}` 对象（OpenAI 官方形态），或多个对象的数组（本插件扩展，用于首尾帧与多图工作流）。也接受裸 URL 字符串或字符串数组。数量规则见下文。 |
 | `audios` | string[] | 按工作流最少数量，省略视为空数组 | 每项音频 URL/Data URL，按顺序映射 ref_audio_*；不支持音频的工作流只能没有音频输入。 |
-| `videos` | string[] | 动作迁移必填 1 项；省略视为空数组 | 每项视频 URL/Data URL；当前只有动作迁移支持，videos[0]→ref_video。 |
-| `seed` | integer 或数字字符串 | 可选，省略不写入 body | 1–999999999999999，zm_u24/zm_u08 允许 0；默认值与无 seed 能力的工作流见能力表。 |
+| `videos` | string[] | 动作迁移、角色替换必填 1 项；省略视为空数组 | 每项视频 URL/Data URL；videos[0]→ref_video。 |
+| `mode` / `style_preset` / `video_subject_to_replace` | string | 可选，省略用上游默认 | 仅声明了该控制的工作流读取（801/802/803 的 `mode`，804/805 的 `style_preset`，titim 的 `video_subject_to_replace`），按官网枚举/长度校验；其他工作流的 `mode` 仍按兼容字段忽略。 |
+| `seed` | integer 或数字字符串 | 可选，省略不写入 body | 范围按工作流（多数 1–999999999999999，zm_u08/u22/u24/u30 允许 0）；无 seed 能力的工作流拒绝。 |
 | `duration` | integer 或数字字符串 | 可选，全部工作流 | `seconds` 的兼容别名（New API 字段名）；两者同时传必须一致，否则报错。 |
 | `images` | string[] | 可选，兼容别名 | **已废弃，请改用 `input_reference`。** New API Sora 风格的参考图数组，与 `input_reference` 等价并映射到同一批 ref_image_* 槽位；与 `input_reference` 同时出现报错。 |
 
-`input_reference` 与 `images` 等价，二者只能选一个；`input_reference` 是推荐写法。OpenAI 官方 `/videos` 只定义单张 `input_reference` 对象，对象数组是 AutoDL 多图/首尾帧工作流所需的扩展。`metadata`、`mode`、`user`、`n`、`response_format` 等非媒体字段会被接受并忽略（上游没有对应能力）。未知的媒体型字段名（如 `ref_image_0`、`file`）或任何未知对象、数组字段会明确报错，包括空数组，不会被静默丢弃，以免用户以为传了图却发出纯文生视频请求。例如 `reference_images`、`references`、`attachments`、`frames` 数组均不受支持，请使用已声明的 `input_reference` / `images`、`audios`、`videos`。明确忽略的兼容字段仍接受数组值。`__proto__`、`constructor`、`prototype` 一律拒绝。
+`input_reference` 与 `images` 等价，二者只能选一个；`input_reference` 是推荐写法。OpenAI 官方 `/videos` 只定义单张 `input_reference` 对象，对象数组是 AutoDL 多图/首尾帧工作流所需的扩展。`metadata`、`mode`（工作流未声明 mode 时）、`user`、`n`、`response_format` 等非媒体字段会被接受并忽略（上游没有对应能力）。未知的媒体型字段名（如 `ref_image_0`、`file`）或任何未知对象、数组字段会明确报错，包括空数组，不会被静默丢弃，以免用户以为传了图却发出纯文生视频请求。例如 `reference_images`、`references`、`attachments`、`frames` 数组均不受支持，请使用已声明的 `input_reference` / `images`、`audios`、`videos`。明确忽略的兼容字段仍接受数组值。`__proto__`、`constructor`、`prototype` 一律拒绝。
 
 H3 秒数及种子的数字字符串会转换为数值，仍须满足安全整数及工作流上下限；boolean、空字符串和科学计数法字符串不是有效秒数/种子。省略媒体不表示可绕过必需数量。
 
@@ -263,7 +266,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 
 ## MiniMax 官方 V2 API
 
-> **`model` 直接填 AutoDL 官网 17 个 workflow ID 之一；创建统一 POST /v2/video_generation，查询统一 GET /v2/query/video_generation/{task_id}，没有 workflow_id 之类的额外字段。**
+> **`model` 直接填 AutoDL 官网 27 个 workflow ID 之一；创建统一 POST /v2/video_generation，查询统一 GET /v2/query/video_generation/{task_id}，没有 workflow_id 之类的额外字段。**
 
 | `model` | 执行与校验 |
 |---|---|
@@ -275,14 +278,14 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 
 | 字段 | 类型 | 必填 / 省略行为 | 可选值、范围与映射 |
 |---|---|---|---|
-| `model` | string | 必填，无默认 | 17 个注册 workflow ID 之一；不增加 workflow_id。 |
+| `model` | string | 必填，无默认 | 27 个注册 workflow ID 之一；不增加 workflow_id。 |
 | `content` | object[] | 必填；所需文本/媒体依工作流 | 只接受下表项，最多 1 条 text；每项必须是 object，媒体数量按工作流。 |
-| `resolution` | string | 有分辨率控制时必填；TTS 拒绝 | MiniMax 档位 480P→480p、768P→768p、2K→1440p；其余扩展档位（736p/1080p/1088p/464p/832p）与完整官网标签按工作流能力表。裸 480p/768p/1440p 拒绝。 |
+| `resolution` | string | 有分辨率控制时必填；TTS 拒绝 | MiniMax 档位 480P→480p、768P→768p、2K→1440p；其余扩展档位（736p/960p/1080p/1088p/464p/832p）与完整官网标签按工作流能力表。裸 480p/768p/1440p 拒绝。 |
 | `duration` | integer（可写十进制字符串）；动作迁移为 number | 有 duration 控制的工作流可省略，默认 5；动作迁移可选，默认 5（仅预扣） | 整数范围按工作流，见能力表；动作迁移接受 1 <= duration <= 3600（可小数），仅预扣；结算以实测成片时长为准。音频同步用 audio_duration，TTS 拒绝。 |
 | `audio_duration` | integer 或数字字符串 | 仅音频同步工作流可选，默认 5 | minimax_h3_image_audio_to_video 的 1–15 秒字段；不与 duration 互换，其余工作流拒绝。 |
 | `ratio` | string | 纯文生必填；参考场景省略为 adaptive；TTS 拒绝 | adaptive/21:9/16:9/4:3/1:1/3:4/9:16；纯文生不能 adaptive，首尾帧按 adaptive，详见[比例说明](#比例与-adaptive)。 |
 | `seed` | integer 或数字字符串 | 有 seed 能力时可选，不补写默认 | 按目标 workflow 的种子范围；没有 seed 能力则拒绝。 |
-| 工作流扩展字段 | 对应 input_rules 类型 | 依工作流，如 TTS 控制方法可省略用默认 | 仅接受该 workflow 的非文本、非媒体控制，如 emo_*；不能混入 prompt/ref_image_*/ref_audio_* 等竞争字段。 |
+| 工作流扩展字段 | 对应 input_rules 类型 | 依工作流，如 TTS 控制方法可省略用默认 | 仅接受该 workflow 的非文本、非媒体控制，如 `mode`、`style_preset`、`video_subject_to_replace`、emo_*；不能混入 prompt/ref_image_*/ref_audio_* 等竞争字段。 |
 
 | `callback_url` | string | 可选，接受后忽略 | MiniMax 官方回调字段；宿主的后台轮询已负责任务状态，本适配器不转发回调，传了也不会失败。 |
 | `extra` | object | 可选，接受后忽略 | MiniMax H3-Max 的 `prompt_expansion_mode` 等选项；AutoDL 上游没有对应控制，忽略。 |
@@ -294,7 +297,7 @@ curl -f "$NEW_API_BASE_URL/v1/videos/$TASK_ID/content" \
 | `text` | text：非空 string | 不传 role | 项只允许 type/text，映射 prompt 或 prompt_text；最多 1 条，长度按工作流文本上限。 |
 | `image_url` | image_url：object，仅含 url:string | first_frame / last_frame / reference_image；省略为 first_frame | 图片 URL/Data URL；对应帧或顺序映射图片槽位。首尾帧工作流必须成对；单图工作流也可把 first_frame 映射到唯一图片槽位。 |
 | `audio_url` | audio_url：object，仅含 url:string | 必填 reference_audio | 音频 URL/Data URL，按同类项出现顺序映射音频槽位。 |
-| `video_url` | video_url：object，仅含 url:string | 必填 reference_video | 视频 URL/Data URL，仅有视频输入能力的工作流 ID（当前动作迁移）可用；其他工作流报「当前 AutoDL 适配器没有对应的 reference_video workflow」。 |
+| `video_url` | video_url：object，仅含 url:string | 必填 reference_video | 视频 URL/Data URL，仅有视频输入能力的工作流 ID（动作迁移、角色替换）可用；其他工作流报「当前 AutoDL 适配器没有对应的 reference_video workflow」。 |
 
 媒体项仅允许 type、对应媒体对象和 role；媒体对象不接受 file_id 或其他属性。type/role 的拼写区分大小写，重复帧或首尾帧混参考媒体均报错。
 
@@ -368,11 +371,10 @@ ratio 可用 adaptive/21:9/16:9/4:3/1:1/3:4/9:16：横向映横，3:4/9:16 映�
 | 扩展字段 | 类型 / 默认 | 规则 |
 |---|---|---|
 | `emo_control_method` | enum / 与音色参考音频相同 | 另可选「使用情感参考音频」（需第二音频）或「使用情感向量控制」。 |
-| `emo_afraid / emo_angry / emo_calm / emo_disgusted / emo_happy / emo_melancholic / emo_sad` | number / 0 | 每项 0–1.4。 |
+| `emo_afraid / emo_angry / emo_calm / emo_disgusted / emo_happy / emo_melancholic / emo_sad / emo_surprised` | number / 0 | 每项 0–1.4（官网 2026-11 起 surprised 也改为 0–1.4）。 |
 | `emo_random` | boolean / false | 随机情感开关。 |
-| `emo_surprised` | enum / `"0"` | 仅 `"0"`；另兼容官网样例的数字 0。 |
 
-不使用 emotion 包装。内部 emotion.mode 为 voice（默认）/reference（需第二音频）/vector，对应表中三种控制；random 为 boolean，七项数值范围同表，surprised=0 转字符串。OpenAI 入口不公开 TTS。
+不使用 emotion 包装。内部 emotion.mode 为 voice（默认）/reference（需第二音频）/vector，对应表中三种控制；random 为 boolean，八项数值范围同表。OpenAI 入口不公开 TTS。
 
 ### TTS 用法（完整示例）
 
@@ -428,29 +430,39 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 
 ## 工作流目录与能力边界
 
-**17 个工作流**，官网定义于 2026-10-08 复核。两种接口都按工作流严格校验媒体数量（上游另有业务校验）。通常图片依序 ref_image_0…N、音频 ref_audio_0…N；首尾帧为 first_frame/last_frame；动作迁移为 1 图+1 视频；TTS 为 1–2 段参考音频（音色/情感）。H3 的文本为必需非空，TTS 也接受文本；表中给最大字符数，**「文本 ✓/✗」表示该工作流是否接受文字提示词**（标 ✗ 的两个工作流传文本会报 `this workflow does not accept a text prompt`）。完整默认值、枚举与精确尺寸映射见 [workflows.json](workflows.json)；[examples.json](examples.json) 保留各工作流的统一参数示例，并在 `_formats.minimax` 中给出全部 17 个工作流的 MiniMax V2 请求体。**「MiniMax 时长字段」一列列出的是各工作流在上游的字段名**：MiniMax V2 原样使用它（因此音频同步工作流在 MiniMax 端要写 `audio_duration`），OpenAI 格式统一用 `duration`/`seconds` 并由插件自动映射。H3 可控时长是整数、默认 **5 秒**；动作迁移仅声明计费时长，TTS 无视频秒数字段。两种接口的字段名对照见下文《调用方字段与数量上限速查》。
+**27 个工作流**，官网定义于 2026-11-05 读取（快照 [official-workflows.json](official-workflows.json)，插件表 [workflows.json](workflows.json)，两种格式示例 [examples.json](examples.json)）。两种接口都按工作流严格校验媒体数量、时长、分辨率和文本长度（上游另有业务校验）。图片依序 ref_image_0…N（动作迁移与 titi 为 ref_image）、音频依序 ref_audio_0…N；首尾帧为 first_frame/last_frame；TTS 为 1–2 段参考音频（音色/情感）。「文本」列：✗ 表示传文本会报 `this workflow does not accept a text prompt`，「可选」表示可以省略。H3 可控时长是整数，默认 5 秒（角色替换默认 10 秒）；对口型工作流的 MiniMax 时长字段是 `audio_duration`。价格为官网单价（元/成片秒，高峰/低峰）。
 
-| 模型（workflow ID）与官网名称 | 媒体数量（含文本） | seconds 范围 | MiniMax 时长字段 | 分辨率（组） | 文本上限 | 默认 seed |
+| 模型（workflow ID） | 输入媒体 | 文本 | 时长（秒） | 分辨率（方向） | 额外参数 | 官方价 元/秒<br>高峰/低峰 |
 |---|---|---|---|---|---|---|
-| `minimax_h3_z0903`<br>H3六图三音频生视频（高质量音画融合） | 图 1–6, 音频 1–3，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p/1088p/1440p<br>（组 A） | ≤10000 | `757947932117433` |
-| `minimax_h3_z0902`<br>H3六图生视频（多图一致性创作） | 图 1–6，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p/1088p/1440p<br>（组 A） | ≤10000 | `629515677062289` |
-| `minimax_h3_z0901`<br>H3文生视频（高质量创意直出） | 无需媒体，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p/1088p/1440p<br>（组 B） | ≤10000 | `865339729647738` |
-| `minimax_h3_zm_u24`<br>H3多图多音频生视频(升级画质) | 图 1–9, 音频 0–3，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p<br>（组 C） | ≤10000 | `683072603085674` |
-| `minimax_h3_zm_u08`<br>H3多图多音频生视频(高速版) | 图 1–9, 音频 0–3，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p<br>（组 C） | ≤10000 | `806661161901022` |
-| `minimax_h3_b99_002`<br>H3首尾帧生成视频 | 图 2–2，文本 ✓ | 1–15 秒 | `duration` 1–15 | 736p<br>（组 D） | ≤10000 | `865339729647738` |
-| `minimax_h3_b99_001`<br>H3文生视频 | 无需媒体，文本 ✓ | 1–15 秒 | `duration` 1–15 | 736p<br>（组 D） | ≤10000 | `865339729647738` |
-| `minimax_h3_b99_003_12s`<br>H3多图生视频12秒 | 图 1–9，文本 ✓ | 1–12 秒 | `duration` 1–12 | 736p<br>（组 D） | ≤10000 | `865339729647738` |
-| `wan2.2animate-v4-motion_retargeting`<br>动作迁移<br>别名 `wan2.2-animate-move` | 图 1–1, 视频 1–1，文本 ✗ | 无时长控制 | 无 | 832p/464p<br>（组 E） | 无 | `485581468409274` |
-| `minimax_h3_image_audio_to_video_v2_15s`<br>H3多图多音频生视频15秒 | 图 0–9, 音频 0–3，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p<br>（组 F） | ≤10000 | `731242627237534` |
-| `minimax_h3_lightx2v_v5_15s`<br>H3多图生视频15秒 | 图 1–9，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p<br>（组 G） | ≤500000 | `212238359716024` |
-| `minimax_h3_image_audio_to_video_v2`<br>H3多图多音频生视频 | 图 0–9, 音频 0–3，文本 ✓ | 1–10 秒 | `duration` 1–10 | 480p/768p/1080p<br>（组 H） | ≤10000 | `731242627237534` |
-| `minimax_h3_image_audio_to_video`<br>H3图生视频-音频同步(自动对口型) | 图 1–1, 音频 1–1，文本 ✗ | 1–15 秒 | MiniMax `audio_duration` 1–15<br>OpenAI `duration` 1–15 | 480p/768p/1080p<br>（组 H） | 无 | 无 |
-| `minimax_h3_lightx2v_v5`<br>H3多图参考生视频 | 图 1–9，文本 ✓ | 1–10 秒 | `duration` 1–10 | 480p/768p/1080p<br>（组 I） | ≤500000 | `212238359716024` |
-| `minimax_h3_lightx2v_no_pic`<br>H3文生视频 | 无需媒体，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p<br>（组 G） | ≤200000 | 无 |
-| `minimax_h3_lightx2v`<br>H3首尾帧生成视频 | 图 2–2，文本 ✓ | 1–15 秒 | `duration` 1–15 | 480p/768p<br>（组 G） | ≤2000000 | `479044338007328` |
-| `indextts2-v1`<br>indextts2<br>别名 `IndexTTS-2` | 音频 1–2，文本 ✓ | 无时长参数（按成片实测计费） | 无（秒数取自成片实测） | 无 | ≤2048 | 无 |
+| `minimax_h3_z0901`<br>H3文生视频（高质量创意直出） | — | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed` | 480p 0.05/0.04<br>768p 0.08/0.06<br>1088p 0.08/0.06<br>1440p 0.09/0.07 |
+| `minimax_h3_b99_001`<br>H3文生视频 | — | ≤20000 | 1–15 | 736p（竖横方） | `seed` | 736p 0.06/0.04 |
+| `minimax_h3_lightx2v_no_pic`<br>H3文生视频 | — | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
+| `minimax_h3_801`<br>H3九图15s(无字幕版) | 图 1–9 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`mode` | 480p 0.05/0.04<br>768p 0.06/0.05<br>1088p 0.07/0.06<br>1440p 0.08/0.07 |
+| `minimax_h3_802`<br>H3九图15s(画质增强版) | 图 0–9 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`mode` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1088p 0.06/0.05<br>1440p 0.07/0.06 |
+| `minimax_h3_804`<br>H3九图15s(多模式版) | 图 0–9 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`style_preset` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1088p 0.06/0.05<br>1440p 0.07/0.06 |
+| `minimax_h3_z0902`<br>H3六图生视频（多图一致性创作） | 图 1–6 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed` | 480p 0.05/0.04<br>768p 0.08/0.06<br>1088p 0.08/0.06<br>1440p 0.09/0.07 |
+| `minimax_h3_lightx2v_v5`<br>H3多图参考生视频 | 图 1–9 | ≤20000 | 1–10 | 480p/768p/1080p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1080p 0.1/0.06 |
+| `minimax_h3_lightx2v_v5_15s`<br>H3多图生视频15秒 | 图 1–9 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
+| `minimax_h3_b99_003_12s`<br>H3多图生视频12秒 | 图 1–9 | ≤20000 | 1–15 | 736p（竖横方） | `seed` | 736p 0.06/0.04 |
+| `minimax_h3_803`<br>H3九图三音15s(画质增强版) | 图 0–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`mode` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1088p 0.06/0.05<br>1440p 0.07/0.06 |
+| `minimax_h3_805`<br>H3九图三音15s(多模式版) | 图 0–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`style_preset` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1088p 0.06/0.05<br>1440p 0.07/0.06 |
+| `minimax_h3_z0903`<br>H3六图三音频生视频（高质量音画融合） | 图 1–6，音频 1–3 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed` | 480p 0.05/0.04<br>768p 0.08/0.06<br>1088p 0.08/0.06<br>1440p 0.09/0.07 |
+| `minimax_h3_zm_u08`<br>H3多图多音频生视频(高速版) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
+| `minimax_h3_zm_u22`<br>H3多图多音频生视频(短剧带货版) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
+| `minimax_h3_zm_u24`<br>H3多图多音频生视频(升级画质) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
+| `minimax_h3_zm_u30`<br>H3多图多音频生视频(超清画质) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/960p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04<br>960p 0.09/0.08 |
+| `minimax_h3_zm_nono`<br>H3多图多音频生视频(影视画质) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/960p（竖横） | — | 480p 0.04/0.03<br>768p 0.05/0.04<br>960p 0.1/0.09 |
+| `minimax_h3_image_audio_to_video_v2`<br>H3多图多音频生视频 | 图 0–9，音频 0–3 | ≤20000 | 1–10 | 480p/768p/1080p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1080p 0.11/0.07 |
+| `minimax_h3_image_audio_to_video_v2_15s`<br>H3多图多音频生视频15秒 | 图 0–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
+| `minimax_h3_image_audio_to_video`<br>H3图生视频-音频同步(自动对口型) | 图 1，音频 1 | ✗ | 1–15 | 480p/768p/1080p（竖横） | — | 480p 0.04/0.03<br>768p 0.05/0.04<br>1080p 0.1/0.06 |
+| `minimax_h3_lightx2v`<br>H3首尾帧生成视频 | 图 2 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
+| `minimax_h3_b99_002`<br>H3首尾帧生成视频 | 图 2 | ≤20000 | 1–15 | 736p（竖横方） | `seed` | 736p 0.06/0.04 |
+| `minimax_h3_zm_titi`<br>H3全自动角色动迁替换 | 图 1，视频 1 | 可选 ≤2048 | 5–25 | 768p（竖横） | — | 768p 0.1/0.09 |
+| `minimax_h3_zm_titim`<br>H3全自动多角色动迁替换 | 图 1–9，视频 1 | 可选 ≤2048 | 5–25 | 768p（竖横） | `video_subject_to_replace` | 768p 0.11/0.1 |
+| `wan2.2animate-v4-motion_retargeting`<br>动作迁移<br>别名 `wan2.2-animate-move` | 图 1，视频 1 | ✗ | 按成片实测 | 832p 竖 / 464p 横 | `seed` | 0.04/0.03 |
+| `indextts2-v1`<br>indextts2<br>别名 `IndexTTS-2` | 音频 1–2 | ≤2048 | 按成片实测 | — | `emotion` | 0.001/0.001（最低 0.01 元） |
 
-官网 API 定义快照保存在 [official-workflows.json](official-workflows.json)，获取日期为 2026-10-07。全部 17 个工作流定义与指定 7 个模型的价格在 2026-10-08 再次从官网读取核实。未来新增工作流时，添加 `WORKFLOWS` 条目、统一字段映射及测试，不需要修改 New API。
+未来新增工作流时，用官网 `input_rules` 重新生成 `WORKFLOWS` 与上述 JSON 并补测试，不需要修改 New API。
 
 ### 调用方字段与数量上限速查
 
@@ -460,22 +472,32 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 
 | 模型（调用名） | 图片 `input_reference` | 音频 `audios` | 视频 `videos` | 文本 `prompt` | 时长（秒） |
 |---|---|---|---|---|---|
-| `minimax_h3_z0903` | 1–6 | 1–3 | — | 1–10000 | 1–15 |
-| `minimax_h3_z0902` | 1–6 | — | — | 1–10000 | 1–15 |
-| `minimax_h3_z0901` | — | — | — | 1–10000 | 1–15 |
-| `minimax_h3_zm_u24` | 1–9 | 0–3（可选） | — | 1–10000 | 1–15 |
-| `minimax_h3_zm_u08` | 1–9 | 0–3（可选） | — | 1–10000 | 1–15 |
-| `minimax_h3_b99_002` | 2（必填） | — | — | 1–10000 | 1–15 |
-| `minimax_h3_b99_001` | — | — | — | 1–10000 | 1–15 |
-| `minimax_h3_b99_003_12s` | 1–9 | — | — | 1–10000 | 1–12 |
-| `wan2.2animate-v4-motion_retargeting`<br>别名 `wan2.2-animate-move` | 1（必填） | — | 1（必填） | —（拒绝文本） | 可选 1–3600<br>（仅预扣） |
-| `minimax_h3_image_audio_to_video_v2_15s` | 0–9（可选） | 0–3（可选） | — | 1–10000 | 1–15 |
-| `minimax_h3_lightx2v_v5_15s` | 1–9 | — | — | 1–500000 | 1–15 |
-| `minimax_h3_image_audio_to_video_v2` | 0–9（可选） | 0–3（可选） | — | 1–10000 | 1–10 |
+| `minimax_h3_z0901` | — | — | — | 1–20000 | 1–15 |
+| `minimax_h3_b99_001` | — | — | — | 1–20000 | 1–15 |
+| `minimax_h3_lightx2v_no_pic` | — | — | — | 1–20000 | 1–15 |
+| `minimax_h3_801` | 1–9 | — | — | 1–20000 | 1–15 |
+| `minimax_h3_802` | 0–9（可选） | — | — | 1–20000 | 1–15 |
+| `minimax_h3_804` | 0–9（可选） | — | — | 1–20000 | 1–15 |
+| `minimax_h3_z0902` | 1–6 | — | — | 1–20000 | 1–15 |
+| `minimax_h3_lightx2v_v5` | 1–9 | — | — | 1–20000 | 1–10 |
+| `minimax_h3_lightx2v_v5_15s` | 1–9 | — | — | 1–20000 | 1–15 |
+| `minimax_h3_b99_003_12s` | 1–9 | — | — | 1–20000 | 1–15 |
+| `minimax_h3_803` | 0–9（可选） | 0–3（可选） | — | 1–20000 | 1–15 |
+| `minimax_h3_805` | 0–9（可选） | 0–3（可选） | — | 1–20000 | 1–15 |
+| `minimax_h3_z0903` | 1–6 | 1–3 | — | 1–20000 | 1–15 |
+| `minimax_h3_zm_u08` | 1–9 | 0–3（可选） | — | 1–20000 | 1–15 |
+| `minimax_h3_zm_u22` | 1–9 | 0–3（可选） | — | 1–20000 | 1–15 |
+| `minimax_h3_zm_u24` | 1–9 | 0–3（可选） | — | 1–20000 | 1–15 |
+| `minimax_h3_zm_u30` | 1–9 | 0–3（可选） | — | 1–20000 | 1–15 |
+| `minimax_h3_zm_nono` | 1–9 | 0–3（可选） | — | 1–20000 | 1–15 |
+| `minimax_h3_image_audio_to_video_v2` | 0–9（可选） | 0–3（可选） | — | 1–20000 | 1–10 |
+| `minimax_h3_image_audio_to_video_v2_15s` | 0–9（可选） | 0–3（可选） | — | 1–20000 | 1–15 |
 | `minimax_h3_image_audio_to_video` | 1（必填） | 1（必填） | — | —（拒绝文本） | 1–15 |
-| `minimax_h3_lightx2v_v5` | 1–9 | — | — | 1–500000 | 1–10 |
-| `minimax_h3_lightx2v_no_pic` | — | — | — | 1–200000 | 1–15 |
-| `minimax_h3_lightx2v` | 2（必填） | — | — | 1–2000000 | 1–15 |
+| `minimax_h3_lightx2v` | 2（必填） | — | — | 1–20000 | 1–15 |
+| `minimax_h3_b99_002` | 2（必填） | — | — | 1–20000 | 1–15 |
+| `minimax_h3_zm_titi` | 1（必填） | — | 1（必填） | 1–2048（可选） | 5–25 |
+| `minimax_h3_zm_titim` | 1–9 | — | 1（必填） | 1–2048（可选） | 5–25 |
+| `wan2.2animate-v4-motion_retargeting`<br>别名 `wan2.2-animate-move` | 1（必填） | — | 1（必填） | —（拒绝文本） | 可选 1–3600<br>（仅预扣） |
 | `indextts2-v1`<br>别名 `IndexTTS-2` | — | 1–2 | — | 1–2048 | —（按实测） |
 
 「必填」= 必须提供，缺一个就报错；TTS 的 2 段音频依序为**音色参考**（上游 `prompt_simple`）
@@ -517,41 +539,36 @@ curl -sS "$BASE/v2/query/video_generation/<task_id>" -H "Authorization: Bearer $
 
 ### 分辨率、方向与精确 size
 
-| 组 | 档位及可用方向 | 官网默认 resolution | 精确 size |
+OpenAI 用 `resolution` 档位 + `orientation`（portrait/landscape/square），各工作流可用的档位和方向见上方工作流表；MiniMax 用 `resolution` + `ratio` 选方向。官网标签有 `768p竖(768*1376)` 这类带像素的和 `768p竖` / `768p(1:1)` 这类不带像素的两种，两种格式也都接受完整官网标签。
+
+`size`（精确 `宽x高`）只对能确认像素的工作流可用，见下表；zm_* 系列、b99 系列、角色替换和动作迁移的官网只给档位或节点值不一致，只能用 resolution/orientation。相同档位在不同工作流的像素不一定相同（例如 768p 竖有 768x1344 和 768x1376 两种）。
+
+| 档位 | 方向 | `size` | 工作流 |
 |---|---|---|---|
-| A | `480p` / `768p` / `1088p` / `1440p`；竖/横 | `768p竖(768*1376)` | 支持 |
-| B | `480p` / `768p` / `1088p` / `1440p`；竖/横 | `768p竖(768*1344)` | 支持 |
-| C | `480p` / `768p`；横/竖/方 | `768p竖` | 不支持 |
-| D | `736p`；竖/横/方 | `736p竖` | 不支持 |
-| E | `832p` 竖（`464*832px(竖版)`）；`464p` 横（`832*464px(横版)`） | `464*832px(竖版)` | 不支持 |
-| F | `480p` / `768p`；竖/横 | `768p竖` | 支持 |
-| G | `480p` / `768p`；竖/横/方 | `768p竖` | 支持 |
-| H | `480p` / `768p` / `1080p`；竖/横 | `768p竖` | 支持 |
-| I | `480p` / `768p` / `1080p`；竖/横/方 | `768p竖` | 支持 |
+| 480p | 横 | `864x480` | 15 个：`minimax_h3_lightx2v_v5_15s`、`minimax_h3_image_audio_to_video_v2_15s`、`minimax_h3_lightx2v_v5`、`minimax_h3_lightx2v_no_pic`、`minimax_h3_803`、`minimax_h3_lightx2v`、`minimax_h3_image_audio_to_video_v2`、`minimax_h3_z0902`、`minimax_h3_801`、`minimax_h3_802`、`minimax_h3_805`、`minimax_h3_804`、`minimax_h3_image_audio_to_video`、`minimax_h3_z0901`、`minimax_h3_z0903` |
+| 480p | 竖 | `480x864` | 15 个：`minimax_h3_lightx2v_v5_15s`、`minimax_h3_image_audio_to_video_v2_15s`、`minimax_h3_lightx2v_v5`、`minimax_h3_lightx2v_no_pic`、`minimax_h3_803`、`minimax_h3_lightx2v`、`minimax_h3_image_audio_to_video_v2`、`minimax_h3_z0902`、`minimax_h3_801`、`minimax_h3_802`、`minimax_h3_805`、`minimax_h3_804`、`minimax_h3_image_audio_to_video`、`minimax_h3_z0901`、`minimax_h3_z0903` |
+| 480p | 方 | `480x480` | 4 个：`minimax_h3_lightx2v_v5_15s`、`minimax_h3_lightx2v_v5`、`minimax_h3_lightx2v_no_pic`、`minimax_h3_lightx2v` |
+| 768p | 横 | `1344x768` | 8 个：`minimax_h3_lightx2v_v5_15s`、`minimax_h3_image_audio_to_video_v2_15s`、`minimax_h3_lightx2v_v5`、`minimax_h3_lightx2v_no_pic`、`minimax_h3_lightx2v`、`minimax_h3_image_audio_to_video_v2`、`minimax_h3_image_audio_to_video`、`minimax_h3_z0901` |
+| 768p | 横 | `1376x768` | 7 个：`minimax_h3_803`、`minimax_h3_z0902`、`minimax_h3_801`、`minimax_h3_802`、`minimax_h3_805`、`minimax_h3_804`、`minimax_h3_z0903` |
+| 768p | 竖 | `768x1344` | 8 个：`minimax_h3_lightx2v_v5_15s`、`minimax_h3_image_audio_to_video_v2_15s`、`minimax_h3_lightx2v_v5`、`minimax_h3_lightx2v_no_pic`、`minimax_h3_lightx2v`、`minimax_h3_image_audio_to_video_v2`、`minimax_h3_image_audio_to_video`、`minimax_h3_z0901` |
+| 768p | 竖 | `768x1376` | 7 个：`minimax_h3_803`、`minimax_h3_z0902`、`minimax_h3_801`、`minimax_h3_802`、`minimax_h3_805`、`minimax_h3_804`、`minimax_h3_z0903` |
+| 768p | 方 | `768x768` | 4 个：`minimax_h3_lightx2v_v5_15s`、`minimax_h3_lightx2v_v5`、`minimax_h3_lightx2v_no_pic`、`minimax_h3_lightx2v` |
+| 1080p | 横 | `1920x1080` | 3 个：`minimax_h3_lightx2v_v5`、`minimax_h3_image_audio_to_video_v2`、`minimax_h3_image_audio_to_video` |
+| 1080p | 竖 | `1080x1920` | 3 个：`minimax_h3_lightx2v_v5`、`minimax_h3_image_audio_to_video_v2`、`minimax_h3_image_audio_to_video` |
+| 1080p | 方 | `1080x1080` | 1 个：`minimax_h3_lightx2v_v5` |
+| 1088p | 横 | `1920x1088` | 8 个：`minimax_h3_803`、`minimax_h3_z0902`、`minimax_h3_801`、`minimax_h3_802`、`minimax_h3_805`、`minimax_h3_804`、`minimax_h3_z0901`、`minimax_h3_z0903` |
+| 1088p | 竖 | `1088x1920` | 8 个：`minimax_h3_803`、`minimax_h3_z0902`、`minimax_h3_801`、`minimax_h3_802`、`minimax_h3_805`、`minimax_h3_804`、`minimax_h3_z0901`、`minimax_h3_z0903` |
+| 1440p | 横 | `2560x1440` | 8 个：`minimax_h3_803`、`minimax_h3_z0902`、`minimax_h3_801`、`minimax_h3_802`、`minimax_h3_805`、`minimax_h3_804`、`minimax_h3_z0901`、`minimax_h3_z0903` |
+| 1440p | 竖 | `1440x2560` | 8 个：`minimax_h3_803`、`minimax_h3_z0902`、`minimax_h3_801`、`minimax_h3_802`、`minimax_h3_805`、`minimax_h3_804`、`minimax_h3_z0901`、`minimax_h3_z0903` |
 
-A/B 官网标签为 `档位竖(宽*高) / 档位横(宽*高)`，如 `768p竖(768*1376)`；C/D/F/G/H/I 为 `档位竖 / 档位横 / 档位(1:1)`，按可用方向组合；E 仅表中完整标签。MiniMax 按 ratio 选方向；OpenAI 用统一档位/orientation。
-
-精确 size 如下；方形限 G/I 可用档位；C/D/E 用 resolution/orientation。1280x720 不在枚举内。
-
-| 组 | 档位 | portrait size | landscape size | square size（组） |
-|---|---|---|---|---|
-| A/B/F/G/H/I | 480p | `480x864` | `864x480` | `480x480`（G/I） |
-| A | 768p | `768x1376` | `1376x768` | — |
-| A/B | 1088p | `1088x1920` | `1920x1088` | — |
-| A/B | 1440p | `1440x2560` | `2560x1440` | — |
-| B/F/G/H/I | 768p | `768x1344` | `1344x768` | `768x768`（G/I） |
-| H/I | 1080p | `1080x1920` | `1920x1080` | `1080x1080`（I） |
-
-相同档位不保证不同工作流宽高相同。动作迁移官网标签为 464×832 / 832×464，但节点值出现 468/832，因此不承诺其精确 size。
-
-seed 上限 **999999999999999**，下限 **1**（zm_u24/zm_u08 为 **0**），默认值见工作流表；省略 seed 不补写上游 body。no_pic、image_audio_to_video、TTS 没有统一 seed 控制。
-
-**模型名与渠道路径映射：**两种格式的 `model` 都可以是**你自己在渠道里配置的映射名**，不限于插件声明的 17 个工作流 ID。解析规则是：
+**模型名与渠道路径映射：**两种格式的 `model` 都可以是**你自己在渠道里配置的映射名**，不限于插件声明的 27 个工作流 ID。解析规则是：
 
 1. 若 `model` 是插件声明的工作流 ID（或动作迁移的公开别名 `wan2.2-animate-move`），就用**该工作流自己的能力表**严格校验；
 2. 若 `model` 不在声明表里，插件不再直接拒绝，而是**按渠道映射实际指向的 workflow ID** 发往 AutoDL，校验退化为「未知工作流」级别的宽松校验；
 3. 无论哪种情况，**校验永远跟随调用方填写的已声明模型**：把一个已声明模型经渠道映射到私有 workflow ID，该模型自己的 prompt/秒数/媒体数量/分辨率上限**依然生效**，不会因为映射而放宽；
 4. 已明确移除的官方模型名（`MiniMax-H3`、`MiniMax-H3-Max`）**不可被映射复活**，仍按不支持拒绝。
+
+MiniMax 原生入口在解码时拿不到渠道映射，插件会在提交时按映射后的工作流重新校验并生成请求，因此映射名两种格式都可用，限制与直接调用该工作流一致。
 
 注意：宽松校验下，插件无法知道私有工作流的秒数范围、参考图数量与分辨率标签，这些由上游工作流自行校验；插件仍会拦截结构性问题（未知字段、媒体角色错误、凭据问题等）。
 
@@ -598,26 +615,14 @@ MiniMax（提交到 `/v2/video_generation`）：
 
 ### 价格与用量
 
-**2026-10-08 官网快照**，每格高峰/低峰 **人民币元/秒**；北京 08:00–24:00 高峰、00:00–08:00 低峰。官网对应 workflow 整数价÷1000；安装不导入价格，用户组倍率影响实扣。动作迁移价格见[动作迁移](#动作迁移与-wan22-animate-move-别名)一节。
+各工作流 2026-11-05 官网单价见[工作流表](#工作流目录与能力边界)最后一列（元/成片秒；北京 08:00–24:00 高峰、00:00–08:00 低峰；官网整数价 ÷1000）。可直接粘贴的完整表达式见 [prices.json](prices.json) 每个模型的 `expression`，包含全部档位与两个时段。安装插件不会导入价格，用户组倍率另外叠加；官网调价不会自动同步。
 
-| 模型 | 480p | 768p | 1080p |
-|---|---|---|---|
-| `minimax_h3_lightx2v_no_pic` | 0.03 / 0.02 | 0.04 / 0.03 | — |
-| `minimax_h3_lightx2v_v5` | 0.03 / 0.02 | 0.04 / 0.03 | 0.09 / 0.05 |
-| `minimax_h3_lightx2v` | 0.03 / 0.02 | 0.04 / 0.03 | — |
-| `minimax_h3_image_audio_to_video_v2` | 0.03 / 0.02 | 0.04 / 0.03 | 0.1 / 0.06 |
-| `minimax_h3_image_audio_to_video` | 0.03 / 0.02 | 0.04 / 0.03 | 0.09 / 0.05 |
-| `minimax_h3_image_audio_to_video_v2_15s` | 0.03 / 0.02 | 0.04 / 0.03 | — |
-| `minimax_h3_lightx2v_v5_15s` | 0.03 / 0.02 | 0.04 / 0.03 | — |
+H3 按请求的 seconds/resolution/orientation 计费；动作迁移按「请求时长与结算」一节的实测顺序；TTS 按成片实测秒数，下限 10 秒；失败任务的次数与秒数归零。
 
-其余 **10 个工作流**（含动作迁移与 TTS）无默认价，须按官网单价补齐，不能假定其他工作流同价。H3 沿用请求 facts（次数/seconds/resolution/orientation），TTS 无视频秒数，动作迁移按本文件「请求时长与结算」的取值顺序；失败次数/秒数归零。
-
-New API 用 tiered_expr 与 u("seconds")/u("resolution")/hour("Asia/Shanghai")；模板占位值替换为上表金额，两档模型移除第三档：
+New API 用 tiered_expr 与 u("seconds")/u("resolution")/hour("Asia/Shanghai")，例如两档分辨率：
 
 ```text
-hour("Asia/Shanghai") < 8
-  ? tier("off_peak", u("seconds") * (u("resolution") == "480p" ? <低峰480> : (u("resolution") == "768p" ? <低峰768> : <低峰1080>)))
-  : tier("peak", u("seconds") * (u("resolution") == "480p" ? <高峰480> : (u("resolution") == "768p" ? <高峰768> : <高峰1080>)))
+hour("Asia/Shanghai") < 8 ? (u("resolution") == "480p" ? tier("off_peak_480p", u("seconds") * 0.03) : (tier("off_peak_768p", u("seconds") * 0.04))) : (u("resolution") == "480p" ? tier("peak_480p", u("seconds") * 0.04) : (tier("peak_768p", u("seconds") * 0.05)))
 ```
 
 动作迁移：`hour("Asia/Shanghai") < 8 ? tier("off_peak", u("seconds") * 0.03) : tier("peak", u("seconds") * 0.04)`。CNY 展示、USDExchangeRate=1 时不换汇。预扣/结算各用当前 hour，跨 00:00/08:00 可能不同时段；AutoDL 未公开跨时段判定时点。

@@ -1,19 +1,32 @@
 {
-  "minimax_h3_z0903": {
-    "model": "minimax_h3_z0903",
-    "prompt": "一只猫在雪地中奔跑",
-    "seconds": 5,
+  "minimax_h3_zm_titim": {
+    "model": "minimax_h3_zm_titim",
+    "prompt": "保留手里的话筒",
+    "seconds": 10,
     "resolution": "768p",
     "orientation": "portrait",
-    "audios": [
-      "https://your-public-file-host.example/reference-1.wav"
+    "videos": [
+      "https://your-public-file-host.example/reference-1.mp4"
     ],
     "input_reference": {
       "image_url": "https://your-public-file-host.example/reference-1.png"
     }
   },
-  "minimax_h3_z0902": {
-    "model": "minimax_h3_z0902",
+  "minimax_h3_zm_titi": {
+    "model": "minimax_h3_zm_titi",
+    "prompt": "保留手里的话筒",
+    "seconds": 10,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "videos": [
+      "https://your-public-file-host.example/reference-1.mp4"
+    ],
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    }
+  },
+  "minimax_h3_zm_u22": {
+    "model": "minimax_h3_zm_u22",
     "prompt": "一只猫在雪地中奔跑",
     "seconds": 5,
     "resolution": "768p",
@@ -21,13 +34,6 @@
     "input_reference": {
       "image_url": "https://your-public-file-host.example/reference-1.png"
     }
-  },
-  "minimax_h3_z0901": {
-    "model": "minimax_h3_z0901",
-    "prompt": "一只猫在雪地中奔跑",
-    "seconds": 5,
-    "resolution": "768p",
-    "orientation": "portrait"
   },
   "minimax_h3_zm_u24": {
     "model": "minimax_h3_zm_u24",
@@ -39,67 +45,6 @@
       "image_url": "https://your-public-file-host.example/reference-1.png"
     }
   },
-  "minimax_h3_zm_u08": {
-    "model": "minimax_h3_zm_u08",
-    "prompt": "一只猫在雪地中奔跑",
-    "seconds": 5,
-    "resolution": "768p",
-    "orientation": "portrait",
-    "input_reference": {
-      "image_url": "https://your-public-file-host.example/reference-1.png"
-    }
-  },
-  "minimax_h3_b99_002": {
-    "model": "minimax_h3_b99_002",
-    "prompt": "一只猫在雪地中奔跑",
-    "seconds": 5,
-    "resolution": "736p",
-    "orientation": "portrait",
-    "input_reference": [
-      {
-        "image_url": "https://your-public-file-host.example/reference-1.png"
-      },
-      {
-        "image_url": "https://your-public-file-host.example/reference-2.png"
-      }
-    ]
-  },
-  "minimax_h3_b99_001": {
-    "model": "minimax_h3_b99_001",
-    "prompt": "一只猫在雪地中奔跑",
-    "seconds": 5,
-    "resolution": "736p",
-    "orientation": "portrait"
-  },
-  "minimax_h3_b99_003_12s": {
-    "model": "minimax_h3_b99_003_12s",
-    "prompt": "一只猫在雪地中奔跑",
-    "seconds": 5,
-    "resolution": "736p",
-    "orientation": "portrait",
-    "input_reference": {
-      "image_url": "https://your-public-file-host.example/reference-1.png"
-    }
-  },
-  "wan2.2animate-v4-motion_retargeting": {
-    "model": "wan2.2animate-v4-motion_retargeting",
-    "resolution": "832p",
-    "orientation": "portrait",
-    "videos": [
-      "https://your-public-file-host.example/reference-1.mp4"
-    ],
-    "input_reference": {
-      "image_url": "https://your-public-file-host.example/reference-1.png"
-    },
-    "seconds": 5
-  },
-  "minimax_h3_image_audio_to_video_v2_15s": {
-    "model": "minimax_h3_image_audio_to_video_v2_15s",
-    "prompt": "一只猫在雪地中奔跑",
-    "seconds": 5,
-    "resolution": "768p",
-    "orientation": "portrait"
-  },
   "minimax_h3_lightx2v_v5_15s": {
     "model": "minimax_h3_lightx2v_v5_15s",
     "prompt": "一只猫在雪地中奔跑",
@@ -110,21 +55,26 @@
       "image_url": "https://your-public-file-host.example/reference-1.png"
     }
   },
-  "minimax_h3_image_audio_to_video_v2": {
-    "model": "minimax_h3_image_audio_to_video_v2",
+  "minimax_h3_image_audio_to_video_v2_15s": {
+    "model": "minimax_h3_image_audio_to_video_v2_15s",
     "prompt": "一只猫在雪地中奔跑",
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait"
   },
-  "minimax_h3_image_audio_to_video": {
-    "model": "minimax_h3_image_audio_to_video",
+  "indextts2-v1": {
+    "model": "indextts2-v1",
+    "prompt": "你好，这是语音合成测试",
+    "audios": [
+      "https://your-public-file-host.example/reference-1.wav"
+    ]
+  },
+  "minimax_h3_zm_nono": {
+    "model": "minimax_h3_zm_nono",
+    "prompt": "一只猫在雪地中奔跑",
     "seconds": 5,
     "resolution": "768p",
     "orientation": "portrait",
-    "audios": [
-      "https://your-public-file-host.example/reference-1.wav"
-    ],
     "input_reference": {
       "image_url": "https://your-public-file-host.example/reference-1.png"
     }
@@ -146,6 +96,23 @@
     "resolution": "768p",
     "orientation": "portrait"
   },
+  "minimax_h3_zm_u30": {
+    "model": "minimax_h3_zm_u30",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    }
+  },
+  "minimax_h3_803": {
+    "model": "minimax_h3_803",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
   "minimax_h3_lightx2v": {
     "model": "minimax_h3_lightx2v",
     "prompt": "一只猫在雪地中奔跑",
@@ -161,17 +128,196 @@
       }
     ]
   },
-  "indextts2-v1": {
-    "model": "indextts2-v1",
-    "prompt": "你好，这是语音合成测试",
+  "minimax_h3_zm_u08": {
+    "model": "minimax_h3_zm_u08",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    }
+  },
+  "minimax_h3_image_audio_to_video_v2": {
+    "model": "minimax_h3_image_audio_to_video_v2",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_z0902": {
+    "model": "minimax_h3_z0902",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    }
+  },
+  "minimax_h3_801": {
+    "model": "minimax_h3_801",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    }
+  },
+  "minimax_h3_802": {
+    "model": "minimax_h3_802",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_805": {
+    "model": "minimax_h3_805",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_804": {
+    "model": "minimax_h3_804",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_image_audio_to_video": {
+    "model": "minimax_h3_image_audio_to_video",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
     "audios": [
       "https://your-public-file-host.example/reference-1.wav"
+    ],
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    }
+  },
+  "minimax_h3_b99_002": {
+    "model": "minimax_h3_b99_002",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "736p",
+    "orientation": "portrait",
+    "input_reference": [
+      {
+        "image_url": "https://your-public-file-host.example/reference-1.png"
+      },
+      {
+        "image_url": "https://your-public-file-host.example/reference-2.png"
+      }
     ]
+  },
+  "wan2.2animate-v4-motion_retargeting": {
+    "model": "wan2.2animate-v4-motion_retargeting",
+    "resolution": "832p",
+    "orientation": "portrait",
+    "videos": [
+      "https://your-public-file-host.example/reference-1.mp4"
+    ],
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    },
+    "seconds": 5
+  },
+  "minimax_h3_z0901": {
+    "model": "minimax_h3_z0901",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait"
+  },
+  "minimax_h3_z0903": {
+    "model": "minimax_h3_z0903",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "768p",
+    "orientation": "portrait",
+    "audios": [
+      "https://your-public-file-host.example/reference-1.wav"
+    ],
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    }
+  },
+  "minimax_h3_b99_003_12s": {
+    "model": "minimax_h3_b99_003_12s",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "736p",
+    "orientation": "portrait",
+    "input_reference": {
+      "image_url": "https://your-public-file-host.example/reference-1.png"
+    }
+  },
+  "minimax_h3_b99_001": {
+    "model": "minimax_h3_b99_001",
+    "prompt": "一只猫在雪地中奔跑",
+    "seconds": 5,
+    "resolution": "736p",
+    "orientation": "portrait"
   },
   "_formats": {
     "minimax": {
-      "minimax_h3_z0903": {
-        "model": "minimax_h3_z0903",
+      "minimax_h3_zm_titim": {
+        "model": "minimax_h3_zm_titim",
+        "content": [
+          {
+            "type": "text",
+            "text": "保留手里的话筒"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          },
+          {
+            "type": "video_url",
+            "video_url": {
+              "url": "https://your-public-file-host.example/reference-1.mp4"
+            },
+            "role": "reference_video"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 10
+      },
+      "minimax_h3_zm_titi": {
+        "model": "minimax_h3_zm_titi",
+        "content": [
+          {
+            "type": "text",
+            "text": "保留手里的话筒"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          },
+          {
+            "type": "video_url",
+            "video_url": {
+              "url": "https://your-public-file-host.example/reference-1.mp4"
+            },
+            "role": "reference_video"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 10
+      },
+      "minimax_h3_zm_u22": {
+        "model": "minimax_h3_zm_u22",
         "content": [
           {
             "type": "text",
@@ -183,44 +329,6 @@
               "url": "https://your-public-file-host.example/reference-1.png"
             },
             "role": "reference_image"
-          },
-          {
-            "type": "audio_url",
-            "audio_url": {
-              "url": "https://your-public-file-host.example/reference-1.wav"
-            },
-            "role": "reference_audio"
-          }
-        ],
-        "resolution": "768P",
-        "ratio": "9:16",
-        "duration": 5
-      },
-      "minimax_h3_z0902": {
-        "model": "minimax_h3_z0902",
-        "content": [
-          {
-            "type": "text",
-            "text": "一只猫在雪地中奔跑"
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://your-public-file-host.example/reference-1.png"
-            },
-            "role": "reference_image"
-          }
-        ],
-        "resolution": "768P",
-        "ratio": "9:16",
-        "duration": 5
-      },
-      "minimax_h3_z0901": {
-        "model": "minimax_h3_z0901",
-        "content": [
-          {
-            "type": "text",
-            "text": "一只猫在雪地中奔跑"
           }
         ],
         "resolution": "768P",
@@ -246,116 +354,6 @@
         "ratio": "9:16",
         "duration": 5
       },
-      "minimax_h3_zm_u08": {
-        "model": "minimax_h3_zm_u08",
-        "content": [
-          {
-            "type": "text",
-            "text": "一只猫在雪地中奔跑"
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://your-public-file-host.example/reference-1.png"
-            },
-            "role": "reference_image"
-          }
-        ],
-        "resolution": "768P",
-        "ratio": "9:16",
-        "duration": 5
-      },
-      "minimax_h3_b99_002": {
-        "model": "minimax_h3_b99_002",
-        "content": [
-          {
-            "type": "text",
-            "text": "一只猫在雪地中奔跑"
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://your-public-file-host.example/reference-1.png"
-            },
-            "role": "first_frame"
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://your-public-file-host.example/reference-2.png"
-            },
-            "role": "last_frame"
-          }
-        ],
-        "resolution": "736p",
-        "ratio": "9:16",
-        "duration": 5
-      },
-      "minimax_h3_b99_001": {
-        "model": "minimax_h3_b99_001",
-        "content": [
-          {
-            "type": "text",
-            "text": "一只猫在雪地中奔跑"
-          }
-        ],
-        "resolution": "736p",
-        "ratio": "9:16",
-        "duration": 5
-      },
-      "minimax_h3_b99_003_12s": {
-        "model": "minimax_h3_b99_003_12s",
-        "content": [
-          {
-            "type": "text",
-            "text": "一只猫在雪地中奔跑"
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://your-public-file-host.example/reference-1.png"
-            },
-            "role": "reference_image"
-          }
-        ],
-        "resolution": "736p",
-        "ratio": "9:16",
-        "duration": 5
-      },
-      "wan2.2animate-v4-motion_retargeting": {
-        "model": "wan2.2animate-v4-motion_retargeting",
-        "content": [
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://your-public-file-host.example/reference-1.png"
-            },
-            "role": "reference_image"
-          },
-          {
-            "type": "video_url",
-            "video_url": {
-              "url": "https://your-public-file-host.example/reference-1.mp4"
-            },
-            "role": "reference_video"
-          }
-        ],
-        "resolution": "832p",
-        "ratio": "9:16",
-        "duration": 5
-      },
-      "minimax_h3_image_audio_to_video_v2_15s": {
-        "model": "minimax_h3_image_audio_to_video_v2_15s",
-        "content": [
-          {
-            "type": "text",
-            "text": "一只猫在雪地中奔跑"
-          }
-        ],
-        "resolution": "768P",
-        "ratio": "9:16",
-        "duration": 5
-      },
       "minimax_h3_lightx2v_v5_15s": {
         "model": "minimax_h3_lightx2v_v5_15s",
         "content": [
@@ -375,8 +373,8 @@
         "ratio": "9:16",
         "duration": 5
       },
-      "minimax_h3_image_audio_to_video_v2": {
-        "model": "minimax_h3_image_audio_to_video_v2",
+      "minimax_h3_image_audio_to_video_v2_15s": {
+        "model": "minimax_h3_image_audio_to_video_v2_15s",
         "content": [
           {
             "type": "text",
@@ -387,15 +385,12 @@
         "ratio": "9:16",
         "duration": 5
       },
-      "minimax_h3_image_audio_to_video": {
-        "model": "minimax_h3_image_audio_to_video",
+      "indextts2-v1": {
+        "model": "indextts2-v1",
         "content": [
           {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://your-public-file-host.example/reference-1.png"
-            },
-            "role": "reference_image"
+            "type": "text",
+            "text": "你好，这是语音合成测试"
           },
           {
             "type": "audio_url",
@@ -405,9 +400,26 @@
             "role": "reference_audio"
           }
         ],
+        "emo_control_method": "与音色参考音频相同"
+      },
+      "minimax_h3_zm_nono": {
+        "model": "minimax_h3_zm_nono",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          }
+        ],
         "resolution": "768P",
         "ratio": "9:16",
-        "audio_duration": 5
+        "duration": 5
       },
       "minimax_h3_lightx2v_v5": {
         "model": "minimax_h3_lightx2v_v5",
@@ -430,6 +442,37 @@
       },
       "minimax_h3_lightx2v_no_pic": {
         "model": "minimax_h3_lightx2v_no_pic",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_zm_u30": {
+        "model": "minimax_h3_zm_u30",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_803": {
+        "model": "minimax_h3_803",
         "content": [
           {
             "type": "text",
@@ -466,12 +509,120 @@
         "ratio": "9:16",
         "duration": 5
       },
-      "indextts2-v1": {
-        "model": "indextts2-v1",
+      "minimax_h3_zm_u08": {
+        "model": "minimax_h3_zm_u08",
         "content": [
           {
             "type": "text",
-            "text": "你好，这是语音合成测试"
+            "text": "一只猫在雪地中奔跑"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_image_audio_to_video_v2": {
+        "model": "minimax_h3_image_audio_to_video_v2",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_z0902": {
+        "model": "minimax_h3_z0902",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_801": {
+        "model": "minimax_h3_801",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_802": {
+        "model": "minimax_h3_802",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_805": {
+        "model": "minimax_h3_805",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_804": {
+        "model": "minimax_h3_804",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_image_audio_to_video": {
+        "model": "minimax_h3_image_audio_to_video",
+        "content": [
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
           },
           {
             "type": "audio_url",
@@ -481,7 +632,126 @@
             "role": "reference_audio"
           }
         ],
-        "emo_control_method": "与音色参考音频相同"
+        "resolution": "768P",
+        "ratio": "9:16",
+        "audio_duration": 5
+      },
+      "minimax_h3_b99_002": {
+        "model": "minimax_h3_b99_002",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "first_frame"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-2.png"
+            },
+            "role": "last_frame"
+          }
+        ],
+        "resolution": "736p",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "wan2.2animate-v4-motion_retargeting": {
+        "model": "wan2.2animate-v4-motion_retargeting",
+        "content": [
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          },
+          {
+            "type": "video_url",
+            "video_url": {
+              "url": "https://your-public-file-host.example/reference-1.mp4"
+            },
+            "role": "reference_video"
+          }
+        ],
+        "resolution": "832p",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_z0901": {
+        "model": "minimax_h3_z0901",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_z0903": {
+        "model": "minimax_h3_z0903",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          },
+          {
+            "type": "audio_url",
+            "audio_url": {
+              "url": "https://your-public-file-host.example/reference-1.wav"
+            },
+            "role": "reference_audio"
+          }
+        ],
+        "resolution": "768P",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_b99_003_12s": {
+        "model": "minimax_h3_b99_003_12s",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://your-public-file-host.example/reference-1.png"
+            },
+            "role": "reference_image"
+          }
+        ],
+        "resolution": "736p",
+        "ratio": "9:16",
+        "duration": 5
+      },
+      "minimax_h3_b99_001": {
+        "model": "minimax_h3_b99_001",
+        "content": [
+          {
+            "type": "text",
+            "text": "一只猫在雪地中奔跑"
+          }
+        ],
+        "resolution": "736p",
+        "ratio": "9:16",
+        "duration": 5
       }
     },
     "minimax_api": {

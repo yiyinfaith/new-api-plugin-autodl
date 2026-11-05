@@ -1,10 +1,243 @@
 {
-  "verified_on": "2026-10-07",
+  "verified_on": "2026-11-05",
   "source": "https://www.autodl.art/api/v1/comfyui/workflows",
   "workflows": {
-    "minimax_h3_z0903": {
-      "workflowId": "minimax_h3_z0903",
-      "name": "H3六图三音频生视频（高质量音画融合）",
+    "minimax_h3_zm_titim": {
+      "workflowId": "minimax_h3_zm_titim",
+      "name": "H3全自动多角色动迁替换",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [
+        "ref_video"
+      ],
+      "resolutions": [
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 10,
+          "min": 5,
+          "max": 25
+        },
+        "prompt": {
+          "type": "prompt",
+          "required": false,
+          "default": " ",
+          "min_length": 1,
+          "max_length": 2048
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": true,
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_video": {
+          "type": "video",
+          "required": true,
+          "accept_types": [
+            "video/mp4",
+            "video/webm"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖",
+          "options": [
+            "768p竖",
+            "768p横"
+          ]
+        },
+        "video_subject_to_replace": {
+          "type": "string",
+          "required": false,
+          "default": "person",
+          "min_length": 1,
+          "max_length": 100
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_zm_titi": {
+      "workflowId": "minimax_h3_zm_titi",
+      "name": "H3全自动角色动迁替换",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [
+        "ref_video"
+      ],
+      "resolutions": [
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 10,
+          "min": 5,
+          "max": 25
+        },
+        "prompt": {
+          "type": "prompt",
+          "required": false,
+          "default": " ",
+          "min_length": 1,
+          "max_length": 2048
+        },
+        "ref_image": {
+          "type": "image",
+          "required": true,
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_video": {
+          "type": "video",
+          "required": true,
+          "accept_types": [
+            "video/mp4",
+            "video/webm"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖",
+          "options": [
+            "768p竖",
+            "768p横"
+          ]
+        }
+      },
+      "input_reference": [
+        "ref_image"
+      ]
+    },
+    "minimax_h3_zm_u22": {
+      "workflowId": "minimax_h3_zm_u22",
+      "name": "H3多图多音频生视频(短剧带货版)",
       "type": "video",
       "timeoutSeconds": 1800,
       "promptField": "prompt",
@@ -18,51 +251,23 @@
       "resolutions": [
         {
           "resolution": "480p",
-          "orientation": "portrait",
-          "upstream": "480p竖(480*864)",
-          "size": "480x864"
+          "orientation": "landscape",
+          "upstream": "480p横"
         },
         {
           "resolution": "480p",
-          "orientation": "landscape",
-          "upstream": "480p横(864*480)",
-          "size": "864x480"
-        },
-        {
-          "resolution": "768p",
           "orientation": "portrait",
-          "upstream": "768p竖(768*1376)",
-          "size": "768x1376"
+          "upstream": "480p竖"
         },
         {
           "resolution": "768p",
           "orientation": "landscape",
-          "upstream": "768p横(1376*768)",
-          "size": "1376x768"
+          "upstream": "768p横"
         },
         {
-          "resolution": "1088p",
+          "resolution": "768p",
           "orientation": "portrait",
-          "upstream": "1088p竖(1088*1920)",
-          "size": "1088x1920"
-        },
-        {
-          "resolution": "1088p",
-          "orientation": "landscape",
-          "upstream": "1088p横(1920*1088)",
-          "size": "1920x1088"
-        },
-        {
-          "resolution": "1440p",
-          "orientation": "portrait",
-          "upstream": "1440p竖(1440*2560)",
-          "size": "1440x2560"
-        },
-        {
-          "resolution": "1440p",
-          "orientation": "landscape",
-          "upstream": "1440p横(2560*1440)",
-          "size": "2560x1440"
+          "upstream": "768p竖"
         }
       ],
       "rules": {
@@ -74,19 +279,18 @@
           "max": 15
         },
         "prompt": {
-          "type": "string",
+          "type": "prompt",
           "required": true,
           "min_length": 1,
-          "max_length": 10000
+          "max_length": 20000
         },
         "ref_audio_0": {
           "type": "audio",
-          "required": true,
+          "required": false,
           "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
           "accept_types": [
             "audio/mpeg",
-            "audio/wav",
-            "audio/flac"
+            "audio/wav"
           ]
         },
         "ref_audio_1": {
@@ -95,8 +299,7 @@
           "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
           "accept_types": [
             "audio/mpeg",
-            "audio/wav",
-            "audio/flac"
+            "audio/wav"
           ]
         },
         "ref_audio_2": {
@@ -105,8 +308,7 @@
           "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
           "accept_types": [
             "audio/mpeg",
-            "audio/wav",
-            "audio/flac"
+            "audio/wav"
           ]
         },
         "ref_image_0": {
@@ -169,26 +371,52 @@
             "image/webp"
           ]
         },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
         "resolution": {
           "type": "enum",
           "required": false,
-          "default": "768p竖(768*1376)",
+          "default": "768p竖",
           "options": [
-            "480p竖(480*864)",
-            "480p横(864*480)",
-            "768p竖(768*1376)",
-            "768p横(1376*768)",
-            "1088p竖(1088*1920)",
-            "1088p横(1920*1088)",
-            "1440p竖(1440*2560)",
-            "1440p横(2560*1440)"
+            "480p横",
+            "480p竖",
+            "768p横",
+            "768p竖"
           ]
         },
         "seed": {
           "type": "integer",
           "required": false,
-          "default": 757947932117433,
-          "min": 1,
+          "default": 836327771708943,
+          "min": 0,
           "max": 999999999999999
         }
       },
@@ -198,271 +426,11 @@
         "ref_image_2",
         "ref_image_3",
         "ref_image_4",
-        "ref_image_5"
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
       ]
-    },
-    "minimax_h3_z0902": {
-      "workflowId": "minimax_h3_z0902",
-      "name": "H3六图生视频（多图一致性创作）",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "audios": [],
-      "videos": [],
-      "resolutions": [
-        {
-          "resolution": "480p",
-          "orientation": "portrait",
-          "upstream": "480p竖(480*864)",
-          "size": "480x864"
-        },
-        {
-          "resolution": "480p",
-          "orientation": "landscape",
-          "upstream": "480p横(864*480)",
-          "size": "864x480"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "portrait",
-          "upstream": "768p竖(768*1376)",
-          "size": "768x1376"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "landscape",
-          "upstream": "768p横(1376*768)",
-          "size": "1376x768"
-        },
-        {
-          "resolution": "1088p",
-          "orientation": "portrait",
-          "upstream": "1088p竖(1088*1920)",
-          "size": "1088x1920"
-        },
-        {
-          "resolution": "1088p",
-          "orientation": "landscape",
-          "upstream": "1088p横(1920*1088)",
-          "size": "1920x1088"
-        },
-        {
-          "resolution": "1440p",
-          "orientation": "portrait",
-          "upstream": "1440p竖(1440*2560)",
-          "size": "1440x2560"
-        },
-        {
-          "resolution": "1440p",
-          "orientation": "landscape",
-          "upstream": "1440p横(2560*1440)",
-          "size": "2560x1440"
-        }
-      ],
-      "rules": {
-        "duration": {
-          "type": "integer",
-          "required": false,
-          "default": 5,
-          "min": 1,
-          "max": 15
-        },
-        "prompt": {
-          "type": "string",
-          "required": true,
-          "min_length": 1,
-          "max_length": 10000
-        },
-        "ref_image_0": {
-          "type": "image",
-          "required": true,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_1": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_2": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_3": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_4": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_5": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "resolution": {
-          "type": "enum",
-          "required": false,
-          "default": "768p竖(768*1376)",
-          "options": [
-            "480p竖(480*864)",
-            "480p横(864*480)",
-            "768p竖(768*1376)",
-            "768p横(1376*768)",
-            "1088p竖(1088*1920)",
-            "1088p横(1920*1088)",
-            "1440p竖(1440*2560)",
-            "1440p横(2560*1440)"
-          ]
-        },
-        "seed": {
-          "type": "integer",
-          "required": false,
-          "default": 629515677062289,
-          "min": 1,
-          "max": 999999999999999
-        }
-      },
-      "input_reference": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5"
-      ]
-    },
-    "minimax_h3_z0901": {
-      "workflowId": "minimax_h3_z0901",
-      "name": "H3文生视频（高质量创意直出）",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "audios": [],
-      "videos": [],
-      "resolutions": [
-        {
-          "resolution": "480p",
-          "orientation": "portrait",
-          "upstream": "480p竖(480*864)",
-          "size": "480x864"
-        },
-        {
-          "resolution": "480p",
-          "orientation": "landscape",
-          "upstream": "480p横(864*480)",
-          "size": "864x480"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "portrait",
-          "upstream": "768p竖(768*1344)",
-          "size": "768x1344"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "landscape",
-          "upstream": "768p横(1344*768)",
-          "size": "1344x768"
-        },
-        {
-          "resolution": "1088p",
-          "orientation": "portrait",
-          "upstream": "1088p竖(1088*1920)",
-          "size": "1088x1920"
-        },
-        {
-          "resolution": "1088p",
-          "orientation": "landscape",
-          "upstream": "1088p横(1920*1088)",
-          "size": "1920x1088"
-        },
-        {
-          "resolution": "1440p",
-          "orientation": "portrait",
-          "upstream": "1440p竖(1440*2560)",
-          "size": "1440x2560"
-        },
-        {
-          "resolution": "1440p",
-          "orientation": "landscape",
-          "upstream": "1440p横(2560*1440)",
-          "size": "2560x1440"
-        }
-      ],
-      "rules": {
-        "duration": {
-          "type": "integer",
-          "required": false,
-          "default": 5,
-          "min": 1,
-          "max": 15
-        },
-        "prompt": {
-          "type": "string",
-          "required": true,
-          "min_length": 1,
-          "max_length": 10000
-        },
-        "resolution": {
-          "type": "enum",
-          "required": false,
-          "default": "768p竖(768*1344)",
-          "options": [
-            "480p竖(480*864)",
-            "480p横(864*480)",
-            "768p竖(768*1344)",
-            "768p横(1344*768)",
-            "1088p竖(1088*1920)",
-            "1088p横(1920*1088)",
-            "1440p竖(1440*2560)",
-            "1440p横(2560*1440)"
-          ]
-        },
-        "seed": {
-          "type": "integer",
-          "required": false,
-          "default": 865339729647738,
-          "min": 1,
-          "max": 999999999999999
-        }
-      },
-      "input_reference": []
     },
     "minimax_h3_zm_u24": {
       "workflowId": "minimax_h3_zm_u24",
@@ -521,7 +489,7 @@
           "type": "prompt",
           "required": true,
           "min_length": 1,
-          "max_length": 10000
+          "max_length": 20000
         },
         "ref_audio_0": {
           "type": "audio",
@@ -676,790 +644,6 @@
         "ref_image_8"
       ]
     },
-    "minimax_h3_zm_u08": {
-      "workflowId": "minimax_h3_zm_u08",
-      "name": "H3多图多音频生视频(高速版)",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "audios": [
-        "ref_audio_0",
-        "ref_audio_1",
-        "ref_audio_2"
-      ],
-      "videos": [],
-      "resolutions": [
-        {
-          "resolution": "480p",
-          "orientation": "landscape",
-          "upstream": "480p横"
-        },
-        {
-          "resolution": "480p",
-          "orientation": "portrait",
-          "upstream": "480p竖"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "landscape",
-          "upstream": "768p横"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "portrait",
-          "upstream": "768p竖"
-        },
-        {
-          "resolution": "480p",
-          "orientation": "square",
-          "upstream": "480p(1:1)"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "square",
-          "upstream": "768p(1:1)"
-        }
-      ],
-      "rules": {
-        "duration": {
-          "type": "integer",
-          "required": false,
-          "default": 5,
-          "min": 1,
-          "max": 15
-        },
-        "prompt": {
-          "type": "prompt",
-          "required": true,
-          "min_length": 1,
-          "max_length": 10000
-        },
-        "ref_audio_0": {
-          "type": "audio",
-          "required": false,
-          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-          "accept_types": [
-            "audio/mpeg",
-            "audio/wav",
-            "audio/flac"
-          ]
-        },
-        "ref_audio_1": {
-          "type": "audio",
-          "required": false,
-          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-          "accept_types": [
-            "audio/mpeg",
-            "audio/wav",
-            "audio/flac"
-          ]
-        },
-        "ref_audio_2": {
-          "type": "audio",
-          "required": false,
-          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-          "accept_types": [
-            "audio/mpeg",
-            "audio/wav",
-            "audio/flac"
-          ]
-        },
-        "ref_image_0": {
-          "type": "image",
-          "required": true,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_1": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_2": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_3": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_4": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_5": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_6": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_7": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_8": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "resolution": {
-          "type": "enum",
-          "required": false,
-          "default": "768p竖",
-          "options": [
-            "480p横",
-            "480p竖",
-            "768p横",
-            "768p竖",
-            "480p(1:1)",
-            "768p(1:1)"
-          ]
-        },
-        "seed": {
-          "type": "integer",
-          "required": false,
-          "default": 806661161901022,
-          "min": 0,
-          "max": 999999999999999
-        }
-      },
-      "input_reference": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5",
-        "ref_image_6",
-        "ref_image_7",
-        "ref_image_8"
-      ]
-    },
-    "minimax_h3_b99_002": {
-      "workflowId": "minimax_h3_b99_002",
-      "name": "H3首尾帧生成视频",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "audios": [],
-      "videos": [],
-      "resolutions": [
-        {
-          "resolution": "736p",
-          "orientation": "portrait",
-          "upstream": "736p竖"
-        },
-        {
-          "resolution": "736p",
-          "orientation": "landscape",
-          "upstream": "736p横"
-        },
-        {
-          "resolution": "736p",
-          "orientation": "square",
-          "upstream": "736p(1:1)"
-        }
-      ],
-      "rules": {
-        "duration": {
-          "type": "integer",
-          "required": false,
-          "default": 5,
-          "min": 1,
-          "max": 15
-        },
-        "first_frame": {
-          "type": "image",
-          "required": true,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "last_frame": {
-          "type": "image",
-          "required": true,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "prompt": {
-          "type": "string",
-          "required": true,
-          "min_length": 1,
-          "max_length": 10000
-        },
-        "resolution": {
-          "type": "enum",
-          "required": false,
-          "default": "736p竖",
-          "options": [
-            "736p竖",
-            "736p横",
-            "736p(1:1)"
-          ]
-        },
-        "seed": {
-          "type": "integer",
-          "required": false,
-          "default": 865339729647738,
-          "min": 1,
-          "max": 999999999999999
-        }
-      },
-      "input_reference": [
-        "first_frame",
-        "last_frame"
-      ]
-    },
-    "minimax_h3_b99_001": {
-      "workflowId": "minimax_h3_b99_001",
-      "name": "H3文生视频",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "audios": [],
-      "videos": [],
-      "resolutions": [
-        {
-          "resolution": "736p",
-          "orientation": "portrait",
-          "upstream": "736p竖"
-        },
-        {
-          "resolution": "736p",
-          "orientation": "landscape",
-          "upstream": "736p横"
-        },
-        {
-          "resolution": "736p",
-          "orientation": "square",
-          "upstream": "736p(1:1)"
-        }
-      ],
-      "rules": {
-        "duration": {
-          "type": "integer",
-          "required": false,
-          "default": 5,
-          "min": 1,
-          "max": 15
-        },
-        "prompt": {
-          "type": "string",
-          "required": true,
-          "min_length": 1,
-          "max_length": 10000
-        },
-        "resolution": {
-          "type": "enum",
-          "required": false,
-          "default": "736p竖",
-          "options": [
-            "736p竖",
-            "736p横",
-            "736p(1:1)"
-          ]
-        },
-        "seed": {
-          "type": "integer",
-          "required": false,
-          "default": 865339729647738,
-          "min": 1,
-          "max": 999999999999999
-        }
-      },
-      "input_reference": []
-    },
-    "minimax_h3_b99_003_12s": {
-      "workflowId": "minimax_h3_b99_003_12s",
-      "name": "H3多图生视频12秒",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "audios": [],
-      "videos": [],
-      "resolutions": [
-        {
-          "resolution": "736p",
-          "orientation": "portrait",
-          "upstream": "736p竖"
-        },
-        {
-          "resolution": "736p",
-          "orientation": "landscape",
-          "upstream": "736p横"
-        },
-        {
-          "resolution": "736p",
-          "orientation": "square",
-          "upstream": "736p(1:1)"
-        }
-      ],
-      "rules": {
-        "duration": {
-          "type": "integer",
-          "required": false,
-          "default": 5,
-          "min": 1,
-          "max": 12
-        },
-        "prompt": {
-          "type": "string",
-          "required": true,
-          "min_length": 1,
-          "max_length": 10000
-        },
-        "ref_image_0": {
-          "type": "image",
-          "required": true,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_1": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_2": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_3": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_4": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_5": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_6": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_7": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_8": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "resolution": {
-          "type": "enum",
-          "required": false,
-          "default": "736p竖",
-          "options": [
-            "736p竖",
-            "736p横",
-            "736p(1:1)"
-          ]
-        },
-        "seed": {
-          "type": "integer",
-          "required": false,
-          "default": 865339729647738,
-          "min": 1,
-          "max": 999999999999999
-        }
-      },
-      "input_reference": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5",
-        "ref_image_6",
-        "ref_image_7",
-        "ref_image_8"
-      ]
-    },
-    "wan2.2animate-v4-motion_retargeting": {
-      "workflowId": "wan2.2animate-v4-motion_retargeting",
-      "name": "动作迁移",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": null,
-      "secondsField": null,
-      "audios": [],
-      "videos": [
-        "ref_video"
-      ],
-      "resolutions": [
-        {
-          "resolution": "832p",
-          "orientation": "portrait",
-          "upstream": "464*832px(竖版)"
-        },
-        {
-          "resolution": "464p",
-          "orientation": "landscape",
-          "upstream": "832*464px(横版)"
-        }
-      ],
-      "rules": {
-        "ref_image": {
-          "type": "image",
-          "required": true,
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_video": {
-          "type": "video",
-          "required": true,
-          "accept_types": [
-            "video/mp4",
-            "video/webm"
-          ]
-        },
-        "resolution": {
-          "type": "enum",
-          "required": false,
-          "default": "464*832px(竖版)",
-          "options": [
-            "464*832px(竖版)",
-            "832*464px(横版)"
-          ]
-        },
-        "seed": {
-          "type": "integer",
-          "required": false,
-          "default": 485581468409274,
-          "min": 1,
-          "max": 999999999999999
-        }
-      },
-      "input_reference": [
-        "ref_image"
-      ]
-    },
-    "minimax_h3_image_audio_to_video_v2_15s": {
-      "workflowId": "minimax_h3_image_audio_to_video_v2_15s",
-      "name": "H3多图多音频生视频15秒",
-      "type": "video",
-      "timeoutSeconds": 1800,
-      "promptField": "prompt",
-      "secondsField": "duration",
-      "audios": [
-        "ref_audio_0",
-        "ref_audio_1",
-        "ref_audio_2"
-      ],
-      "videos": [],
-      "resolutions": [
-        {
-          "resolution": "480p",
-          "orientation": "portrait",
-          "upstream": "480p竖",
-          "size": "480x864"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "portrait",
-          "upstream": "768p竖",
-          "size": "768x1344"
-        },
-        {
-          "resolution": "480p",
-          "orientation": "landscape",
-          "upstream": "480p横",
-          "size": "864x480"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "landscape",
-          "upstream": "768p横",
-          "size": "1344x768"
-        }
-      ],
-      "rules": {
-        "duration": {
-          "type": "integer",
-          "required": false,
-          "default": 5,
-          "min": 1,
-          "max": 15
-        },
-        "prompt": {
-          "type": "prompt",
-          "required": true,
-          "min_length": 1,
-          "max_length": 10000
-        },
-        "ref_audio_0": {
-          "type": "audio",
-          "required": false,
-          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-          "accept_types": [
-            "audio/mpeg",
-            "audio/wav",
-            "audio/mp4",
-            "audio/flac"
-          ]
-        },
-        "ref_audio_1": {
-          "type": "audio",
-          "required": false,
-          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-          "accept_types": [
-            "audio/mpeg",
-            "audio/wav",
-            "audio/mp4",
-            "audio/flac"
-          ]
-        },
-        "ref_audio_2": {
-          "type": "audio",
-          "required": false,
-          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-          "accept_types": [
-            "audio/mpeg",
-            "audio/wav",
-            "audio/mp4",
-            "audio/flac"
-          ]
-        },
-        "ref_image_0": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_1": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_2": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_3": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_4": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_5": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_6": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_7": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "ref_image_8": {
-          "type": "image",
-          "required": false,
-          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-          "accept_types": [
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-          ]
-        },
-        "resolution": {
-          "type": "enum",
-          "required": false,
-          "default": "768p竖",
-          "options": [
-            "480p竖",
-            "768p竖",
-            "480p横",
-            "768p横"
-          ]
-        },
-        "seed": {
-          "type": "integer",
-          "required": false,
-          "default": 731242627237534,
-          "min": 1,
-          "max": 999999999999999
-        }
-      },
-      "input_reference": [
-        "ref_image_0",
-        "ref_image_1",
-        "ref_image_2",
-        "ref_image_3",
-        "ref_image_4",
-        "ref_image_5",
-        "ref_image_6",
-        "ref_image_7",
-        "ref_image_8"
-      ]
-    },
     "minimax_h3_lightx2v_v5_15s": {
       "workflowId": "minimax_h3_lightx2v_v5_15s",
       "name": "H3多图生视频15秒",
@@ -1519,7 +703,7 @@
           "type": "prompt",
           "required": true,
           "min_length": 1,
-          "max_length": 500000
+          "max_length": 20000
         },
         "ref_image_0": {
           "type": "image",
@@ -1644,9 +828,9 @@
         "ref_image_8"
       ]
     },
-    "minimax_h3_image_audio_to_video_v2": {
-      "workflowId": "minimax_h3_image_audio_to_video_v2",
-      "name": "H3多图多音频生视频",
+    "minimax_h3_image_audio_to_video_v2_15s": {
+      "workflowId": "minimax_h3_image_audio_to_video_v2_15s",
+      "name": "H3多图多音频生视频15秒",
       "type": "video",
       "timeoutSeconds": 1800,
       "promptField": "prompt",
@@ -1671,12 +855,6 @@
           "size": "768x1344"
         },
         {
-          "resolution": "1080p",
-          "orientation": "portrait",
-          "upstream": "1080p竖",
-          "size": "1080x1920"
-        },
-        {
           "resolution": "480p",
           "orientation": "landscape",
           "upstream": "480p横",
@@ -1687,12 +865,6 @@
           "orientation": "landscape",
           "upstream": "768p横",
           "size": "1344x768"
-        },
-        {
-          "resolution": "1080p",
-          "orientation": "landscape",
-          "upstream": "1080p横",
-          "size": "1920x1080"
         }
       ],
       "rules": {
@@ -1701,13 +873,13 @@
           "required": false,
           "default": 5,
           "min": 1,
-          "max": 10
+          "max": 15
         },
         "prompt": {
           "type": "prompt",
           "required": true,
           "min_length": 1,
-          "max_length": 10000
+          "max_length": 20000
         },
         "ref_audio_0": {
           "type": "audio",
@@ -1716,7 +888,6 @@
           "accept_types": [
             "audio/mpeg",
             "audio/wav",
-            "audio/mp4",
             "audio/flac"
           ]
         },
@@ -1727,7 +898,6 @@
           "accept_types": [
             "audio/mpeg",
             "audio/wav",
-            "audio/mp4",
             "audio/flac"
           ]
         },
@@ -1738,7 +908,6 @@
           "accept_types": [
             "audio/mpeg",
             "audio/wav",
-            "audio/mp4",
             "audio/flac"
           ]
         },
@@ -1839,10 +1008,8 @@
           "options": [
             "480p竖",
             "768p竖",
-            "1080p竖",
             "480p横",
-            "768p横",
-            "1080p横"
+            "768p横"
           ]
         },
         "seed": {
@@ -1865,76 +1032,286 @@
         "ref_image_8"
       ]
     },
-    "minimax_h3_image_audio_to_video": {
-      "workflowId": "minimax_h3_image_audio_to_video",
-      "name": "H3图生视频-音频同步(自动对口型)",
+    "indextts2-v1": {
+      "workflowId": "indextts2-v1",
+      "name": "indextts2",
+      "type": "audio",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt_text",
+      "secondsField": null,
+      "audios": [
+        "prompt_simple",
+        "emo_ref_audio"
+      ],
+      "videos": [],
+      "resolutions": [],
+      "rules": {
+        "emo_afraid": {
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 1.4
+        },
+        "emo_angry": {
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 1.4
+        },
+        "emo_calm": {
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 1.4
+        },
+        "emo_control_method": {
+          "type": "enum",
+          "required": true,
+          "default": "与音色参考音频相同",
+          "options": [
+            "与音色参考音频相同",
+            "使用情感参考音频",
+            "使用情感向量控制"
+          ]
+        },
+        "emo_disgusted": {
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 1.4
+        },
+        "emo_happy": {
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 1.4
+        },
+        "emo_melancholic": {
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 1.4
+        },
+        "emo_random": {
+          "type": "boolean",
+          "required": false,
+          "default": false
+        },
+        "emo_ref_audio": {
+          "type": "audio",
+          "required": false,
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav"
+          ]
+        },
+        "emo_sad": {
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 1.4
+        },
+        "emo_surprised": {
+          "type": "number",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 1.4
+        },
+        "prompt_simple": {
+          "type": "audio",
+          "required": true,
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav"
+          ]
+        },
+        "prompt_text": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 2048
+        }
+      },
+      "input_reference": []
+    },
+    "minimax_h3_zm_nono": {
+      "workflowId": "minimax_h3_zm_nono",
+      "name": "H3多图多音频生视频(影视画质)",
       "type": "video",
       "timeoutSeconds": 1800,
-      "promptField": null,
-      "secondsField": "audio_duration",
+      "promptField": "prompt",
+      "secondsField": "duration",
       "audios": [
-        "ref_audio_0"
+        "ref_audio_0",
+        "ref_audio_1",
+        "ref_audio_2"
       ],
       "videos": [],
       "resolutions": [
         {
           "resolution": "480p",
-          "orientation": "portrait",
-          "upstream": "480p竖",
-          "size": "480x864"
-        },
-        {
-          "resolution": "768p",
-          "orientation": "portrait",
-          "upstream": "768p竖",
-          "size": "768x1344"
-        },
-        {
-          "resolution": "1080p",
-          "orientation": "portrait",
-          "upstream": "1080p竖",
-          "size": "1080x1920"
+          "orientation": "landscape",
+          "upstream": "480p横"
         },
         {
           "resolution": "480p",
-          "orientation": "landscape",
-          "upstream": "480p横",
-          "size": "864x480"
+          "orientation": "portrait",
+          "upstream": "480p竖"
         },
         {
           "resolution": "768p",
           "orientation": "landscape",
-          "upstream": "768p横",
-          "size": "1344x768"
+          "upstream": "768p横"
         },
         {
-          "resolution": "1080p",
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖"
+        },
+        {
+          "resolution": "960p",
           "orientation": "landscape",
-          "upstream": "1080p横",
-          "size": "1920x1080"
+          "upstream": "960p横"
+        },
+        {
+          "resolution": "960p",
+          "orientation": "portrait",
+          "upstream": "960p竖"
         }
       ],
       "rules": {
-        "audio_duration": {
+        "duration": {
           "type": "integer",
           "required": false,
           "default": 5,
           "min": 1,
           "max": 15
         },
+        "prompt": {
+          "type": "prompt",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
         "ref_audio_0": {
           "type": "audio",
-          "required": true,
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
           "accept_types": [
             "audio/mpeg",
-            "audio/wav",
-            "audio/mp4",
-            "audio/flac"
+            "audio/wav"
+          ]
+        },
+        "ref_audio_1": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav"
+          ]
+        },
+        "ref_audio_2": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav"
           ]
         },
         "ref_image_0": {
           "type": "image",
           "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
           "accept_types": [
             "image/jpeg",
             "image/png",
@@ -1946,17 +1323,25 @@
           "required": false,
           "default": "768p竖",
           "options": [
-            "480p竖",
-            "768p竖",
-            "1080p竖",
             "480p横",
+            "480p竖",
             "768p横",
-            "1080p横"
+            "768p竖",
+            "960p横",
+            "960p竖"
           ]
         }
       },
       "input_reference": [
-        "ref_image_0"
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
       ]
     },
     "minimax_h3_lightx2v_v5": {
@@ -2036,7 +1421,7 @@
           "type": "prompt",
           "required": true,
           "min_length": 1,
-          "max_length": 500000
+          "max_length": 20000
         },
         "ref_image_0": {
           "type": "image",
@@ -2223,7 +1608,7 @@
           "type": "prompt",
           "required": true,
           "min_length": 1,
-          "max_length": 200000
+          "max_length": 20000
         },
         "resolution": {
           "type": "enum",
@@ -2237,9 +1622,469 @@
             "480p(1:1)",
             "768p(1:1)"
           ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 479044338007328,
+          "min": 1,
+          "max": 999999999999999
         }
       },
       "input_reference": []
+    },
+    "minimax_h3_zm_u30": {
+      "workflowId": "minimax_h3_zm_u30",
+      "name": "H3多图多音频生视频(超清画质)",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [
+        "ref_audio_0",
+        "ref_audio_1",
+        "ref_audio_2"
+      ],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖"
+        },
+        {
+          "resolution": "960p",
+          "orientation": "landscape",
+          "upstream": "960p横"
+        },
+        {
+          "resolution": "960p",
+          "orientation": "portrait",
+          "upstream": "960p竖"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "prompt": {
+          "type": "prompt",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_audio_0": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_1": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_2": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖",
+          "options": [
+            "480p横",
+            "480p竖",
+            "768p横",
+            "768p竖",
+            "960p横",
+            "960p竖"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 548628410878779,
+          "min": 0,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_803": {
+      "workflowId": "minimax_h3_803",
+      "name": "H3九图三音15s(画质增强版)",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [
+        "ref_audio_0",
+        "ref_audio_1",
+        "ref_audio_2"
+      ],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖(480*864)",
+          "size": "480x864"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖(768*1376)",
+          "size": "768x1376"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "portrait",
+          "upstream": "1088p竖(1088*1920)",
+          "size": "1088x1920"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "portrait",
+          "upstream": "1440p竖(1440*2560)",
+          "size": "1440x2560"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横(864*480)",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横(1376*768)",
+          "size": "1376x768"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "landscape",
+          "upstream": "1088p横(1920*1088)",
+          "size": "1920x1088"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "landscape",
+          "upstream": "1440p横(2560*1440)",
+          "size": "2560x1440"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "mode": {
+          "type": "enum",
+          "required": false,
+          "default": "高质模式",
+          "options": [
+            "高速模式",
+            "高质模式"
+          ]
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_audio_0": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_1": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_2": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖(768*1376)",
+          "options": [
+            "480p竖(480*864)",
+            "768p竖(768*1376)",
+            "1088p竖(1088*1920)",
+            "1440p竖(1440*2560)",
+            "480p横(864*480)",
+            "768p横(1376*768)",
+            "1088p横(1920*1088)",
+            "1440p横(2560*1440)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 803729153365684,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
     },
     "minimax_h3_lightx2v": {
       "workflowId": "minimax_h3_lightx2v",
@@ -2318,7 +2163,7 @@
           "type": "prompt",
           "required": true,
           "min_length": 1,
-          "max_length": 2000000
+          "max_length": 20000
         },
         "resolution": {
           "type": "enum",
@@ -2346,113 +2191,2222 @@
         "last_frame"
       ]
     },
-    "indextts2-v1": {
-      "workflowId": "indextts2-v1",
-      "name": "indextts2",
-      "type": "audio",
+    "minimax_h3_zm_u08": {
+      "workflowId": "minimax_h3_zm_u08",
+      "name": "H3多图多音频生视频(高速版)",
+      "type": "video",
       "timeoutSeconds": 1800,
-      "promptField": "prompt_text",
-      "secondsField": null,
+      "promptField": "prompt",
+      "secondsField": "duration",
       "audios": [
-        "prompt_simple",
-        "emo_ref_audio"
+        "ref_audio_0",
+        "ref_audio_1",
+        "ref_audio_2"
       ],
       "videos": [],
-      "resolutions": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "square",
+          "upstream": "480p(1:1)"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "square",
+          "upstream": "768p(1:1)"
+        }
+      ],
       "rules": {
-        "emo_afraid": {
-          "type": "number",
+        "duration": {
+          "type": "integer",
           "required": false,
-          "default": 0,
-          "min": 0,
-          "max": 1.4
+          "default": 5,
+          "min": 1,
+          "max": 15
         },
-        "emo_angry": {
-          "type": "number",
-          "required": false,
-          "default": 0,
-          "min": 0,
-          "max": 1.4
-        },
-        "emo_calm": {
-          "type": "number",
-          "required": false,
-          "default": 0,
-          "min": 0,
-          "max": 1.4
-        },
-        "emo_control_method": {
-          "type": "enum",
+        "prompt": {
+          "type": "prompt",
           "required": true,
-          "default": "与音色参考音频相同",
-          "options": [
-            "与音色参考音频相同",
-            "使用情感参考音频",
-            "使用情感向量控制"
-          ]
+          "min_length": 1,
+          "max_length": 20000
         },
-        "emo_disgusted": {
-          "type": "number",
-          "required": false,
-          "default": 0,
-          "min": 0,
-          "max": 1.4
-        },
-        "emo_happy": {
-          "type": "number",
-          "required": false,
-          "default": 0,
-          "min": 0,
-          "max": 1.4
-        },
-        "emo_melancholic": {
-          "type": "number",
-          "required": false,
-          "default": 0,
-          "min": 0,
-          "max": 1.4
-        },
-        "emo_random": {
-          "type": "boolean",
-          "required": false,
-          "default": false
-        },
-        "emo_ref_audio": {
+        "ref_audio_0": {
           "type": "audio",
           "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
           "accept_types": [
             "audio/mpeg",
-            "audio/wav"
+            "audio/wav",
+            "audio/flac"
           ]
         },
-        "emo_sad": {
-          "type": "number",
+        "ref_audio_1": {
+          "type": "audio",
           "required": false,
-          "default": 0,
-          "min": 0,
-          "max": 1.4
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
         },
-        "emo_surprised": {
+        "ref_audio_2": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
           "type": "enum",
           "required": false,
-          "default": "0",
+          "default": "768p竖",
           "options": [
-            "0"
+            "480p横",
+            "480p竖",
+            "768p横",
+            "768p竖",
+            "480p(1:1)",
+            "768p(1:1)"
           ]
         },
-        "prompt_simple": {
-          "type": "audio",
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 806661161901022,
+          "min": 0,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_image_audio_to_video_v2": {
+      "workflowId": "minimax_h3_image_audio_to_video_v2",
+      "name": "H3多图多音频生视频",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [
+        "ref_audio_0",
+        "ref_audio_1",
+        "ref_audio_2"
+      ],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖",
+          "size": "480x864"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖",
+          "size": "768x1344"
+        },
+        {
+          "resolution": "1080p",
+          "orientation": "portrait",
+          "upstream": "1080p竖",
+          "size": "1080x1920"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横",
+          "size": "1344x768"
+        },
+        {
+          "resolution": "1080p",
+          "orientation": "landscape",
+          "upstream": "1080p横",
+          "size": "1920x1080"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 10
+        },
+        "prompt": {
+          "type": "prompt",
           "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_audio_0": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
           "accept_types": [
             "audio/mpeg",
-            "audio/wav"
+            "audio/wav",
+            "audio/flac"
           ]
         },
-        "prompt_text": {
+        "ref_audio_1": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_2": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖",
+          "options": [
+            "480p竖",
+            "768p竖",
+            "1080p竖",
+            "480p横",
+            "768p横",
+            "1080p横"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 731242627237534,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_z0902": {
+      "workflowId": "minimax_h3_z0902",
+      "name": "H3六图生视频（多图一致性创作）",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖(480*864)",
+          "size": "480x864"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横(864*480)",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖(768*1376)",
+          "size": "768x1376"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横(1376*768)",
+          "size": "1376x768"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "portrait",
+          "upstream": "1088p竖(1088*1920)",
+          "size": "1088x1920"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "landscape",
+          "upstream": "1088p横(1920*1088)",
+          "size": "1920x1088"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "portrait",
+          "upstream": "1440p竖(1440*2560)",
+          "size": "1440x2560"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "landscape",
+          "upstream": "1440p横(2560*1440)",
+          "size": "2560x1440"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "prompt": {
           "type": "string",
           "required": true,
           "min_length": 1,
-          "max_length": 2048
+          "max_length": 20000
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖(768*1376)",
+          "options": [
+            "480p竖(480*864)",
+            "480p横(864*480)",
+            "768p竖(768*1376)",
+            "768p横(1376*768)",
+            "1088p竖(1088*1920)",
+            "1088p横(1920*1088)",
+            "1440p竖(1440*2560)",
+            "1440p横(2560*1440)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 629515677062289,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5"
+      ]
+    },
+    "minimax_h3_801": {
+      "workflowId": "minimax_h3_801",
+      "name": "H3九图15s(无字幕版)",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖(480*864)",
+          "size": "480x864"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖(768*1376)",
+          "size": "768x1376"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "portrait",
+          "upstream": "1088p竖(1088*1920)",
+          "size": "1088x1920"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "portrait",
+          "upstream": "1440p竖(1440*2560)",
+          "size": "1440x2560"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横(864*480)",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横(1376*768)",
+          "size": "1376x768"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "landscape",
+          "upstream": "1088p横(1920*1088)",
+          "size": "1920x1088"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "landscape",
+          "upstream": "1440p横(2560*1440)",
+          "size": "2560x1440"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "mode": {
+          "type": "enum",
+          "required": false,
+          "default": "高质模式",
+          "options": [
+            "高速模式",
+            "高质模式"
+          ]
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖(768*1376)",
+          "options": [
+            "480p竖(480*864)",
+            "768p竖(768*1376)",
+            "1088p竖(1088*1920)",
+            "1440p竖(1440*2560)",
+            "480p横(864*480)",
+            "768p横(1376*768)",
+            "1088p横(1920*1088)",
+            "1440p横(2560*1440)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 803729153365684,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_802": {
+      "workflowId": "minimax_h3_802",
+      "name": "H3九图15s(画质增强版)",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖(480*864)",
+          "size": "480x864"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖(768*1376)",
+          "size": "768x1376"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "portrait",
+          "upstream": "1088p竖(1088*1920)",
+          "size": "1088x1920"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "portrait",
+          "upstream": "1440p竖(1440*2560)",
+          "size": "1440x2560"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横(864*480)",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横(1376*768)",
+          "size": "1376x768"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "landscape",
+          "upstream": "1088p横(1920*1088)",
+          "size": "1920x1088"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "landscape",
+          "upstream": "1440p横(2560*1440)",
+          "size": "2560x1440"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "mode": {
+          "type": "enum",
+          "required": false,
+          "default": "高质模式",
+          "options": [
+            "高速模式",
+            "高质模式"
+          ]
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖(768*1376)",
+          "options": [
+            "480p竖(480*864)",
+            "768p竖(768*1376)",
+            "1088p竖(1088*1920)",
+            "1440p竖(1440*2560)",
+            "480p横(864*480)",
+            "768p横(1376*768)",
+            "1088p横(1920*1088)",
+            "1440p横(2560*1440)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 513879206753813,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_805": {
+      "workflowId": "minimax_h3_805",
+      "name": "H3九图三音15s(多模式版)",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [
+        "ref_audio_0",
+        "ref_audio_1",
+        "ref_audio_2"
+      ],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖(480*864)",
+          "size": "480x864"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横(864*480)",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖(768*1376)",
+          "size": "768x1376"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横(1376*768)",
+          "size": "1376x768"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "portrait",
+          "upstream": "1088p竖(1088*1920)",
+          "size": "1088x1920"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "landscape",
+          "upstream": "1088p横(1920*1088)",
+          "size": "1920x1088"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "portrait",
+          "upstream": "1440p竖(1440*2560)",
+          "size": "1440x2560"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "landscape",
+          "upstream": "1440p横(2560*1440)",
+          "size": "2560x1440"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_audio_0": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_1": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_2": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖(768*1376)",
+          "options": [
+            "480p竖(480*864)",
+            "480p横(864*480)",
+            "768p竖(768*1376)",
+            "768p横(1376*768)",
+            "1088p竖(1088*1920)",
+            "1088p横(1920*1088)",
+            "1440p竖(1440*2560)",
+            "1440p横(2560*1440)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 309132325113668,
+          "min": 1,
+          "max": 999999999999999
+        },
+        "style_preset": {
+          "type": "enum",
+          "required": false,
+          "default": "武打模式-真人-武戏+真实质感",
+          "options": [
+            "文戏模式-真人-文戏",
+            "文戏模式-真人-文戏+真实质感",
+            "武打模式-真人-武戏",
+            "武打模式-真人-武戏+真实质感",
+            "漫剧模式-漫剧-文戏",
+            "漫剧模式-漫剧-武戏"
+          ]
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_804": {
+      "workflowId": "minimax_h3_804",
+      "name": "H3九图15s(多模式版)",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖(480*864)",
+          "size": "480x864"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横(864*480)",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖(768*1376)",
+          "size": "768x1376"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横(1376*768)",
+          "size": "1376x768"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "portrait",
+          "upstream": "1088p竖(1088*1920)",
+          "size": "1088x1920"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "landscape",
+          "upstream": "1088p横(1920*1088)",
+          "size": "1920x1088"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "portrait",
+          "upstream": "1440p竖(1440*2560)",
+          "size": "1440x2560"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "landscape",
+          "upstream": "1440p横(2560*1440)",
+          "size": "2560x1440"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖(768*1376)",
+          "options": [
+            "480p竖(480*864)",
+            "480p横(864*480)",
+            "768p竖(768*1376)",
+            "768p横(1376*768)",
+            "1088p竖(1088*1920)",
+            "1088p横(1920*1088)",
+            "1440p竖(1440*2560)",
+            "1440p横(2560*1440)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 1022956482512850,
+          "min": 1,
+          "max": 100000000000000000
+        },
+        "style_preset": {
+          "type": "enum",
+          "required": false,
+          "default": "武打模式-真人-武戏+真实质感",
+          "options": [
+            "文戏模式-真人-文戏",
+            "文戏模式-真人-文戏+真实质感",
+            "武打模式-真人-武戏",
+            "武打模式-真人-武戏+真实质感",
+            "漫剧模式-漫剧-文戏",
+            "漫剧模式-漫剧-武戏"
+          ]
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_image_audio_to_video": {
+      "workflowId": "minimax_h3_image_audio_to_video",
+      "name": "H3图生视频-音频同步(自动对口型)",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": null,
+      "secondsField": "audio_duration",
+      "audios": [
+        "ref_audio_0"
+      ],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖",
+          "size": "480x864"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖",
+          "size": "768x1344"
+        },
+        {
+          "resolution": "1080p",
+          "orientation": "portrait",
+          "upstream": "1080p竖",
+          "size": "1080x1920"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横",
+          "size": "1344x768"
+        },
+        {
+          "resolution": "1080p",
+          "orientation": "landscape",
+          "upstream": "1080p横",
+          "size": "1920x1080"
+        }
+      ],
+      "rules": {
+        "audio_duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "ref_audio_0": {
+          "type": "audio",
+          "required": true,
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": true,
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖",
+          "options": [
+            "480p竖",
+            "768p竖",
+            "1080p竖",
+            "480p横",
+            "768p横",
+            "1080p横"
+          ]
+        }
+      },
+      "input_reference": [
+        "ref_image_0"
+      ]
+    },
+    "minimax_h3_b99_002": {
+      "workflowId": "minimax_h3_b99_002",
+      "name": "H3首尾帧生成视频",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "736p",
+          "orientation": "portrait",
+          "upstream": "736p竖"
+        },
+        {
+          "resolution": "736p",
+          "orientation": "landscape",
+          "upstream": "736p横"
+        },
+        {
+          "resolution": "736p",
+          "orientation": "square",
+          "upstream": "736p(1:1)"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "first_frame": {
+          "type": "image",
+          "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "last_frame": {
+          "type": "image",
+          "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "736p竖",
+          "options": [
+            "736p竖",
+            "736p横",
+            "736p(1:1)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 865339729647738,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "first_frame",
+        "last_frame"
+      ]
+    },
+    "wan2.2animate-v4-motion_retargeting": {
+      "workflowId": "wan2.2animate-v4-motion_retargeting",
+      "name": "动作迁移",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": null,
+      "secondsField": null,
+      "audios": [],
+      "videos": [
+        "ref_video"
+      ],
+      "resolutions": [
+        {
+          "resolution": "832p",
+          "orientation": "portrait",
+          "upstream": "464*832px(竖版)"
+        },
+        {
+          "resolution": "464p",
+          "orientation": "landscape",
+          "upstream": "832*464px(横版)"
+        }
+      ],
+      "rules": {
+        "ref_image": {
+          "type": "image",
+          "required": true,
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_video": {
+          "type": "video",
+          "required": true,
+          "accept_types": [
+            "video/mp4",
+            "video/webm"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "464*832px(竖版)",
+          "options": [
+            "464*832px(竖版)",
+            "832*464px(横版)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 485581468409274,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image"
+      ]
+    },
+    "minimax_h3_z0901": {
+      "workflowId": "minimax_h3_z0901",
+      "name": "H3文生视频（高质量创意直出）",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖(480*864)",
+          "size": "480x864"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横(864*480)",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖(768*1344)",
+          "size": "768x1344"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横(1344*768)",
+          "size": "1344x768"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "portrait",
+          "upstream": "1088p竖(1088*1920)",
+          "size": "1088x1920"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "landscape",
+          "upstream": "1088p横(1920*1088)",
+          "size": "1920x1088"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "portrait",
+          "upstream": "1440p竖(1440*2560)",
+          "size": "1440x2560"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "landscape",
+          "upstream": "1440p横(2560*1440)",
+          "size": "2560x1440"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖(768*1344)",
+          "options": [
+            "480p竖(480*864)",
+            "480p横(864*480)",
+            "768p竖(768*1344)",
+            "768p横(1344*768)",
+            "1088p竖(1088*1920)",
+            "1088p横(1920*1088)",
+            "1440p竖(1440*2560)",
+            "1440p横(2560*1440)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 865339729647738,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": []
+    },
+    "minimax_h3_z0903": {
+      "workflowId": "minimax_h3_z0903",
+      "name": "H3六图三音频生视频（高质量音画融合）",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [
+        "ref_audio_0",
+        "ref_audio_1",
+        "ref_audio_2"
+      ],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "480p",
+          "orientation": "portrait",
+          "upstream": "480p竖(480*864)",
+          "size": "480x864"
+        },
+        {
+          "resolution": "480p",
+          "orientation": "landscape",
+          "upstream": "480p横(864*480)",
+          "size": "864x480"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "portrait",
+          "upstream": "768p竖(768*1376)",
+          "size": "768x1376"
+        },
+        {
+          "resolution": "768p",
+          "orientation": "landscape",
+          "upstream": "768p横(1376*768)",
+          "size": "1376x768"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "portrait",
+          "upstream": "1088p竖(1088*1920)",
+          "size": "1088x1920"
+        },
+        {
+          "resolution": "1088p",
+          "orientation": "landscape",
+          "upstream": "1088p横(1920*1088)",
+          "size": "1920x1088"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "portrait",
+          "upstream": "1440p竖(1440*2560)",
+          "size": "1440x2560"
+        },
+        {
+          "resolution": "1440p",
+          "orientation": "landscape",
+          "upstream": "1440p横(2560*1440)",
+          "size": "2560x1440"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_audio_0": {
+          "type": "audio",
+          "required": true,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_1": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_audio_2": {
+          "type": "audio",
+          "required": false,
+          "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
+          "accept_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/flac"
+          ]
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "768p竖(768*1376)",
+          "options": [
+            "480p竖(480*864)",
+            "480p横(864*480)",
+            "768p竖(768*1376)",
+            "768p横(1376*768)",
+            "1088p竖(1088*1920)",
+            "1088p横(1920*1088)",
+            "1440p竖(1440*2560)",
+            "1440p横(2560*1440)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 757947932117433,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5"
+      ]
+    },
+    "minimax_h3_b99_003_12s": {
+      "workflowId": "minimax_h3_b99_003_12s",
+      "name": "H3多图生视频12秒",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "736p",
+          "orientation": "portrait",
+          "upstream": "736p竖"
+        },
+        {
+          "resolution": "736p",
+          "orientation": "landscape",
+          "upstream": "736p横"
+        },
+        {
+          "resolution": "736p",
+          "orientation": "square",
+          "upstream": "736p(1:1)"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "ref_image_0": {
+          "type": "image",
+          "required": true,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_1": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_2": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_3": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_4": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_5": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_6": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_7": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "ref_image_8": {
+          "type": "image",
+          "required": false,
+          "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
+          "accept_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "736p竖",
+          "options": [
+            "736p竖",
+            "736p横",
+            "736p(1:1)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 865339729647738,
+          "min": 1,
+          "max": 999999999999999
+        }
+      },
+      "input_reference": [
+        "ref_image_0",
+        "ref_image_1",
+        "ref_image_2",
+        "ref_image_3",
+        "ref_image_4",
+        "ref_image_5",
+        "ref_image_6",
+        "ref_image_7",
+        "ref_image_8"
+      ]
+    },
+    "minimax_h3_b99_001": {
+      "workflowId": "minimax_h3_b99_001",
+      "name": "H3文生视频",
+      "type": "video",
+      "timeoutSeconds": 1800,
+      "promptField": "prompt",
+      "secondsField": "duration",
+      "audios": [],
+      "videos": [],
+      "resolutions": [
+        {
+          "resolution": "736p",
+          "orientation": "portrait",
+          "upstream": "736p竖"
+        },
+        {
+          "resolution": "736p",
+          "orientation": "landscape",
+          "upstream": "736p横"
+        },
+        {
+          "resolution": "736p",
+          "orientation": "square",
+          "upstream": "736p(1:1)"
+        }
+      ],
+      "rules": {
+        "duration": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 1,
+          "max": 15
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "min_length": 1,
+          "max_length": 20000
+        },
+        "resolution": {
+          "type": "enum",
+          "required": false,
+          "default": "736p竖",
+          "options": [
+            "736p竖",
+            "736p横",
+            "736p(1:1)"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "required": false,
+          "default": 865339729647738,
+          "min": 1,
+          "max": 999999999999999
         }
       },
       "input_reference": []

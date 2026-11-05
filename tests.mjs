@@ -29,10 +29,10 @@ test('exact official catalog coverage', () => {
     assert.ok(doc.includes(p.meta.version), name + ' must state the plugin version ' + p.meta.version);
   }
   assert.equal(p.meta.requiredCapabilities, undefined);
-  assert.equal(official.length, 17);
+  assert.equal(official.length, 27);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
   assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'wan2.2-animate-move', 'IndexTTS-2'].sort());
-  assert.equal(p.meta.protocols[0].models.length, 17);
+  assert.equal(p.meta.protocols[0].models.length, 27);
   assert.ok(!p.meta.protocols[0].models.includes('indextts2-v1'));
   // TTS is served only by the MiniMax V2 surface, so its alias must not be
   // advertised on /v1/videos where the audio path cannot answer it.
@@ -699,7 +699,7 @@ for (const [model, config] of Object.entries(catalog)) {
   // The motion workflow also records the reference video it must measure for
   // billing; every other workflow keeps the plain state shape.
   const inputVideo = model === motionModel ? (Array.isArray(input.videos) ? input.videos[0] : undefined) : undefined;
-  const state = { facts: expectedFacts, type: config.type, submittedAt: 2000, timeoutSeconds: 1800, workflowId: config.workflowId, ...(inputVideo ? { inputVideoUrl: inputVideo } : {}) };
+  const state = { facts: expectedFacts, type: config.type, submittedAt: 2000, timeoutSeconds: 1800, workflowId: config.workflowId, kind: config.workflowId, ...(inputVideo ? { inputVideoUrl: inputVideo } : {}) };
   test(model + ': submit persists facts and media type', () => {
     assert.deepEqual(p.parseSubmitResponse(ctx(model), { statusCode: 200, body: envelope('QUEUED') }).state, state);
   });
@@ -812,9 +812,11 @@ const audio = ctx('indextts2-v1');
 test('TTS unified emotion', () => {
   const r = p.buildSubmitRequest({ ...audio, requestBody: { ...audio.requestBody, emotion: { mode: 'vector', calm: 0.3, surprised: 0, random: false } } });
   assert.equal(r.body.prompt_text, audio.requestBody.prompt); assert.equal(r.body.prompt_simple, audio.requestBody.audios[0]);
-  assert.equal(r.body.emo_control_method, '使用情感向量控制'); assert.equal(r.body.emo_calm, 0.3); assert.equal(r.body.emo_surprised, '0'); assert.equal(r.body.emo_random, false);
+  assert.equal(r.body.emo_control_method, '使用情感向量控制'); assert.equal(r.body.emo_calm, 0.3); assert.equal(r.body.emo_surprised, 0); assert.equal(r.body.emo_random, false);
 });
-reject('TTS unsupported surprised value', 'buildSubmitRequest', [{ ...audio, requestBody: { ...audio.requestBody, emotion: { surprised: 0.5 } } }], 'supports only 0');
+// The official rule for surprised became a 0-1.4 number like the other emotions (2026-11-05).
+fixture('TTS surprised accepts the official numeric range', 'extractUsage', [{ ...audio, requestBody: { ...audio.requestBody, emotion: { mode: 'vector', surprised: 1.4 } } }], { requests: 1, seconds: 10 });
+reject('TTS surprised above the official maximum', 'buildSubmitRequest', [{ ...audio, requestBody: { ...audio.requestBody, emotion: { surprised: 1.5 } } }], 'between 0 and 1.4');
 reject('TTS emotion reference requires audio', 'buildSubmitRequest', [{ ...audio, requestBody: { ...audio.requestBody, emotion: { mode: 'reference' } } }], 'audios[1] is required');
 test('TTS emotion reference maps secondary audio', () => assert.equal(p.buildSubmitRequest({ ...audio, requestBody: { ...audio.requestBody, audios: ['https://cdn.example.com/voice.wav', 'https://cdn.example.com/emotion.wav'], emotion: { mode: 'reference' } } }).body.emo_ref_audio, 'https://cdn.example.com/emotion.wav'));
 test('form arrays use JSON', () => {
@@ -983,7 +985,7 @@ for (const alias of removedOfficialModels) {
 test('no automatic model routing remains', () => {
   assert.ok(!p.meta.models.includes('MiniMax-H3'));
   assert.ok(!p.meta.models.includes('MiniMax-H3-Max'));
-  assert.ok(p.meta.models.length === Object.keys(catalog).length + 2, 'the 17 workflows plus the motion and TTS aliases');
+  assert.ok(p.meta.models.length === Object.keys(catalog).length + 2, 'the 27 workflows plus the motion and TTS aliases');
   assert.ok(p.meta.noAutoRouting === undefined || true);
 });
 // Only workflow ids are callable now; filter defensively so a stale fixture can
@@ -1042,8 +1044,10 @@ for (const [model, request] of Object.entries(workflowMiniMax)) {
   // upstream field name varies (duration vs audio_duration), so mirror it.
   const secondsField = catalog[model].secondsField;
   const declaresSeconds = typeof secondsField === 'string';
-  const openaiBody = Object.assign({}, examples[model], declaresSeconds ? { seconds: 4 } : {});
-  const miniBody = Object.assign({}, request, declaresSeconds ? { [secondsField]: 4 } : {});
+  // 4 seconds unless the workflow's own range excludes it (character replacement starts at 5).
+  const declared = declaresSeconds ? Math.min(Math.max(4, catalog[model].rules[secondsField].min), catalog[model].rules[secondsField].max) : undefined;
+  const openaiBody = Object.assign({}, examples[model], declaresSeconds ? { seconds: declared } : {});
+  const miniBody = Object.assign({}, request, declaresSeconds ? { [secondsField]: declared } : {});
   const openai = p.protocols.openai_video.decodeRequest({ ...ctx(model, openaiBody), body: { kind: 'json', value: openaiBody } });
   const minimax = p.native.miniCreate(v2Context(miniBody));
   const openaiFacts = declaresSeconds ? p.extractUsage(ctx(model, openaiBody)) : null;
@@ -2168,5 +2172,117 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
   // The clamp is a ceiling on the bill, so it must never exceed it either.
   assert.equal(p.meta && typeof p.extractUsageOnComplete, 'function');
 });
+
+// --- Workflows added 2026-11-05: per-workflow controls and optional prompts ---
+// `mode`, `style_preset` and `video_subject_to_replace` have no unified spelling,
+// so both surfaces take them under their official names and validate them
+// against the official rule instead of silently dropping them.
+{
+  const submitBody = (model, extra) => p.buildSubmitRequest(ctx(model, { ...examples[model], ...extra })).body;
+  test('H3 nine-image mode reaches upstream on the OpenAI surface', () => {
+    assert.equal(submitBody('minimax_h3_801', { mode: '高速模式' }).mode, '高速模式');
+    assert.equal(submitBody('minimax_h3_801', {}).mode, undefined, 'omitted mode keeps the upstream default');
+  });
+  reject('H3 nine-image mode outside the official options', 'buildSubmitRequest', [ctx('minimax_h3_801', { ...examples.minimax_h3_801, mode: 'fast' })], 'use one of: 高速模式, 高质模式');
+  test('mode stays an ignored OpenAI field for workflows without a mode control', () => {
+    assert.equal(submitBody('minimax_h3_z0901', { mode: 'std' }).mode, undefined);
+  });
+  test('H3 multi-mode style_preset reaches upstream on the OpenAI surface', () => {
+    assert.equal(submitBody('minimax_h3_804', { style_preset: '漫剧模式-漫剧-文戏' }).style_preset, '漫剧模式-漫剧-文戏');
+  });
+  reject('style_preset outside the official options', 'buildSubmitRequest', [ctx('minimax_h3_804', { ...examples.minimax_h3_804, style_preset: 'anime' })], 'unsupported style_preset');
+  test('character replacement subject reaches upstream', () => {
+    assert.equal(submitBody('minimax_h3_zm_titim', { video_subject_to_replace: 'person,dog' }).video_subject_to_replace, 'person,dog');
+  });
+  reject('character replacement subject length is bounded', 'buildSubmitRequest', [ctx('minimax_h3_zm_titim', { ...examples.minimax_h3_zm_titim, video_subject_to_replace: 'x'.repeat(101) })], 'invalid video_subject_to_replace');
+  for (const model of ['minimax_h3_zm_titi', 'minimax_h3_zm_titim']) {
+    test(model + ': prompt is optional on the OpenAI surface', () => {
+      const body = { ...examples[model] }; delete body.prompt;
+      const request = p.buildSubmitRequest(ctx(model, body));
+      assert.equal(request.body.prompt, undefined);
+      assert.equal(request.action, 'video_to_video');
+    });
+    test(model + ': prompt is optional on the MiniMax surface', () => {
+      const mini = structuredClone(formats.minimax[model]);
+      mini.content = mini.content.filter(item => item.type !== 'text');
+      const intent = p.native.miniCreate(v2Context(mini));
+      const body = p.buildSubmitRequest({ ...base, model, upstreamModel: model, requestBody: intent.requestBody }).body;
+      assert.equal(body.prompt, undefined);
+      assert.ok(body.ref_video && (body.ref_image || body.ref_image_0));
+    });
+    reject(model + ': an empty prompt is still refused', 'buildSubmitRequest', [ctx(model, { ...examples[model], prompt: '   ' })], 'prompt must contain');
+  }
+  test('MiniMax surface carries mode, style_preset and video_subject_to_replace as raw fields', () => {
+    for (const [model, key, value] of [['minimax_h3_802', 'mode', '高质模式'], ['minimax_h3_805', 'style_preset', '文戏模式-真人-文戏'], ['minimax_h3_zm_titim', 'video_subject_to_replace', 'person']]) {
+      const intent = p.native.miniCreate(v2Context({ ...formats.minimax[model], [key]: value }));
+      const body = p.buildSubmitRequest({ ...base, model, upstreamModel: model, requestBody: intent.requestBody }).body;
+      assert.equal(body[key], value, model + ' ' + key);
+    }
+    assert.throws(() => p.native.miniCreate(v2Context({ ...formats.minimax.minimax_h3_802, mode: 'turbo' })), /unsupported mode/);
+  });
+  test('960p tier is selectable on both surfaces and billed as 960p', () => {
+    const openai = p.extractUsage(ctx('minimax_h3_zm_u30', { ...examples.minimax_h3_zm_u30, resolution: '960p', orientation: 'landscape' }));
+    assert.equal(openai.resolution, '960p'); assert.equal(openai.orientation, 'landscape');
+    const intent = p.native.miniCreate(v2Context({ ...formats.minimax.minimax_h3_zm_u30, resolution: '960p', ratio: '16:9' }));
+    const body = p.buildSubmitRequest({ ...base, model: 'minimax_h3_zm_u30', upstreamModel: 'minimax_h3_zm_u30', requestBody: intent.requestBody }).body;
+    assert.equal(body.resolution, '960p横');
+  });
+  // Channel model_mapping: a native MiniMax decoder never sees ctx.upstreamModel,
+  // only the driver hooks do. Submission must resolve the mapping instead of
+  // refusing it, and motion/TTS billing must follow the declared table even
+  // when the upstream id was renamed.
+  const nativeFlow = (model, upstream, request) => {
+    const intent = p.native.miniCreate({ path: '/v2/video_generation', body: { kind: 'json', value: hostJSON(request) } });
+    const driver = { ...base, model, upstreamModel: upstream, requestBody: intent.requestBody };
+    return { submit: p.buildSubmitRequest(driver), facts: p.extractUsage(driver), driver };
+  };
+  test('MiniMax: a channel alias mapped onto a declared workflow submits with that table', () => {
+    const { submit, facts } = nativeFlow('my-frames', 'minimax_h3_lightx2v', { model: 'my-frames', content: [
+      { type: 'text', text: 'cat' }, { type: 'image_url', image_url: { url: 'https://cdn.example.com/1.png' } },
+      { type: 'image_url', image_url: { url: 'https://cdn.example.com/2.png' }, role: 'last_frame' }], resolution: '480P', ratio: '9:16', duration: 1 });
+    assert.equal(submit.url, 'https://autodl.art/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v');
+    assert.deepEqual(submit.body, { duration: 1, resolution: '480p竖', prompt: 'cat', first_frame: 'https://cdn.example.com/1.png', last_frame: 'https://cdn.example.com/2.png' });
+    assert.deepEqual(facts, { requests: 1, seconds: 1, resolution: '480p', orientation: 'portrait' });
+  });
+  test('MiniMax: an aliased reference request keeps its image_to_video action at submission', () => {
+    const { submit } = nativeFlow('my-multi', 'minimax_h3_lightx2v_v5', { model: 'my-multi', content: [
+      { type: 'text', text: 'cat' }, { type: 'image_url', image_url: { url: 'https://cdn.example.com/1.png' }, role: 'reference_image' }], resolution: '480P', ratio: '9:16', duration: 1 });
+    assert.equal(submit.body.ref_image_0, 'https://cdn.example.com/1.png');
+    assert.equal(submit.action, 'image_to_video');
+  });
+  test('MiniMax: an alias still gets the mapped table limits at submission', () => {
+    assert.throws(() => nativeFlow('my-h3', 'minimax_h3_z0901', { model: 'my-h3', content: [{ type: 'text', text: 'cat' }], resolution: '720P', ratio: '16:9' }), /unsupported MiniMax resolution/);
+  });
+  test('MiniMax: a declared workflow mapped onto a private id keeps its table and pins the private id', () => {
+    const { submit, facts } = nativeFlow('minimax_h3_z0901', 'private-z', { model: 'minimax_h3_z0901', content: [{ type: 'text', text: 'cat' }], resolution: '480P', ratio: '9:16', duration: 1 });
+    assert.equal(submit.url, 'https://autodl.art/api/v1/comfyui/comfyui_workflow/private-z');
+    assert.equal(submit.rewriteModel, 'private-z');
+    assert.equal(submit.body.resolution, '480p竖(480*864)');
+    assert.equal(facts.seconds, 1);
+  });
+  test('motion mapped onto another upstream id still reserves and settles measured seconds', () => {
+    const driver = { ...base, model: motionModel, upstreamModel: 'motion-v5-private', requestBody: { ...examples[motionModel], seconds: 8 } };
+    assert.equal(p.extractUsage(driver).seconds, 8);
+    const omitted = { ...examples[motionModel] }; delete omitted.seconds;
+    assert.equal(p.extractUsage({ ...driver, requestBody: omitted }).seconds, 5);
+    const state = p.parseSubmitResponse(driver, { statusCode: 200, body: envelope('QUEUED') }).state;
+    assert.equal(state.kind, motionModel);
+    assert.equal(state.workflowId, 'motion-v5-private');
+    const settled = p.extractUsageOnComplete({ state }, { status: 'SUCCESS', url: '' }, { usage: { total_seconds: 3 } });
+    assert.equal(settled.seconds, 3, 'settlement follows the motion table, not the upstream label');
+  });
+  test('TTS mapped onto another upstream id keeps the 10-second floor at settlement', () => {
+    const intent = p.native.miniCreate(v2Context(formats.minimax['indextts2-v1']));
+    const driver = { ...base, model: 'indextts2-v1', upstreamModel: 'tts-private', requestBody: intent.requestBody };
+    const state = p.parseSubmitResponse(driver, { statusCode: 200, body: envelope('QUEUED') }).state;
+    assert.equal(state.kind, 'indextts2-v1');
+    assert.equal(p.extractUsageOnComplete({ state: { ...state, facts: { ...state.facts, seconds: 4 } } }, { status: 'SUCCESS', url: '' }, {}).seconds, 10);
+  });
+  test('every workflow with an official price has a matching prices.json expression', () => {
+    const prices = read('./prices.json').models;
+    for (const row of official) assert.ok(prices[row.uuid] && /u\("seconds"\)/.test(prices[row.uuid].expression), row.uuid);
+    for (const alias of ['wan2.2-animate-move', 'IndexTTS-2']) assert.ok(prices[alias], alias);
+  });
+}
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
-console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all 17 workflows.`);
+console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all ${Object.keys(catalog).length} workflows.`);
