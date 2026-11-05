@@ -4501,7 +4501,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.1.1",
+  version: "1.1.2",
   author: { name: "Yiyin" },
   description: { en: "All " + WORKFLOW_COUNT + " AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 " + WORKFLOW_COUNT + " 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
