@@ -2303,6 +2303,25 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
     assert.equal(bodyOf({ resolution: '832p', ratio: '9:16' }), '464*832px(竖版)');
     assert.throws(() => bodyOf({ resolution: '832p', ratio: '16:9' }), /ratio conflicts/);
   });
+  // The host settles in the same round as the terminal poll: ctx.state is the state
+  // BEFORE that poll and the duration just measured arrives only as
+  // result.plugin_state. Reading ctx.state alone billed a 1.6s motion clip at its
+  // 1s reservation and long TTS clips at the 10s floor (seen live on rc.48).
+  for (const [label, encode] of [['object', value => value], ['JSON text', value => JSON.stringify(value)]]) {
+    test('motion settlement reads the duration measured on the terminal poll (' + label + ')', () => {
+      const before = { facts: { requests: 1, seconds: 1, resolution: '464p', orientation: 'landscape' }, kind: motionModel, workflowId: motionModel, type: 'video' };
+      const after = { ...before, measuredSeconds: 1.6 };
+      assert.equal(p.extractUsageOnComplete({ ...base, state: before }, { status: 'SUCCESS', url: '', plugin_state: encode(after) }, {}).seconds, 1.6);
+    });
+    test('TTS settlement reads the duration measured on the terminal poll (' + label + ')', () => {
+      const before = { facts: { requests: 1, seconds: 10 }, kind: 'indextts2-v1', workflowId: 'indextts2-v1', type: 'audio' };
+      assert.equal(p.extractUsageOnComplete({ ...base, state: before }, { status: 'SUCCESS', url: '', plugin_state: encode({ ...before, measuredSeconds: 37.5 }) }, {}).seconds, 37.5);
+    });
+  }
+  test('a malformed fresh state falls back to the saved state', () => {
+    const before = { facts: { requests: 1, seconds: 1 }, kind: motionModel, workflowId: motionModel, type: 'video', measuredSeconds: 2 };
+    assert.equal(p.extractUsageOnComplete({ ...base, state: before }, { status: 'SUCCESS', url: '', plugin_state: '{broken' }, {}).seconds, 2);
+  });
   test('every workflow with an official price has a matching prices.json expression', () => {
     const prices = read('./prices.json').models;
     for (const row of official) assert.ok(prices[row.uuid] && /u\("seconds"\)/.test(prices[row.uuid].expression), row.uuid);

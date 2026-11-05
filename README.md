@@ -2,7 +2,7 @@
 
 把 [AutoDL.Art](https://www.autodl.art/large-model/comfyui) 的 ComfyUI 工作流接入 New API：全部 **27 个**官网工作流（26 个视频 + 1 个 TTS），支持 OpenAI Videos 与 MiniMax V2 两种请求格式，按成片秒数计费，失败不收费。
 
-当前版本 **v1.1.3**，插件 key `autodl`，单文件 `plugin.js`，无需改宿主、无需转发配置。已在官方镜像 `calciumion/new-api` **v1.0.0-rc.48** 上验证。
+当前版本 **v1.1.4**，插件 key `autodl`，单文件 `plugin.js`，无需改宿主、无需转发配置。已在官方镜像 `calciumion/new-api` **v1.0.0-rc.48** 上验证。
 
 详细字段、响应示例和报错对照见 [API.md](API.md)。
 

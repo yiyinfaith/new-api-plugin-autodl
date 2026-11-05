@@ -756,7 +756,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.1.3",
+  version: "1.1.4",
   author: { name: "Yiyin" },
   description: { en: "All " + WORKFLOW_COUNT + " AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 " + WORKFLOW_COUNT + " 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -2180,11 +2180,21 @@ export function extractUsage(ctx) {
 }
 
 // `body` is the raw upstream polling payload the host forwards to this hook.
+// The state written by the poll that just turned terminal. The host settles in the
+// same round, passing the PREVIOUS state as ctx.state and the new one only as
+// result.plugin_state, so a duration measured on that poll is read from here.
+function freshState(result) {
+  let value = object(result) ? result.plugin_state : undefined;
+  if (typeof value === "string") { try { value = JSON.parse(value); } catch (_) { value = null; } }
+  return object(value) ? value : {};
+}
+
 export function extractUsageOnComplete(task, result, body) {
   // The host's fetch budget is per hook call.
   resetFetchBudget();
   const state = task && task.state;
   if (!object(state) || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
+  const fresh = freshState(result);
   const status = completionStatus(result);
   // One tolerant predicate for both branches below. Comparing the raw spelling to
   // "SUCCESS" skipped the measurement and the vendor floor for "success"/"succeeded".
@@ -2204,6 +2214,7 @@ export function extractUsageOnComplete(task, result, body) {
     // Priority: freshest measurement of the delivered clip, then the one saved while polling, then
     // the upstream usage block. The reference clip's length is never billed.
     const settled = measuredSecondsInRange(seconds)
+      || measuredSecondsInRange(fresh.measuredSeconds)
       || measuredSecondsInRange(state.measuredSeconds)
       || upstreamDeclaredSeconds(body);
     // The delivered file is authoritative. The caller's declaration is only the pre-charge
@@ -2218,6 +2229,7 @@ export function extractUsageOnComplete(task, result, body) {
   if (succeeded && kind === TTS_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
     const settled = measuredSecondsInRange(url ? measuredAudioDuration(url) : null)
+      || measuredSecondsInRange(fresh.measuredSeconds)
       || measuredSecondsInRange(state.measuredSeconds)
       || upstreamDeclaredSeconds(body);
     if (settled !== null) facts.seconds = Math.max(settled, TTS_DEFAULT_SECONDS);

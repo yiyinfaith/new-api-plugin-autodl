@@ -1,6 +1,6 @@
 # AutoDL 插件接口参考
 
-版本 **1.1.3**。本文件是调用方的字段参考；安装、渠道和价格配置见 [README](README.md)。示例中的 `https://media.example.com/...` 需换成真实可公开访问的媒体。
+版本 **1.1.4**。本文件是调用方的字段参考；安装、渠道和价格配置见 [README](README.md)。示例中的 `https://media.example.com/...` 需换成真实可公开访问的媒体。
 
 ## 接口一览
 
