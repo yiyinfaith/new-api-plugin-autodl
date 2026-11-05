@@ -215,7 +215,7 @@
   },
   "wan2.2animate-v4-motion_retargeting": {
     "model": "wan2.2animate-v4-motion_retargeting",
-    "resolution": "832p",
+    "resolution": "464p",
     "orientation": "portrait",
     "videos": [
       "https://your-public-file-host.example/reference-1.mp4"
@@ -680,7 +680,7 @@
             "role": "reference_video"
           }
         ],
-        "resolution": "832p",
+        "resolution": "464p",
         "ratio": "9:16",
         "duration": 5
       },

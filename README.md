@@ -2,7 +2,7 @@
 
 把 [AutoDL.Art](https://www.autodl.art/large-model/comfyui) 的 ComfyUI 工作流接入 New API：全部 **27 个**官网工作流（26 个视频 + 1 个 TTS），支持 OpenAI Videos 与 MiniMax V2 两种请求格式，按成片秒数计费，失败不收费。
 
-当前版本 **v1.1.2**，插件 key `autodl`，单文件 `plugin.js`，无需改宿主、无需转发配置。已在官方镜像 `calciumion/new-api` **v1.0.0-rc.47** 上验证。
+当前版本 **v1.1.3**，插件 key `autodl`，单文件 `plugin.js`，无需改宿主、无需转发配置。已在官方镜像 `calciumion/new-api` **v1.0.0-rc.48** 上验证。
 
 详细字段、响应示例和报错对照见 [API.md](API.md)。
 
@@ -55,7 +55,7 @@ curl https://你的域名/v2/video_generation -H "Authorization: Bearer $NEW_API
 
 - 媒体支持公网 HTTP(S) URL 和标准 Base64 Data URL（如 `data:image/png;base64,…`），不支持文件上传。
 - 媒体数量、时长、分辨率超出工作流范围会直接报错，**不截断、不补齐、不降级**，也不会产生费用。
-- OpenAI 格式下拼错的普通字段会被忽略；MiniMax 格式会拒绝未知字段。
+- 两种格式都拒绝未知或拼错的字段，避免参数没生效却照常扣费；OpenAI/Sora 客户端常带的 `metadata`、`user`、`n` 等兼容字段会被忽略。
 
 ## 支持的工作流
 
@@ -63,32 +63,32 @@ curl https://你的域名/v2/video_generation -H "Authorization: Bearer $NEW_API
 
 | 模型（workflow ID） | 输入媒体 | 文本 | 时长（秒） | 分辨率（方向） | 额外参数 | 官方价 元/秒<br>高峰/低峰 |
 |---|---|---|---|---|---|---|
-| `minimax_h3_z0901`<br>H3文生视频（高质量创意直出） | — | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed` | 480p 0.05/0.04<br>768p 0.08/0.06<br>1088p 0.08/0.06<br>1440p 0.09/0.07 |
 | `minimax_h3_b99_001`<br>H3文生视频 | — | ≤20000 | 1–15 | 736p（竖横方） | `seed` | 736p 0.06/0.04 |
 | `minimax_h3_lightx2v_no_pic`<br>H3文生视频 | — | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
+| `minimax_h3_z0901`<br>H3文生视频（高质量创意直出） | — | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed` | 480p 0.05/0.04<br>768p 0.08/0.06<br>1088p 0.08/0.06<br>1440p 0.09/0.07 |
 | `minimax_h3_801`<br>H3九图15s(无字幕版) | 图 1–9 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`mode` | 480p 0.05/0.04<br>768p 0.06/0.05<br>1088p 0.07/0.06<br>1440p 0.08/0.07 |
 | `minimax_h3_802`<br>H3九图15s(画质增强版) | 图 0–9 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`mode` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1088p 0.06/0.05<br>1440p 0.07/0.06 |
 | `minimax_h3_804`<br>H3九图15s(多模式版) | 图 0–9 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`style_preset` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1088p 0.06/0.05<br>1440p 0.07/0.06 |
-| `minimax_h3_z0902`<br>H3六图生视频（多图一致性创作） | 图 1–6 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed` | 480p 0.05/0.04<br>768p 0.08/0.06<br>1088p 0.08/0.06<br>1440p 0.09/0.07 |
+| `minimax_h3_b99_003_12s`<br>H3多图生视频12秒 | 图 1–9 | ≤20000 | 1–15 | 736p（竖横方） | `seed` | 736p 0.06/0.04 |
 | `minimax_h3_lightx2v_v5`<br>H3多图参考生视频 | 图 1–9 | ≤20000 | 1–10 | 480p/768p/1080p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1080p 0.1/0.06 |
 | `minimax_h3_lightx2v_v5_15s`<br>H3多图生视频15秒 | 图 1–9 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
-| `minimax_h3_b99_003_12s`<br>H3多图生视频12秒 | 图 1–9 | ≤20000 | 1–15 | 736p（竖横方） | `seed` | 736p 0.06/0.04 |
+| `minimax_h3_z0902`<br>H3六图生视频（多图一致性创作） | 图 1–6 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed` | 480p 0.05/0.04<br>768p 0.08/0.06<br>1088p 0.08/0.06<br>1440p 0.09/0.07 |
 | `minimax_h3_803`<br>H3九图三音15s(画质增强版) | 图 0–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`mode` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1088p 0.06/0.05<br>1440p 0.07/0.06 |
 | `minimax_h3_805`<br>H3九图三音15s(多模式版) | 图 0–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed`、`style_preset` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1088p 0.06/0.05<br>1440p 0.07/0.06 |
+| `minimax_h3_image_audio_to_video`<br>H3图生视频-音频同步(自动对口型) | 图 1，音频 1 | ✗ | 1–15 | 480p/768p/1080p（竖横） | — | 480p 0.04/0.03<br>768p 0.05/0.04<br>1080p 0.1/0.06 |
+| `minimax_h3_image_audio_to_video_v2`<br>H3多图多音频生视频 | 图 0–9，音频 0–3 | ≤20000 | 1–10 | 480p/768p/1080p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1080p 0.11/0.07 |
+| `minimax_h3_image_audio_to_video_v2_15s`<br>H3多图多音频生视频15秒 | 图 0–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
 | `minimax_h3_z0903`<br>H3六图三音频生视频（高质量音画融合） | 图 1–6，音频 1–3 | ≤20000 | 1–15 | 480p/768p/1088p/1440p（竖横） | `seed` | 480p 0.05/0.04<br>768p 0.08/0.06<br>1088p 0.08/0.06<br>1440p 0.09/0.07 |
+| `minimax_h3_zm_nono`<br>H3多图多音频生视频(影视画质) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/960p（竖横） | — | 480p 0.04/0.03<br>768p 0.05/0.04<br>960p 0.1/0.09 |
 | `minimax_h3_zm_u08`<br>H3多图多音频生视频(高速版) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
 | `minimax_h3_zm_u22`<br>H3多图多音频生视频(短剧带货版) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
 | `minimax_h3_zm_u24`<br>H3多图多音频生视频(升级画质) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
 | `minimax_h3_zm_u30`<br>H3多图多音频生视频(超清画质) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/960p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04<br>960p 0.09/0.08 |
-| `minimax_h3_zm_nono`<br>H3多图多音频生视频(影视画质) | 图 1–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p/960p（竖横） | — | 480p 0.04/0.03<br>768p 0.05/0.04<br>960p 0.1/0.09 |
-| `minimax_h3_image_audio_to_video_v2`<br>H3多图多音频生视频 | 图 0–9，音频 0–3 | ≤20000 | 1–10 | 480p/768p/1080p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04<br>1080p 0.11/0.07 |
-| `minimax_h3_image_audio_to_video_v2_15s`<br>H3多图多音频生视频15秒 | 图 0–9，音频 0–3 | ≤20000 | 1–15 | 480p/768p（竖横） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
-| `minimax_h3_image_audio_to_video`<br>H3图生视频-音频同步(自动对口型) | 图 1，音频 1 | ✗ | 1–15 | 480p/768p/1080p（竖横） | — | 480p 0.04/0.03<br>768p 0.05/0.04<br>1080p 0.1/0.06 |
-| `minimax_h3_lightx2v`<br>H3首尾帧生成视频 | 图 2 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
 | `minimax_h3_b99_002`<br>H3首尾帧生成视频 | 图 2 | ≤20000 | 1–15 | 736p（竖横方） | `seed` | 736p 0.06/0.04 |
+| `minimax_h3_lightx2v`<br>H3首尾帧生成视频 | 图 2 | ≤20000 | 1–15 | 480p/768p（竖横方） | `seed` | 480p 0.04/0.03<br>768p 0.05/0.04 |
 | `minimax_h3_zm_titi`<br>H3全自动角色动迁替换 | 图 1，视频 1 | 可选 ≤2048 | 5–25 | 768p（竖横） | — | 768p 0.1/0.09 |
 | `minimax_h3_zm_titim`<br>H3全自动多角色动迁替换 | 图 1–9，视频 1 | 可选 ≤2048 | 5–25 | 768p（竖横） | `video_subject_to_replace` | 768p 0.11/0.1 |
-| `wan2.2animate-v4-motion_retargeting`<br>动作迁移<br>别名 `wan2.2-animate-move` | 图 1，视频 1 | ✗ | 按成片实测 | 832p 竖 / 464p 横 | `seed` | 0.04/0.03 |
+| `wan2.2animate-v4-motion_retargeting`<br>动作迁移<br>别名 `wan2.2-animate-move` | 图 1，视频 1 | ✗ | 按成片实测 | 464p（竖横） | `seed` | 0.04/0.03 |
 | `indextts2-v1`<br>indextts2<br>别名 `IndexTTS-2` | 音频 1–2 | ≤2048 | 按成片实测 | — | `emo_*` | 0.001/0.001（最低 0.01 元） |
 
 额外参数：
@@ -105,7 +105,7 @@ curl https://你的域名/v2/video_generation -H "Authorization: Bearer $NEW_API
 
 - **首尾帧**（`minimax_h3_lightx2v`、`minimax_h3_b99_002`）：OpenAI 传 2 张图，依次为首帧、尾帧；MiniMax 用 `first_frame` 和 `last_frame` 两个 role。
 - **动迁替换**（`minimax_h3_zm_titi` / `titim`）：1 个参考视频 + 角色图，提示词可省略；时长 5–25 秒。
-- **动作迁移**：1 图 + 1 视频，不接受提示词；`seconds` 只用于预扣，结算按成片实测时长。两种格式都可直接用别名 `wan2.2-animate-move`。
+- **动作迁移**：1 图 + 1 视频，不接受提示词；档位 `464p`，用 `orientation`（MiniMax 用 `ratio`）选竖横，旧写法 `832p` 仍表示竖屏；`seconds` 只用于预扣，结算按成片实测时长。两种格式都可直接用别名 `wan2.2-animate-move`。
 - **TTS**（`indextts2-v1`，别名 `IndexTTS-2`）：只走 MiniMax V2，文本放 `content`，音色参考音频必填、情感参考音频可选；按成片实测秒数计费，不足 10 秒按 10 秒（官方最低 0.01 元）。
 - **渠道模型映射**：可以在渠道里把自定义名字映射到上面的 workflow ID，两种格式都可用；校验和计费规则跟随映射到的工作流，别名需要单独配价格。
 
@@ -156,10 +156,23 @@ hour("Asia/Shanghai") < 8 ? (u("resolution") == "480p" ? tier("off_peak_480p", u
 | `this workflow does not accept a text prompt` | 对口型和动作迁移不接受提示词 |
 | 成功但链接打不开 | 产物是短期签名链接，请及时下载保存 |
 
+## 维护：同步官网工作流
+
+AutoDL 会不定期新增工作流、修改已有工作流的参数或调价。仓库里的 `tools/sync_workflows.py` 负责把插件和官网保持一致（只用 Python 标准库）：
+
+```bash
+python tools/sync_workflows.py            # 拉取官网，重新生成全部数据和 plugin.js 里的工作流表，并列出官网改了什么
+python tools/sync_workflows.py --table    # 输出 README / API.md 用的模型表和尺寸表
+python tools/sync_workflows.py --check    # 不联网，检查生成文件是否和快照一致（CI 会跑）
+```
+
+拉取后会打印变化，如 `+ 新工作流`、`- 下架工作流`、`~ 某工作流 input_rules: duration, prompt`、`~ 某工作流 billing_config`。接下来：跑 `node tests.mjs`；新工作流如果带了插件没见过的参数类型，脚本会直接报错提示；把 `--table` 的输出贴进文档；最后在 `plugin.js` 里改版本号。官网价格变了时 `prices.json` 会更新，但 New API 里已配置的价格不会自动改，需要手动复制新表达式。
+
 ## 本地测试
 
 ```bash
 node tests.mjs              # 离线回归测试，不访问网络
+python tools/sync_workflows.py --check   # 生成文件与官网快照一致
 python tests-client.py      # 测试客户端自检
 NEW_API_BASE_URL=https://你的域名 NEW_API_KEY=sk-xxx python test-task.py --format minimax --example minimax_h3_z0901 --out out.mp4
 ```
@@ -177,4 +190,4 @@ NEW_API_BASE_URL=https://你的域名 NEW_API_KEY=sk-xxx python test-task.py --f
 
 ## 参考与许可
 
-项目：[yiyinfaith/new-api-plugin-autodl](https://github.com/yiyinfaith/new-api-plugin-autodl)。参考 [New API 任务插件 API](https://github.com/QuantumNous/new-api/blob/main/docs/plugin-api/v1.md)、[官方插件示例](https://github.com/QuantumNous/new-api/tree/main/plugins/tasks)、[AutoDL ComfyUI API 文档](https://autodl.art/docs/comfyui_api/)。工作流定义快照见 [official-workflows.json](official-workflows.json)。遵守本仓库 [AGPL-3.0](LICENSE) 许可证及 AutoDL 的使用条款。
+项目：[yiyinfaith/new-api-plugin-autodl](https://github.com/yiyinfaith/new-api-plugin-autodl)。参考 [New API 任务插件 API](https://github.com/QuantumNous/new-api/blob/main/docs/plugin-api/v1.md)、[官方插件示例](https://github.com/QuantumNous/new-api/tree/main/plugins/tasks)、[AutoDL ComfyUI API 文档](https://autodl.art/docs/comfyui_api/)。工作流定义快照见 [official-workflows.json](official-workflows.json)，历史测试记录在 [archive 分支](https://github.com/yiyinfaith/new-api-plugin-autodl/tree/archive)。遵守本仓库 [AGPL-3.0](LICENSE) 许可证及 AutoDL 的使用条款。

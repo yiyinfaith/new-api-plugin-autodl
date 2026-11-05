@@ -724,9 +724,26 @@ reject('legacy duration conflict', 'extractUsage', [ctx(model, { prompt: 'x', se
 reject('unsupported 720p size', 'extractUsage', [ctx(model, { prompt: 'x', size: '1280x720' })], 'unsupported size');
 reject('size resolution conflict', 'extractUsage', [ctx(model, { prompt: 'x', size: '864x480', resolution: '768p' })], 'size, resolution and orientation conflict');
 reject('reject blank prompt', 'buildSubmitRequest', [ctx(model, { prompt: ' ' })], 'prompt must');
-// Unknown scalar junk is ignored, but a media-shaped, object or array field is refused rather
-// than dropped so a caller cannot lose an input silently.
-for (const field of ['seedx', 'prompt_weight']) fixture('tolerated scalar field ' + field, 'extractUsage', [ctx(model, { prompt: 'x', [field]: 3 })], { requests: 1, seconds: 5, resolution: '768p', orientation: 'portrait' });
+// Unknown fields are refused on the OpenAI surface too (1.1.3): a misspelt control
+// must not be dropped while the render is still billed.
+for (const field of ['seedx', 'prompt_weight', 'style_presets']) reject('unknown scalar field ' + field + ' is refused', 'extractUsage', [ctx(model, { prompt: 'x', [field]: 3 })], 'unsupported request field ' + field);
+test('a control declared by another workflow is refused, not dropped', () => assert.throws(() => p.buildSubmitRequest(ctx('minimax_h3_z0901', { ...examples.minimax_h3_z0901, style_preset: '漫剧模式-漫剧-文戏' })), /unsupported request field style_preset/));
+// Motion transfer tiers are 464p in both orientations; 832p (portrait) and a bare
+// 464p (landscape) keep their pre-1.1.3 meaning.
+for (const [input, expected] of [
+  [{ resolution: '464p', orientation: 'portrait' }, ['464*832px(竖版)', 'portrait']],
+  [{ resolution: '464p', orientation: 'landscape' }, ['832*464px(横版)', 'landscape']],
+  [{ resolution: '464p' }, ['832*464px(横版)', 'landscape']],
+  [{ resolution: '832p' }, ['464*832px(竖版)', 'portrait']],
+  [{ resolution: '832p', orientation: 'portrait' }, ['464*832px(竖版)', 'portrait']],
+  [{}, ['464*832px(竖版)', 'portrait']],
+]) test('motion resolution ' + JSON.stringify(input), () => {
+  const body = { ...examples[motionModel] }; delete body.resolution; delete body.orientation;
+  const driver = ctx(motionModel, { ...body, ...input });
+  assert.equal(p.buildSubmitRequest(driver).body.resolution, expected[0]);
+  assert.deepEqual([p.extractUsage(driver).resolution, p.extractUsage(driver).orientation], ['464p', expected[1]]);
+});
+reject('motion 832p cannot be landscape', 'buildSubmitRequest', [ctx(motionModel, { ...examples[motionModel], resolution: '832p', orientation: 'landscape' })], 'resolution and orientation conflict');
 for (const field of ['metadata', 'mode', 'user', 'n', 'response_format']) fixture('official OpenAI field ' + field + ' is ignored, not fatal', 'extractUsage', [ctx(model, { prompt: 'x', [field]: field === 'n' ? 1 : 'value' })], { requests: 1, seconds: 5, resolution: '768p', orientation: 'portrait' });
 for (const field of ['ref_image_0', 'ref_video_0', 'audio_url', 'file', 'image_settings', 'video_settings']) reject('media-shaped field ' + field + ' is refused', 'buildSubmitRequest', [ctx(model, { prompt: 'x', [field]: 'anything' })], 'unsupported request field');
 // An unrecognized object could hide media, so it is refused rather than dropped.
@@ -2184,7 +2201,7 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
     assert.equal(submitBody('minimax_h3_801', {}).mode, undefined, 'omitted mode keeps the upstream default');
   });
   reject('H3 nine-image mode outside the official options', 'buildSubmitRequest', [ctx('minimax_h3_801', { ...examples.minimax_h3_801, mode: 'fast' })], 'use one of: 高速模式, 高质模式');
-  test('mode stays an ignored OpenAI field for workflows without a mode control', () => {
+  test('mode stays an ignored OpenAI compatibility field for workflows without a mode control', () => {
     assert.equal(submitBody('minimax_h3_z0901', { mode: 'std' }).mode, undefined);
   });
   test('H3 multi-mode style_preset reaches upstream on the OpenAI surface', () => {
@@ -2277,6 +2294,14 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
     const state = p.parseSubmitResponse(driver, { statusCode: 200, body: envelope('QUEUED') }).state;
     assert.equal(state.kind, 'indextts2-v1');
     assert.equal(p.extractUsageOnComplete({ state: { ...state, facts: { ...state.facts, seconds: 4 } } }, { status: 'SUCCESS', url: '' }, {}).seconds, 10);
+  });
+  test('motion MiniMax spellings', () => {
+    const mini = formats.minimax[motionModel];
+    const bodyOf = extra => p.buildSubmitRequest({ ...base, model: motionModel, upstreamModel: motionModel, requestBody: p.native.miniCreate(v2Context({ ...mini, ...extra })).requestBody }).body.resolution;
+    assert.equal(bodyOf({ resolution: '464p', ratio: '16:9' }), '832*464px(横版)');
+    assert.equal(bodyOf({ resolution: '464p', ratio: '9:16' }), '464*832px(竖版)');
+    assert.equal(bodyOf({ resolution: '832p', ratio: '9:16' }), '464*832px(竖版)');
+    assert.throws(() => bodyOf({ resolution: '832p', ratio: '16:9' }), /ratio conflicts/);
   });
   test('every workflow with an official price has a matching prices.json expression', () => {
     const prices = read('./prices.json').models;

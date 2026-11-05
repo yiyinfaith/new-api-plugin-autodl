@@ -4,4413 +4,682 @@
 
 const WORKFLOWS = {
   "minimax_h3_zm_titim": {
-    "workflowId": "minimax_h3_zm_titim",
-    "name": "H3全自动多角色动迁替换",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [],
-    "videos": [
-      "ref_video"
-    ],
+    "workflowId": "minimax_h3_zm_titim", "name": "H3全自动多角色动迁替换", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": [], "videos": ["ref_video"],
     "resolutions": [
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横"
-      }
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 10,
-        "min": 5,
-        "max": 25
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": false,
-        "default": " ",
-        "min_length": 1,
-        "max_length": 2048
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_video": {
-        "type": "video",
-        "required": true,
-        "accept_types": [
-          "video/mp4",
-          "video/webm"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "768p竖",
-          "768p横"
-        ]
-      },
-      "video_subject_to_replace": {
-        "type": "string",
-        "required": false,
-        "default": "person",
-        "min_length": 1,
-        "max_length": 100
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 5, "max": 25, "default": 10},
+      "prompt": {"type": "prompt", "required": false, "min_length": 1, "max_length": 2048},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "ref_video": {"type": "video", "required": true},
+      "resolution": {"type": "enum", "required": false, "options": ["768p竖", "768p横"], "default": "768p竖"},
+      "video_subject_to_replace": {"type": "string", "required": false, "min_length": 1, "max_length": 100},
+    },
   },
   "minimax_h3_zm_titi": {
-    "workflowId": "minimax_h3_zm_titi",
-    "name": "H3全自动角色动迁替换",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image"
-    ],
-    "audios": [],
-    "videos": [
-      "ref_video"
-    ],
+    "workflowId": "minimax_h3_zm_titi", "name": "H3全自动角色动迁替换", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image"], "audios": [], "videos": ["ref_video"],
     "resolutions": [
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横"
-      }
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 10,
-        "min": 5,
-        "max": 25
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": false,
-        "default": " ",
-        "min_length": 1,
-        "max_length": 2048
-      },
-      "ref_image": {
-        "type": "image",
-        "required": true,
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_video": {
-        "type": "video",
-        "required": true,
-        "accept_types": [
-          "video/mp4",
-          "video/webm"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "768p竖",
-          "768p横"
-        ]
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 5, "max": 25, "default": 10},
+      "prompt": {"type": "prompt", "required": false, "min_length": 1, "max_length": 2048},
+      "ref_image": {"type": "image", "required": true},
+      "ref_video": {"type": "video", "required": true},
+      "resolution": {"type": "enum", "required": false, "options": ["768p竖", "768p横"], "default": "768p竖"},
+    },
   },
   "minimax_h3_zm_u22": {
-    "workflowId": "minimax_h3_zm_u22",
-    "name": "H3多图多音频生视频(短剧带货版)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_zm_u22", "name": "H3多图多音频生视频(短剧带货版)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖"
-      }
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横"},
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p横",
-          "480p竖",
-          "768p横",
-          "768p竖"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 836327771708943,
-        "min": 0,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p横", "480p竖", "768p横", "768p竖"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 0, "max": 999999999999999},
+    },
   },
   "minimax_h3_zm_u24": {
-    "workflowId": "minimax_h3_zm_u24",
-    "name": "H3多图多音频生视频(升级画质)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_zm_u24", "name": "H3多图多音频生视频(升级画质)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "square",
-        "upstream": "480p(1:1)"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "square",
-        "upstream": "768p(1:1)"
-      }
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横"},
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖"},
+      {"resolution": "480p", "orientation": "square", "upstream": "480p(1:1)"},
+      {"resolution": "768p", "orientation": "square", "upstream": "768p(1:1)"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p横",
-          "480p竖",
-          "768p横",
-          "768p竖",
-          "480p(1:1)",
-          "768p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 683072603085674,
-        "min": 0,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p横", "480p竖", "768p横", "768p竖", "480p(1:1)", "768p(1:1)"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 0, "max": 999999999999999},
+    },
   },
   "minimax_h3_lightx2v_v5_15s": {
-    "workflowId": "minimax_h3_lightx2v_v5_15s",
-    "name": "H3多图生视频15秒",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_lightx2v_v5_15s", "name": "H3多图生视频15秒", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖",
-        "size": "768x1344"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横",
-        "size": "1344x768"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "square",
-        "upstream": "480p(1:1)",
-        "size": "480x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "square",
-        "upstream": "768p(1:1)",
-        "size": "768x768"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖", "size": "768x1344"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横", "size": "1344x768"},
+      {"resolution": "480p", "orientation": "square", "upstream": "480p(1:1)", "size": "480x480"},
+      {"resolution": "768p", "orientation": "square", "upstream": "768p(1:1)", "size": "768x768"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p竖",
-          "768p竖",
-          "480p横",
-          "768p横",
-          "480p(1:1)",
-          "768p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 212238359716024,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖", "768p竖", "480p横", "768p横", "480p(1:1)", "768p(1:1)"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_image_audio_to_video_v2_15s": {
-    "workflowId": "minimax_h3_image_audio_to_video_v2_15s",
-    "name": "H3多图多音频生视频15秒",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_image_audio_to_video_v2_15s", "name": "H3多图多音频生视频15秒", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖",
-        "size": "768x1344"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横",
-        "size": "1344x768"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖", "size": "768x1344"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横", "size": "1344x768"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p竖",
-          "768p竖",
-          "480p横",
-          "768p横"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 731242627237534,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": false},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖", "768p竖", "480p横", "768p横"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "indextts2-v1": {
-    "workflowId": "indextts2-v1",
-    "name": "indextts2",
-    "type": "audio",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt_text",
-    "secondsField": null,
-    "input_reference": [],
-    "audios": [
-      "prompt_simple",
-      "emo_ref_audio"
-    ],
-    "videos": [],
+    "workflowId": "indextts2-v1", "name": "indextts2", "type": "audio", "timeoutSeconds": 1800, "promptField": "prompt_text", "secondsField": null,
+    "input_reference": [], "audios": ["prompt_simple", "emo_ref_audio"], "videos": [],
     "resolutions": [],
     "rules": {
-      "emo_afraid": {
-        "type": "number",
-        "required": false,
-        "default": 0,
-        "min": 0,
-        "max": 1.4
-      },
-      "emo_angry": {
-        "type": "number",
-        "required": false,
-        "default": 0,
-        "min": 0,
-        "max": 1.4
-      },
-      "emo_calm": {
-        "type": "number",
-        "required": false,
-        "default": 0,
-        "min": 0,
-        "max": 1.4
-      },
-      "emo_control_method": {
-        "type": "enum",
-        "required": true,
-        "default": "与音色参考音频相同",
-        "options": [
-          "与音色参考音频相同",
-          "使用情感参考音频",
-          "使用情感向量控制"
-        ]
-      },
-      "emo_disgusted": {
-        "type": "number",
-        "required": false,
-        "default": 0,
-        "min": 0,
-        "max": 1.4
-      },
-      "emo_happy": {
-        "type": "number",
-        "required": false,
-        "default": 0,
-        "min": 0,
-        "max": 1.4
-      },
-      "emo_melancholic": {
-        "type": "number",
-        "required": false,
-        "default": 0,
-        "min": 0,
-        "max": 1.4
-      },
-      "emo_random": {
-        "type": "boolean",
-        "required": false,
-        "default": false
-      },
-      "emo_ref_audio": {
-        "type": "audio",
-        "required": false,
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav"
-        ]
-      },
-      "emo_sad": {
-        "type": "number",
-        "required": false,
-        "default": 0,
-        "min": 0,
-        "max": 1.4
-      },
-      "emo_surprised": {
-        "type": "number",
-        "required": false,
-        "default": 0,
-        "min": 0,
-        "max": 1.4
-      },
-      "prompt_simple": {
-        "type": "audio",
-        "required": true,
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav"
-        ]
-      },
-      "prompt_text": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 2048
-      }
-    }
+      "emo_afraid": {"type": "number", "required": false, "min": 0, "max": 1.4},
+      "emo_angry": {"type": "number", "required": false, "min": 0, "max": 1.4},
+      "emo_calm": {"type": "number", "required": false, "min": 0, "max": 1.4},
+      "emo_control_method": {"type": "enum", "required": true, "options": ["与音色参考音频相同", "使用情感参考音频", "使用情感向量控制"], "default": "与音色参考音频相同"},
+      "emo_disgusted": {"type": "number", "required": false, "min": 0, "max": 1.4},
+      "emo_happy": {"type": "number", "required": false, "min": 0, "max": 1.4},
+      "emo_melancholic": {"type": "number", "required": false, "min": 0, "max": 1.4},
+      "emo_random": {"type": "boolean", "required": false},
+      "emo_ref_audio": {"type": "audio", "required": false},
+      "emo_sad": {"type": "number", "required": false, "min": 0, "max": 1.4},
+      "emo_surprised": {"type": "number", "required": false, "min": 0, "max": 1.4},
+      "prompt_simple": {"type": "audio", "required": true},
+      "prompt_text": {"type": "string", "required": true, "min_length": 1, "max_length": 2048},
+    },
   },
   "minimax_h3_zm_nono": {
-    "workflowId": "minimax_h3_zm_nono",
-    "name": "H3多图多音频生视频(影视画质)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_zm_nono", "name": "H3多图多音频生视频(影视画质)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖"
-      },
-      {
-        "resolution": "960p",
-        "orientation": "landscape",
-        "upstream": "960p横"
-      },
-      {
-        "resolution": "960p",
-        "orientation": "portrait",
-        "upstream": "960p竖"
-      }
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横"},
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖"},
+      {"resolution": "960p", "orientation": "landscape", "upstream": "960p横"},
+      {"resolution": "960p", "orientation": "portrait", "upstream": "960p竖"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p横",
-          "480p竖",
-          "768p横",
-          "768p竖",
-          "960p横",
-          "960p竖"
-        ]
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p横", "480p竖", "768p横", "768p竖", "960p横", "960p竖"], "default": "768p竖"},
+    },
   },
   "minimax_h3_lightx2v_v5": {
-    "workflowId": "minimax_h3_lightx2v_v5",
-    "name": "H3多图参考生视频",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_lightx2v_v5", "name": "H3多图参考生视频", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖",
-        "size": "768x1344"
-      },
-      {
-        "resolution": "1080p",
-        "orientation": "portrait",
-        "upstream": "1080p竖",
-        "size": "1080x1920"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横",
-        "size": "1344x768"
-      },
-      {
-        "resolution": "1080p",
-        "orientation": "landscape",
-        "upstream": "1080p横",
-        "size": "1920x1080"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "square",
-        "upstream": "480p(1:1)",
-        "size": "480x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "square",
-        "upstream": "768p(1:1)",
-        "size": "768x768"
-      },
-      {
-        "resolution": "1080p",
-        "orientation": "square",
-        "upstream": "1080p(1:1)",
-        "size": "1080x1080"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖", "size": "768x1344"},
+      {"resolution": "1080p", "orientation": "portrait", "upstream": "1080p竖", "size": "1080x1920"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横", "size": "1344x768"},
+      {"resolution": "1080p", "orientation": "landscape", "upstream": "1080p横", "size": "1920x1080"},
+      {"resolution": "480p", "orientation": "square", "upstream": "480p(1:1)", "size": "480x480"},
+      {"resolution": "768p", "orientation": "square", "upstream": "768p(1:1)", "size": "768x768"},
+      {"resolution": "1080p", "orientation": "square", "upstream": "1080p(1:1)", "size": "1080x1080"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 10
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p竖",
-          "768p竖",
-          "1080p竖",
-          "480p横",
-          "768p横",
-          "1080p横",
-          "480p(1:1)",
-          "768p(1:1)",
-          "1080p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 212238359716024,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 10, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖", "768p竖", "1080p竖", "480p横", "768p横", "1080p横", "480p(1:1)", "768p(1:1)", "1080p(1:1)"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_lightx2v_no_pic": {
-    "workflowId": "minimax_h3_lightx2v_no_pic",
-    "name": "H3文生视频",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_lightx2v_no_pic", "name": "H3文生视频", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": [], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖",
-        "size": "768x1344"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横",
-        "size": "1344x768"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "square",
-        "upstream": "480p(1:1)",
-        "size": "480x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "square",
-        "upstream": "768p(1:1)",
-        "size": "768x768"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖", "size": "768x1344"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横", "size": "1344x768"},
+      {"resolution": "480p", "orientation": "square", "upstream": "480p(1:1)", "size": "480x480"},
+      {"resolution": "768p", "orientation": "square", "upstream": "768p(1:1)", "size": "768x768"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p竖",
-          "768p竖",
-          "480p横",
-          "768p横",
-          "480p(1:1)",
-          "768p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 479044338007328,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖", "768p竖", "480p横", "768p横", "480p(1:1)", "768p(1:1)"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_zm_u30": {
-    "workflowId": "minimax_h3_zm_u30",
-    "name": "H3多图多音频生视频(超清画质)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_zm_u30", "name": "H3多图多音频生视频(超清画质)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖"
-      },
-      {
-        "resolution": "960p",
-        "orientation": "landscape",
-        "upstream": "960p横"
-      },
-      {
-        "resolution": "960p",
-        "orientation": "portrait",
-        "upstream": "960p竖"
-      }
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横"},
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖"},
+      {"resolution": "960p", "orientation": "landscape", "upstream": "960p横"},
+      {"resolution": "960p", "orientation": "portrait", "upstream": "960p竖"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p横",
-          "480p竖",
-          "768p横",
-          "768p竖",
-          "960p横",
-          "960p竖"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 548628410878779,
-        "min": 0,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p横", "480p竖", "768p横", "768p竖", "960p横", "960p竖"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 0, "max": 999999999999999},
+    },
   },
   "minimax_h3_803": {
-    "workflowId": "minimax_h3_803",
-    "name": "H3九图三音15s(画质增强版)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_803", "name": "H3九图三音15s(画质增强版)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖(480*864)",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖(768*1376)",
-        "size": "768x1376"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "portrait",
-        "upstream": "1088p竖(1088*1920)",
-        "size": "1088x1920"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "portrait",
-        "upstream": "1440p竖(1440*2560)",
-        "size": "1440x2560"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横(864*480)",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横(1376*768)",
-        "size": "1376x768"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "landscape",
-        "upstream": "1088p横(1920*1088)",
-        "size": "1920x1088"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "landscape",
-        "upstream": "1440p横(2560*1440)",
-        "size": "2560x1440"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖(480*864)", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖(768*1376)", "size": "768x1376"},
+      {"resolution": "1088p", "orientation": "portrait", "upstream": "1088p竖(1088*1920)", "size": "1088x1920"},
+      {"resolution": "1440p", "orientation": "portrait", "upstream": "1440p竖(1440*2560)", "size": "1440x2560"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横(864*480)", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横(1376*768)", "size": "1376x768"},
+      {"resolution": "1088p", "orientation": "landscape", "upstream": "1088p横(1920*1088)", "size": "1920x1088"},
+      {"resolution": "1440p", "orientation": "landscape", "upstream": "1440p横(2560*1440)", "size": "2560x1440"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "mode": {
-        "type": "enum",
-        "required": false,
-        "default": "高质模式",
-        "options": [
-          "高速模式",
-          "高质模式"
-        ]
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖(768*1376)",
-        "options": [
-          "480p竖(480*864)",
-          "768p竖(768*1376)",
-          "1088p竖(1088*1920)",
-          "1440p竖(1440*2560)",
-          "480p横(864*480)",
-          "768p横(1376*768)",
-          "1088p横(1920*1088)",
-          "1440p横(2560*1440)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 803729153365684,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "mode": {"type": "enum", "required": false, "options": ["高速模式", "高质模式"], "default": "高质模式"},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": false},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖(480*864)", "768p竖(768*1376)", "1088p竖(1088*1920)", "1440p竖(1440*2560)", "480p横(864*480)", "768p横(1376*768)", "1088p横(1920*1088)", "1440p横(2560*1440)"], "default": "768p竖(768*1376)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_lightx2v": {
-    "workflowId": "minimax_h3_lightx2v",
-    "name": "H3首尾帧生成视频",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "first_frame",
-      "last_frame"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_lightx2v", "name": "H3首尾帧生成视频", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["first_frame", "last_frame"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖",
-        "size": "768x1344"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横",
-        "size": "1344x768"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "square",
-        "upstream": "480p(1:1)",
-        "size": "480x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "square",
-        "upstream": "768p(1:1)",
-        "size": "768x768"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖", "size": "768x1344"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横", "size": "1344x768"},
+      {"resolution": "480p", "orientation": "square", "upstream": "480p(1:1)", "size": "480x480"},
+      {"resolution": "768p", "orientation": "square", "upstream": "768p(1:1)", "size": "768x768"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "first_frame": {
-        "type": "image",
-        "required": true,
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "last_frame": {
-        "type": "image",
-        "required": true,
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p竖",
-          "768p竖",
-          "480p横",
-          "768p横",
-          "480p(1:1)",
-          "768p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 479044338007328,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "first_frame": {"type": "image", "required": true},
+      "last_frame": {"type": "image", "required": true},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖", "768p竖", "480p横", "768p横", "480p(1:1)", "768p(1:1)"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_zm_u08": {
-    "workflowId": "minimax_h3_zm_u08",
-    "name": "H3多图多音频生视频(高速版)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_zm_u08", "name": "H3多图多音频生视频(高速版)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "square",
-        "upstream": "480p(1:1)"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "square",
-        "upstream": "768p(1:1)"
-      }
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横"},
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖"},
+      {"resolution": "480p", "orientation": "square", "upstream": "480p(1:1)"},
+      {"resolution": "768p", "orientation": "square", "upstream": "768p(1:1)"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p横",
-          "480p竖",
-          "768p横",
-          "768p竖",
-          "480p(1:1)",
-          "768p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 806661161901022,
-        "min": 0,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p横", "480p竖", "768p横", "768p竖", "480p(1:1)", "768p(1:1)"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 0, "max": 999999999999999},
+    },
   },
   "minimax_h3_image_audio_to_video_v2": {
-    "workflowId": "minimax_h3_image_audio_to_video_v2",
-    "name": "H3多图多音频生视频",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_image_audio_to_video_v2", "name": "H3多图多音频生视频", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖",
-        "size": "768x1344"
-      },
-      {
-        "resolution": "1080p",
-        "orientation": "portrait",
-        "upstream": "1080p竖",
-        "size": "1080x1920"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横",
-        "size": "1344x768"
-      },
-      {
-        "resolution": "1080p",
-        "orientation": "landscape",
-        "upstream": "1080p横",
-        "size": "1920x1080"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖", "size": "768x1344"},
+      {"resolution": "1080p", "orientation": "portrait", "upstream": "1080p竖", "size": "1080x1920"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横", "size": "1344x768"},
+      {"resolution": "1080p", "orientation": "landscape", "upstream": "1080p横", "size": "1920x1080"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 10
-      },
-      "prompt": {
-        "type": "prompt",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p竖",
-          "768p竖",
-          "1080p竖",
-          "480p横",
-          "768p横",
-          "1080p横"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 731242627237534,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 10, "default": 5},
+      "prompt": {"type": "prompt", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": false},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖", "768p竖", "1080p竖", "480p横", "768p横", "1080p横"], "default": "768p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_z0902": {
-    "workflowId": "minimax_h3_z0902",
-    "name": "H3六图生视频（多图一致性创作）",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_z0902", "name": "H3六图生视频（多图一致性创作）", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖(480*864)",
-        "size": "480x864"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横(864*480)",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖(768*1376)",
-        "size": "768x1376"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横(1376*768)",
-        "size": "1376x768"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "portrait",
-        "upstream": "1088p竖(1088*1920)",
-        "size": "1088x1920"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "landscape",
-        "upstream": "1088p横(1920*1088)",
-        "size": "1920x1088"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "portrait",
-        "upstream": "1440p竖(1440*2560)",
-        "size": "1440x2560"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "landscape",
-        "upstream": "1440p横(2560*1440)",
-        "size": "2560x1440"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖(480*864)", "size": "480x864"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横(864*480)", "size": "864x480"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖(768*1376)", "size": "768x1376"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横(1376*768)", "size": "1376x768"},
+      {"resolution": "1088p", "orientation": "portrait", "upstream": "1088p竖(1088*1920)", "size": "1088x1920"},
+      {"resolution": "1088p", "orientation": "landscape", "upstream": "1088p横(1920*1088)", "size": "1920x1088"},
+      {"resolution": "1440p", "orientation": "portrait", "upstream": "1440p竖(1440*2560)", "size": "1440x2560"},
+      {"resolution": "1440p", "orientation": "landscape", "upstream": "1440p横(2560*1440)", "size": "2560x1440"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖(768*1376)",
-        "options": [
-          "480p竖(480*864)",
-          "480p横(864*480)",
-          "768p竖(768*1376)",
-          "768p横(1376*768)",
-          "1088p竖(1088*1920)",
-          "1088p横(1920*1088)",
-          "1440p竖(1440*2560)",
-          "1440p横(2560*1440)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 629515677062289,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖(480*864)", "480p横(864*480)", "768p竖(768*1376)", "768p横(1376*768)", "1088p竖(1088*1920)", "1088p横(1920*1088)", "1440p竖(1440*2560)", "1440p横(2560*1440)"], "default": "768p竖(768*1376)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_801": {
-    "workflowId": "minimax_h3_801",
-    "name": "H3九图15s(无字幕版)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_801", "name": "H3九图15s(无字幕版)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖(480*864)",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖(768*1376)",
-        "size": "768x1376"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "portrait",
-        "upstream": "1088p竖(1088*1920)",
-        "size": "1088x1920"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "portrait",
-        "upstream": "1440p竖(1440*2560)",
-        "size": "1440x2560"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横(864*480)",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横(1376*768)",
-        "size": "1376x768"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "landscape",
-        "upstream": "1088p横(1920*1088)",
-        "size": "1920x1088"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "landscape",
-        "upstream": "1440p横(2560*1440)",
-        "size": "2560x1440"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖(480*864)", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖(768*1376)", "size": "768x1376"},
+      {"resolution": "1088p", "orientation": "portrait", "upstream": "1088p竖(1088*1920)", "size": "1088x1920"},
+      {"resolution": "1440p", "orientation": "portrait", "upstream": "1440p竖(1440*2560)", "size": "1440x2560"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横(864*480)", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横(1376*768)", "size": "1376x768"},
+      {"resolution": "1088p", "orientation": "landscape", "upstream": "1088p横(1920*1088)", "size": "1920x1088"},
+      {"resolution": "1440p", "orientation": "landscape", "upstream": "1440p横(2560*1440)", "size": "2560x1440"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "mode": {
-        "type": "enum",
-        "required": false,
-        "default": "高质模式",
-        "options": [
-          "高速模式",
-          "高质模式"
-        ]
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖(768*1376)",
-        "options": [
-          "480p竖(480*864)",
-          "768p竖(768*1376)",
-          "1088p竖(1088*1920)",
-          "1440p竖(1440*2560)",
-          "480p横(864*480)",
-          "768p横(1376*768)",
-          "1088p横(1920*1088)",
-          "1440p横(2560*1440)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 803729153365684,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "mode": {"type": "enum", "required": false, "options": ["高速模式", "高质模式"], "default": "高质模式"},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖(480*864)", "768p竖(768*1376)", "1088p竖(1088*1920)", "1440p竖(1440*2560)", "480p横(864*480)", "768p横(1376*768)", "1088p横(1920*1088)", "1440p横(2560*1440)"], "default": "768p竖(768*1376)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_802": {
-    "workflowId": "minimax_h3_802",
-    "name": "H3九图15s(画质增强版)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_802", "name": "H3九图15s(画质增强版)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖(480*864)",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖(768*1376)",
-        "size": "768x1376"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "portrait",
-        "upstream": "1088p竖(1088*1920)",
-        "size": "1088x1920"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "portrait",
-        "upstream": "1440p竖(1440*2560)",
-        "size": "1440x2560"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横(864*480)",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横(1376*768)",
-        "size": "1376x768"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "landscape",
-        "upstream": "1088p横(1920*1088)",
-        "size": "1920x1088"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "landscape",
-        "upstream": "1440p横(2560*1440)",
-        "size": "2560x1440"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖(480*864)", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖(768*1376)", "size": "768x1376"},
+      {"resolution": "1088p", "orientation": "portrait", "upstream": "1088p竖(1088*1920)", "size": "1088x1920"},
+      {"resolution": "1440p", "orientation": "portrait", "upstream": "1440p竖(1440*2560)", "size": "1440x2560"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横(864*480)", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横(1376*768)", "size": "1376x768"},
+      {"resolution": "1088p", "orientation": "landscape", "upstream": "1088p横(1920*1088)", "size": "1920x1088"},
+      {"resolution": "1440p", "orientation": "landscape", "upstream": "1440p横(2560*1440)", "size": "2560x1440"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "mode": {
-        "type": "enum",
-        "required": false,
-        "default": "高质模式",
-        "options": [
-          "高速模式",
-          "高质模式"
-        ]
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖(768*1376)",
-        "options": [
-          "480p竖(480*864)",
-          "768p竖(768*1376)",
-          "1088p竖(1088*1920)",
-          "1440p竖(1440*2560)",
-          "480p横(864*480)",
-          "768p横(1376*768)",
-          "1088p横(1920*1088)",
-          "1440p横(2560*1440)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 513879206753813,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "mode": {"type": "enum", "required": false, "options": ["高速模式", "高质模式"], "default": "高质模式"},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_image_0": {"type": "image", "required": false},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖(480*864)", "768p竖(768*1376)", "1088p竖(1088*1920)", "1440p竖(1440*2560)", "480p横(864*480)", "768p横(1376*768)", "1088p横(1920*1088)", "1440p横(2560*1440)"], "default": "768p竖(768*1376)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_805": {
-    "workflowId": "minimax_h3_805",
-    "name": "H3九图三音15s(多模式版)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_805", "name": "H3九图三音15s(多模式版)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖(480*864)",
-        "size": "480x864"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横(864*480)",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖(768*1376)",
-        "size": "768x1376"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横(1376*768)",
-        "size": "1376x768"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "portrait",
-        "upstream": "1088p竖(1088*1920)",
-        "size": "1088x1920"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "landscape",
-        "upstream": "1088p横(1920*1088)",
-        "size": "1920x1088"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "portrait",
-        "upstream": "1440p竖(1440*2560)",
-        "size": "1440x2560"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "landscape",
-        "upstream": "1440p横(2560*1440)",
-        "size": "2560x1440"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖(480*864)", "size": "480x864"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横(864*480)", "size": "864x480"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖(768*1376)", "size": "768x1376"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横(1376*768)", "size": "1376x768"},
+      {"resolution": "1088p", "orientation": "portrait", "upstream": "1088p竖(1088*1920)", "size": "1088x1920"},
+      {"resolution": "1088p", "orientation": "landscape", "upstream": "1088p横(1920*1088)", "size": "1920x1088"},
+      {"resolution": "1440p", "orientation": "portrait", "upstream": "1440p竖(1440*2560)", "size": "1440x2560"},
+      {"resolution": "1440p", "orientation": "landscape", "upstream": "1440p横(2560*1440)", "size": "2560x1440"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖(768*1376)",
-        "options": [
-          "480p竖(480*864)",
-          "480p横(864*480)",
-          "768p竖(768*1376)",
-          "768p横(1376*768)",
-          "1088p竖(1088*1920)",
-          "1088p横(1920*1088)",
-          "1440p竖(1440*2560)",
-          "1440p横(2560*1440)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 309132325113668,
-        "min": 1,
-        "max": 999999999999999
-      },
-      "style_preset": {
-        "type": "enum",
-        "required": false,
-        "default": "武打模式-真人-武戏+真实质感",
-        "options": [
-          "文戏模式-真人-文戏",
-          "文戏模式-真人-文戏+真实质感",
-          "武打模式-真人-武戏",
-          "武打模式-真人-武戏+真实质感",
-          "漫剧模式-漫剧-文戏",
-          "漫剧模式-漫剧-武戏"
-        ]
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": false},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": false},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖(480*864)", "480p横(864*480)", "768p竖(768*1376)", "768p横(1376*768)", "1088p竖(1088*1920)", "1088p横(1920*1088)", "1440p竖(1440*2560)", "1440p横(2560*1440)"], "default": "768p竖(768*1376)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+      "style_preset": {"type": "enum", "required": false, "options": ["文戏模式-真人-文戏", "文戏模式-真人-文戏+真实质感", "武打模式-真人-武戏", "武打模式-真人-武戏+真实质感", "漫剧模式-漫剧-文戏", "漫剧模式-漫剧-武戏"], "default": "武打模式-真人-武戏+真实质感"},
+    },
   },
   "minimax_h3_804": {
-    "workflowId": "minimax_h3_804",
-    "name": "H3九图15s(多模式版)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_804", "name": "H3九图15s(多模式版)", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖(480*864)",
-        "size": "480x864"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横(864*480)",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖(768*1376)",
-        "size": "768x1376"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横(1376*768)",
-        "size": "1376x768"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "portrait",
-        "upstream": "1088p竖(1088*1920)",
-        "size": "1088x1920"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "landscape",
-        "upstream": "1088p横(1920*1088)",
-        "size": "1920x1088"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "portrait",
-        "upstream": "1440p竖(1440*2560)",
-        "size": "1440x2560"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "landscape",
-        "upstream": "1440p横(2560*1440)",
-        "size": "2560x1440"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖(480*864)", "size": "480x864"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横(864*480)", "size": "864x480"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖(768*1376)", "size": "768x1376"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横(1376*768)", "size": "1376x768"},
+      {"resolution": "1088p", "orientation": "portrait", "upstream": "1088p竖(1088*1920)", "size": "1088x1920"},
+      {"resolution": "1088p", "orientation": "landscape", "upstream": "1088p横(1920*1088)", "size": "1920x1088"},
+      {"resolution": "1440p", "orientation": "portrait", "upstream": "1440p竖(1440*2560)", "size": "1440x2560"},
+      {"resolution": "1440p", "orientation": "landscape", "upstream": "1440p横(2560*1440)", "size": "2560x1440"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖(768*1376)",
-        "options": [
-          "480p竖(480*864)",
-          "480p横(864*480)",
-          "768p竖(768*1376)",
-          "768p横(1376*768)",
-          "1088p竖(1088*1920)",
-          "1088p横(1920*1088)",
-          "1440p竖(1440*2560)",
-          "1440p横(2560*1440)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 1022956482512850,
-        "min": 1,
-        "max": 100000000000000000
-      },
-      "style_preset": {
-        "type": "enum",
-        "required": false,
-        "default": "武打模式-真人-武戏+真实质感",
-        "options": [
-          "文戏模式-真人-文戏",
-          "文戏模式-真人-文戏+真实质感",
-          "武打模式-真人-武戏",
-          "武打模式-真人-武戏+真实质感",
-          "漫剧模式-漫剧-文戏",
-          "漫剧模式-漫剧-武戏"
-        ]
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_image_0": {"type": "image", "required": false},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖(480*864)", "480p横(864*480)", "768p竖(768*1376)", "768p横(1376*768)", "1088p竖(1088*1920)", "1088p横(1920*1088)", "1440p竖(1440*2560)", "1440p横(2560*1440)"], "default": "768p竖(768*1376)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 100000000000000000},
+      "style_preset": {"type": "enum", "required": false, "options": ["文戏模式-真人-文戏", "文戏模式-真人-文戏+真实质感", "武打模式-真人-武戏", "武打模式-真人-武戏+真实质感", "漫剧模式-漫剧-文戏", "漫剧模式-漫剧-武戏"], "default": "武打模式-真人-武戏+真实质感"},
+    },
   },
   "minimax_h3_image_audio_to_video": {
-    "workflowId": "minimax_h3_image_audio_to_video",
-    "name": "H3图生视频-音频同步(自动对口型)",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": null,
-    "secondsField": "audio_duration",
-    "input_reference": [
-      "ref_image_0"
-    ],
-    "audios": [
-      "ref_audio_0"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_image_audio_to_video", "name": "H3图生视频-音频同步(自动对口型)", "type": "video", "timeoutSeconds": 1800, "promptField": null, "secondsField": "audio_duration",
+    "input_reference": ["ref_image_0"], "audios": ["ref_audio_0"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖",
-        "size": "480x864"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖",
-        "size": "768x1344"
-      },
-      {
-        "resolution": "1080p",
-        "orientation": "portrait",
-        "upstream": "1080p竖",
-        "size": "1080x1920"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横",
-        "size": "1344x768"
-      },
-      {
-        "resolution": "1080p",
-        "orientation": "landscape",
-        "upstream": "1080p横",
-        "size": "1920x1080"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖", "size": "480x864"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖", "size": "768x1344"},
+      {"resolution": "1080p", "orientation": "portrait", "upstream": "1080p竖", "size": "1080x1920"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横", "size": "864x480"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横", "size": "1344x768"},
+      {"resolution": "1080p", "orientation": "landscape", "upstream": "1080p横", "size": "1920x1080"},
     ],
     "rules": {
-      "audio_duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": true,
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖",
-        "options": [
-          "480p竖",
-          "768p竖",
-          "1080p竖",
-          "480p横",
-          "768p横",
-          "1080p横"
-        ]
-      }
-    }
+      "audio_duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "ref_audio_0": {"type": "audio", "required": true},
+      "ref_image_0": {"type": "image", "required": true},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖", "768p竖", "1080p竖", "480p横", "768p横", "1080p横"], "default": "768p竖"},
+    },
   },
   "minimax_h3_b99_002": {
-    "workflowId": "minimax_h3_b99_002",
-    "name": "H3首尾帧生成视频",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "first_frame",
-      "last_frame"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_b99_002", "name": "H3首尾帧生成视频", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["first_frame", "last_frame"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "736p",
-        "orientation": "portrait",
-        "upstream": "736p竖"
-      },
-      {
-        "resolution": "736p",
-        "orientation": "landscape",
-        "upstream": "736p横"
-      },
-      {
-        "resolution": "736p",
-        "orientation": "square",
-        "upstream": "736p(1:1)"
-      }
+      {"resolution": "736p", "orientation": "portrait", "upstream": "736p竖"},
+      {"resolution": "736p", "orientation": "landscape", "upstream": "736p横"},
+      {"resolution": "736p", "orientation": "square", "upstream": "736p(1:1)"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "first_frame": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "last_frame": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "736p竖",
-        "options": [
-          "736p竖",
-          "736p横",
-          "736p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 865339729647738,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "first_frame": {"type": "image", "required": true},
+      "last_frame": {"type": "image", "required": true},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "resolution": {"type": "enum", "required": false, "options": ["736p竖", "736p横", "736p(1:1)"], "default": "736p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "wan2.2animate-v4-motion_retargeting": {
-    "workflowId": "wan2.2animate-v4-motion_retargeting",
-    "name": "动作迁移",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": null,
-    "secondsField": null,
-    "input_reference": [
-      "ref_image"
-    ],
-    "audios": [],
-    "videos": [
-      "ref_video"
-    ],
+    "workflowId": "wan2.2animate-v4-motion_retargeting", "name": "动作迁移", "type": "video", "timeoutSeconds": 1800, "promptField": null, "secondsField": null,
+    "input_reference": ["ref_image"], "audios": [], "videos": ["ref_video"],
     "resolutions": [
-      {
-        "resolution": "832p",
-        "orientation": "portrait",
-        "upstream": "464*832px(竖版)"
-      },
-      {
-        "resolution": "464p",
-        "orientation": "landscape",
-        "upstream": "832*464px(横版)"
-      }
+      {"resolution": "464p", "orientation": "portrait", "upstream": "464*832px(竖版)"},
+      {"resolution": "464p", "orientation": "landscape", "upstream": "832*464px(横版)"},
     ],
     "rules": {
-      "ref_image": {
-        "type": "image",
-        "required": true,
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_video": {
-        "type": "video",
-        "required": true,
-        "accept_types": [
-          "video/mp4",
-          "video/webm"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "464*832px(竖版)",
-        "options": [
-          "464*832px(竖版)",
-          "832*464px(横版)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 485581468409274,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "ref_image": {"type": "image", "required": true},
+      "ref_video": {"type": "video", "required": true},
+      "resolution": {"type": "enum", "required": false, "options": ["464*832px(竖版)", "832*464px(横版)"], "default": "464*832px(竖版)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_z0901": {
-    "workflowId": "minimax_h3_z0901",
-    "name": "H3文生视频（高质量创意直出）",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_z0901", "name": "H3文生视频（高质量创意直出）", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": [], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖(480*864)",
-        "size": "480x864"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横(864*480)",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖(768*1344)",
-        "size": "768x1344"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横(1344*768)",
-        "size": "1344x768"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "portrait",
-        "upstream": "1088p竖(1088*1920)",
-        "size": "1088x1920"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "landscape",
-        "upstream": "1088p横(1920*1088)",
-        "size": "1920x1088"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "portrait",
-        "upstream": "1440p竖(1440*2560)",
-        "size": "1440x2560"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "landscape",
-        "upstream": "1440p横(2560*1440)",
-        "size": "2560x1440"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖(480*864)", "size": "480x864"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横(864*480)", "size": "864x480"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖(768*1344)", "size": "768x1344"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横(1344*768)", "size": "1344x768"},
+      {"resolution": "1088p", "orientation": "portrait", "upstream": "1088p竖(1088*1920)", "size": "1088x1920"},
+      {"resolution": "1088p", "orientation": "landscape", "upstream": "1088p横(1920*1088)", "size": "1920x1088"},
+      {"resolution": "1440p", "orientation": "portrait", "upstream": "1440p竖(1440*2560)", "size": "1440x2560"},
+      {"resolution": "1440p", "orientation": "landscape", "upstream": "1440p横(2560*1440)", "size": "2560x1440"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖(768*1344)",
-        "options": [
-          "480p竖(480*864)",
-          "480p横(864*480)",
-          "768p竖(768*1344)",
-          "768p横(1344*768)",
-          "1088p竖(1088*1920)",
-          "1088p横(1920*1088)",
-          "1440p竖(1440*2560)",
-          "1440p横(2560*1440)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 865339729647738,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖(480*864)", "480p横(864*480)", "768p竖(768*1344)", "768p横(1344*768)", "1088p竖(1088*1920)", "1088p横(1920*1088)", "1440p竖(1440*2560)", "1440p横(2560*1440)"], "default": "768p竖(768*1344)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_z0903": {
-    "workflowId": "minimax_h3_z0903",
-    "name": "H3六图三音频生视频（高质量音画融合）",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5"
-    ],
-    "audios": [
-      "ref_audio_0",
-      "ref_audio_1",
-      "ref_audio_2"
-    ],
-    "videos": [],
+    "workflowId": "minimax_h3_z0903", "name": "H3六图三音频生视频（高质量音画融合）", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5"], "audios": ["ref_audio_0", "ref_audio_1", "ref_audio_2"], "videos": [],
     "resolutions": [
-      {
-        "resolution": "480p",
-        "orientation": "portrait",
-        "upstream": "480p竖(480*864)",
-        "size": "480x864"
-      },
-      {
-        "resolution": "480p",
-        "orientation": "landscape",
-        "upstream": "480p横(864*480)",
-        "size": "864x480"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "portrait",
-        "upstream": "768p竖(768*1376)",
-        "size": "768x1376"
-      },
-      {
-        "resolution": "768p",
-        "orientation": "landscape",
-        "upstream": "768p横(1376*768)",
-        "size": "1376x768"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "portrait",
-        "upstream": "1088p竖(1088*1920)",
-        "size": "1088x1920"
-      },
-      {
-        "resolution": "1088p",
-        "orientation": "landscape",
-        "upstream": "1088p横(1920*1088)",
-        "size": "1920x1088"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "portrait",
-        "upstream": "1440p竖(1440*2560)",
-        "size": "1440x2560"
-      },
-      {
-        "resolution": "1440p",
-        "orientation": "landscape",
-        "upstream": "1440p横(2560*1440)",
-        "size": "2560x1440"
-      }
+      {"resolution": "480p", "orientation": "portrait", "upstream": "480p竖(480*864)", "size": "480x864"},
+      {"resolution": "480p", "orientation": "landscape", "upstream": "480p横(864*480)", "size": "864x480"},
+      {"resolution": "768p", "orientation": "portrait", "upstream": "768p竖(768*1376)", "size": "768x1376"},
+      {"resolution": "768p", "orientation": "landscape", "upstream": "768p横(1376*768)", "size": "1376x768"},
+      {"resolution": "1088p", "orientation": "portrait", "upstream": "1088p竖(1088*1920)", "size": "1088x1920"},
+      {"resolution": "1088p", "orientation": "landscape", "upstream": "1088p横(1920*1088)", "size": "1920x1088"},
+      {"resolution": "1440p", "orientation": "portrait", "upstream": "1440p竖(1440*2560)", "size": "1440x2560"},
+      {"resolution": "1440p", "orientation": "landscape", "upstream": "1440p横(2560*1440)", "size": "2560x1440"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_audio_0": {
-        "type": "audio",
-        "required": true,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_1": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_audio_2": {
-        "type": "audio",
-        "required": false,
-        "default": "default_local_path:/blank.wav;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.wav",
-        "accept_types": [
-          "audio/mpeg",
-          "audio/wav",
-          "audio/flac"
-        ]
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "768p竖(768*1376)",
-        "options": [
-          "480p竖(480*864)",
-          "480p横(864*480)",
-          "768p竖(768*1376)",
-          "768p横(1376*768)",
-          "1088p竖(1088*1920)",
-          "1088p横(1920*1088)",
-          "1440p竖(1440*2560)",
-          "1440p横(2560*1440)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 757947932117433,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_audio_0": {"type": "audio", "required": true},
+      "ref_audio_1": {"type": "audio", "required": false},
+      "ref_audio_2": {"type": "audio", "required": false},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["480p竖(480*864)", "480p横(864*480)", "768p竖(768*1376)", "768p横(1376*768)", "1088p竖(1088*1920)", "1088p横(1920*1088)", "1440p竖(1440*2560)", "1440p横(2560*1440)"], "default": "768p竖(768*1376)"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_b99_003_12s": {
-    "workflowId": "minimax_h3_b99_003_12s",
-    "name": "H3多图生视频12秒",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [
-      "ref_image_0",
-      "ref_image_1",
-      "ref_image_2",
-      "ref_image_3",
-      "ref_image_4",
-      "ref_image_5",
-      "ref_image_6",
-      "ref_image_7",
-      "ref_image_8"
-    ],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_b99_003_12s", "name": "H3多图生视频12秒", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": ["ref_image_0", "ref_image_1", "ref_image_2", "ref_image_3", "ref_image_4", "ref_image_5", "ref_image_6", "ref_image_7", "ref_image_8"], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "736p",
-        "orientation": "portrait",
-        "upstream": "736p竖"
-      },
-      {
-        "resolution": "736p",
-        "orientation": "landscape",
-        "upstream": "736p横"
-      },
-      {
-        "resolution": "736p",
-        "orientation": "square",
-        "upstream": "736p(1:1)"
-      }
+      {"resolution": "736p", "orientation": "portrait", "upstream": "736p竖"},
+      {"resolution": "736p", "orientation": "landscape", "upstream": "736p横"},
+      {"resolution": "736p", "orientation": "square", "upstream": "736p(1:1)"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "ref_image_0": {
-        "type": "image",
-        "required": true,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_1": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_2": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_3": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_4": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_5": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_6": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_7": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "ref_image_8": {
-        "type": "image",
-        "required": false,
-        "default": "default_local_path:/blank.png;https://codewithgpu.ks3-cn-beijing.ksyuncs.com/comfyui_api/blank/blank.png",
-        "accept_types": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ]
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "736p竖",
-        "options": [
-          "736p竖",
-          "736p横",
-          "736p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 865339729647738,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "ref_image_0": {"type": "image", "required": true},
+      "ref_image_1": {"type": "image", "required": false},
+      "ref_image_2": {"type": "image", "required": false},
+      "ref_image_3": {"type": "image", "required": false},
+      "ref_image_4": {"type": "image", "required": false},
+      "ref_image_5": {"type": "image", "required": false},
+      "ref_image_6": {"type": "image", "required": false},
+      "ref_image_7": {"type": "image", "required": false},
+      "ref_image_8": {"type": "image", "required": false},
+      "resolution": {"type": "enum", "required": false, "options": ["736p竖", "736p横", "736p(1:1)"], "default": "736p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   },
   "minimax_h3_b99_001": {
-    "workflowId": "minimax_h3_b99_001",
-    "name": "H3文生视频",
-    "type": "video",
-    "timeoutSeconds": 1800,
-    "promptField": "prompt",
-    "secondsField": "duration",
-    "input_reference": [],
-    "audios": [],
-    "videos": [],
+    "workflowId": "minimax_h3_b99_001", "name": "H3文生视频", "type": "video", "timeoutSeconds": 1800, "promptField": "prompt", "secondsField": "duration",
+    "input_reference": [], "audios": [], "videos": [],
     "resolutions": [
-      {
-        "resolution": "736p",
-        "orientation": "portrait",
-        "upstream": "736p竖"
-      },
-      {
-        "resolution": "736p",
-        "orientation": "landscape",
-        "upstream": "736p横"
-      },
-      {
-        "resolution": "736p",
-        "orientation": "square",
-        "upstream": "736p(1:1)"
-      }
+      {"resolution": "736p", "orientation": "portrait", "upstream": "736p竖"},
+      {"resolution": "736p", "orientation": "landscape", "upstream": "736p横"},
+      {"resolution": "736p", "orientation": "square", "upstream": "736p(1:1)"},
     ],
     "rules": {
-      "duration": {
-        "type": "integer",
-        "required": false,
-        "default": 5,
-        "min": 1,
-        "max": 15
-      },
-      "prompt": {
-        "type": "string",
-        "required": true,
-        "min_length": 1,
-        "max_length": 20000
-      },
-      "resolution": {
-        "type": "enum",
-        "required": false,
-        "default": "736p竖",
-        "options": [
-          "736p竖",
-          "736p横",
-          "736p(1:1)"
-        ]
-      },
-      "seed": {
-        "type": "integer",
-        "required": false,
-        "default": 865339729647738,
-        "min": 1,
-        "max": 999999999999999
-      }
-    }
+      "duration": {"type": "integer", "required": false, "min": 1, "max": 15, "default": 5},
+      "prompt": {"type": "string", "required": true, "min_length": 1, "max_length": 20000},
+      "resolution": {"type": "enum", "required": false, "options": ["736p竖", "736p横", "736p(1:1)"], "default": "736p竖"},
+      "seed": {"type": "integer", "required": false, "min": 1, "max": 999999999999999},
+    },
   }
 };
 
@@ -4423,45 +692,34 @@ const MOTION_WORKFLOW = "wan2.2animate-v4-motion_retargeting";
 // Channel-mapped external model name for motion transfer over OpenAI /v1/videos.
 const MOTION_ALIAS = "wan2.2-animate-move";
 const TTS_WORKFLOW = "indextts2-v1";
-// The upstream project's own model id for the TTS workflow, added for the same
-// reason as the motion alias: callers know the vendor's name, not AutoDL's
-// wrapped workflow id. Exact spelling comes from the creator's model repos
-// (IndexTeam/IndexTTS-2), which use the hyphenated form in prose and in the
-// repository id alike.
+// The upstream project's own model id for the TTS workflow, added for the same reason as the motion
+// alias: callers know the vendor's name, not AutoDL's wrapped workflow id.
 const TTS_ALIAS = "IndexTTS-2";
-// Public model names that resolve to a declared workflow instead of to themselves.
-// Keeping this a table means the two aliases cannot drift apart in how they are
-// advertised, validated, priced or resolved.
+// Public model names that resolve to a declared workflow instead of to themselves. Keeping this a
+// table means the two aliases cannot drift apart in how they are advertised, validated, priced or
+// resolved.
 const PUBLIC_ALIASES = {};
 PUBLIC_ALIASES[MOTION_ALIAS] = MOTION_WORKFLOW;
 PUBLIC_ALIASES[TTS_ALIAS] = TTS_WORKFLOW;
 
-// Motion transfer has no upstream duration control, so a caller's declaration is
-// only the pre-charge reservation and settlement replaces it with the measured
-// length of the delivered clip. This is the reservation used when a caller
-// declares nothing, so an omitted declaration can never settle at zero seconds.
+// Motion transfer has no upstream duration control, so a caller's declaration is only the
+// pre-charge reservation and settlement replaces it with the measured length of the delivered clip.
 const MOTION_DEFAULT_SECONDS = 5;
 
-// TTS is billed per delivered audio second with a vendor minimum charge equal to
-// ten seconds of audio, so the pre-charge holds exactly that floor: a shorter
-// reservation would let a successful short clip be charged the difference after
-// the fact, and a longer one would lock up balance for no reason.
+// TTS is billed per delivered audio second with a vendor minimum charge equal to ten seconds of
+// audio, so the pre-charge holds exactly that floor: a shorter reservation would let a successful
+// short clip be charged the difference after the fact, and a longer one would lock up balance for
+// no reason.
 const TTS_DEFAULT_SECONDS = 10;
 
-// `publicModel` lets the channel-mapped motion alias reuse the motion workflow's
-// capability profile while still being advertised and priced under its own name.
-// It is validated as a string because Array.map would otherwise pass an index.
+// `publicModel` lets the channel-mapped motion alias reuse the motion workflow's capability profile
+// while still being advertised and priced under its own name.
 function usageProfile(model, publicModel) {
   const config = WORKFLOWS[model];
   const schema = Object.assign({}, REQUEST_SCHEMA);
   const facts = { requests: 1 };
-  // TTS is billed per second of delivered audio (AutoDL's own price_type for the
-  // workflow is `audio_sec_cost`). It has no duration *parameter* -- the caller
-  // cannot ask for a length -- but the delivered file always has one, so unlike
-  // the H3 workflows its seconds come from measurement, exactly like motion
-  // transfer. The fact is still named `seconds`: every workflow reports its
-  // billable length under that one name, including the H3 audio-sync workflow
-  // whose *parameter* is audio_duration, so pricing expressions stay uniform.
+  // TTS is billed per second of delivered audio (AutoDL's own price_type for the workflow is
+  // `audio_sec_cost`).
   const measured = config.secondsField || model === MOTION_WORKFLOW || config.type === "audio";
   if (measured) {
     const audio = config.type === "audio";
@@ -4483,25 +741,22 @@ function usageProfile(model, publicModel) {
   return { models: [typeof publicModel === "string" ? publicModel : model], schema: schema, examples: [{ label: config.name, facts: facts }] };
 }
 
-// Map a public alias onto the workflow it runs as, leaving every other name
-// untouched. This is what makes an alias inherit the workflow's capability table,
-// media slots and validation rather than falling through to the permissive
-// profile used for names we hold no table for.
+// Map a public alias onto the workflow it runs as, leaving every other name untouched. This is what
+// makes an alias inherit the workflow's capability table, media slots and validation rather than
+// falling through to the permissive profile used for names we hold no table for.
 function workflowForName(model) {
   return typeof model === "string" && has(PUBLIC_ALIASES, model) ? PUBLIC_ALIASES[model] : model;
 }
 
-// Removed on purpose and never coming back: the official model names this adapter
-// used to auto-route. An operator mapping a channel could otherwise resurrect one
-// by accident and silently restore routing that was deliberately deleted, so these
-// stay refused even though arbitrary mapped names are now accepted.
+// Removed on purpose and never coming back: the official model names this adapter used to
+// auto-route.
 const RETIRED_MODELS = ["minimax-h3", "minimax-h3-max"];
 
 export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.1.2",
+  version: "1.1.3",
   author: { name: "Yiyin" },
   description: { en: "All " + WORKFLOW_COUNT + " AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 " + WORKFLOW_COUNT + " 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -4513,47 +768,37 @@ export const meta = {
   allowedHosts: ["cg-comfyui-prod.tos-cn-beijing.volces.com"],
   models: Object.keys(WORKFLOWS).concat([MOTION_ALIAS, TTS_ALIAS]),
   fetchMode: "per_task",
-  // The channel-mapped OpenAI motion alias stays selectable; its OpenAI decoder
-  // is unchanged. The TTS alias is deliberately absent: this plugin exposes TTS
-  // only through the MiniMax V2 surface, and adding it here would advertise a
-  // model on /v1/videos that the audio path cannot serve.
+  // The channel-mapped OpenAI motion alias stays selectable; its OpenAI decoder is unchanged. The
+  // TTS alias is deliberately absent: this plugin exposes TTS only through the MiniMax V2 surface,
+  // and adding it here would advertise a model on /v1/videos that the audio path cannot serve.
   protocols: [{ name: "openai_video", models: VIDEO_MODELS.concat([MOTION_ALIAS]) }],
-  // Only the MiniMax V2 routes are registered. Neither OpenAI (/v1/videos) nor
-  // MiniMax (/v2/...) intersects a host-reserved namespace, so this plugin needs
-  // no origin-proxy rewrite and runs from a single file install.
+  // Only the MiniMax V2 routes are registered. Neither OpenAI (/v1/videos) nor MiniMax (/v2/...)
+  // intersects a host-reserved namespace, so this plugin needs no origin-proxy rewrite and runs
+  // from a single file install.
   routes: [
     { method: "POST", path: "/v2/video_generation", type: "submit", decode: "miniCreate", render: "miniCreated" },
     { method: "GET", path: "/v2/query/video_generation/:task_id", type: "query", render: "miniTask" },
   ],
   usageSchema: REQUEST_SCHEMA,
-  // Both public aliases advertise their own usage profile so each can be priced
-  // separately, and each inherits the shape of the workflow it resolves to. Motion
-  // bills per second of the delivered clip. TTS bills per delivered AUDIO second
-  // against the vendor's minimum, so its profile carries `seconds` too -- describing it
-  // as per-request would put it back on a price the vendor does not charge. Without these
-  // profiles the host priced an alias from usageSchema alone (requests only) and its
-  // per-second expression had no seconds value to read, so per-second billing silently
-  // degraded to per-request.
+  // Both public aliases advertise their own usage profile so each can be priced separately, and
+  // each inherits the shape of the workflow it resolves to.
   usageProfiles: Object.keys(WORKFLOWS).map(usageProfile)
     .concat([usageProfile(MOTION_WORKFLOW, MOTION_ALIAS), usageProfile(TTS_WORKFLOW, TTS_ALIAS)]),
 };
 
 function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
-// Smallest billable declaration. The host rounds measured seconds to whole
-// seconds, but a declared value is used verbatim for the pre-charge and, when
-// the output cannot be measured, for the final settlement. Without a floor a
-// caller could declare 0.0001s and pay essentially nothing for a real render.
+// Smallest billable declaration. The host rounds measured seconds to whole seconds, but a declared
+// value is used verbatim for the pre-charge and, when the output cannot be measured, for the final
+// settlement.
 const MIN_BILLABLE_SECONDS = 1;
 function billedSeconds(value, field) {
   const seconds = typeof value === "number" ? value : (typeof value === "string" && /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value) ? Number(value) : NaN);
   if (!Number.isFinite(seconds) || seconds < MIN_BILLABLE_SECONDS || seconds > 3600) throw new Error("AutoDL: " + field + " must be a number between " + MIN_BILLABLE_SECONDS + " and 3600 seconds");
   return seconds;
 }
-// The reservation for a motion-transfer request. The declaration is optional:
-// upstream has no duration parameter, so it never reaches the vendor, and
-// settlement bills the measured clip instead. Falling back to the default keeps
-// the reservation non-zero so a caller who declares nothing still pays for a
-// render whose output cannot be measured.
+// The reservation for a motion-transfer request. The declaration is optional: upstream has no
+// duration parameter, so it never reaches the vendor, and settlement bills the measured clip
+// instead.
 function motionDeclaredSeconds(input) {
   const declared = input.seconds === undefined ? input.duration : input.seconds;
   if (input.seconds !== undefined && input.duration !== undefined
@@ -4575,15 +820,9 @@ function workflow(model) {
   if (!has(WORKFLOWS, model)) throw new Error(UNSUPPORTED_MODEL);
   return WORKFLOWS[model];
 }
-// Deployment reality the protocol tables cannot express: an operator may map any
-// self-chosen model name onto an AutoDL workflow inside their own channel, so the
-// workflow id can be one we hold no capability table for. Declared models never
-// reach this path and keep their strict per-model validation; the fallback covers
-// only the ids we cannot describe, and validates what is knowable without a
-// capability table (the body is an object, media is well formed, no unknown or
-// prototype key rides along) while leaving capability limits -- prompt slots,
-// second ranges, reference counts, resolution labels -- to the workflow upstream
-// actually runs. Rejecting instead would make every mapped name unusable.
+// Deployment reality the protocol tables cannot express: an operator may map any self-chosen model
+// name onto an AutoDL workflow inside their own channel, so the workflow id can be one we hold no
+// capability table for.
 function unmappedWorkflow(workflowId) {
   const id = text(workflowId);
   if (!id) throw new Error("AutoDL: model is required");
@@ -4602,13 +841,13 @@ function unmappedWorkflow(workflowId) {
   // refused before the channel mapping (known only at submission) picks the table.
   rules.first_frame = { type: "image", required: false };
   rules.last_frame = { type: "image", required: false };
-  // A generic text slot so a mapped workflow can still receive its prompt. The
-  // declared workflows keep their own exact prompt field and character limits;
-  // without a capability table the only honest bound is "non-empty string".
+  // A generic text slot so a mapped workflow can still receive its prompt. The declared workflows
+  // keep their own exact prompt field and character limits; without a capability table the only
+  // honest bound is "non-empty string".
   rules.prompt = { type: "string", min_length: 1, max_length: 4096 };
-  // Likewise a generic duration slot: a mapped workflow that accepts a length gets
-  // it, and the wide 1..3600 bound (the same sanity bound motion settlement uses)
-  // stands in for the per-workflow range we cannot know.
+  // Likewise a generic duration slot: a mapped workflow that accepts a length gets it, and the wide
+  // 1..3600 bound (the same sanity bound motion settlement uses) stands in for the per-workflow
+  // range we cannot know.
   rules.duration = { type: "integer", required: false, default: 5, min: 1, max: 3600 };
   rules.audio_duration = { type: "integer", required: false, default: 5, min: 1, max: 3600 };
   rules.resolution = { type: "string", required: false, default: "adaptive" };
@@ -4617,16 +856,11 @@ function unmappedWorkflow(workflowId) {
   return {
     workflowId: id,
     name: "Mapped AutoDL workflow",
-    // Modality is NOT inferred from the name. A private id is just a label the
-    // operator chose; matching /tts|indextts/ against it made a video workflow called
-    // "tts-enhance-video" classify as audio (tagged text_to_audio and billed as
-    // audio), and -- because this fallback never builds the emo_* rules -- it made
-    // mapEmotion dereference a rule that does not exist and crash with a raw
-    // TypeError at the real upstream call. Without a capability table the honest
-    // answer is video, which is what every declared workflow except one is, and
-    // emotion controls are then refused by mapEmotion with a clean message instead
-    // of being half-supported. An operator whose private workflow really is audio
-    // declares it under its mapped id, which carries the real table.
+    // Modality is NOT inferred from the name. A private id is just a label the operator chose;
+    // matching /tts|indextts/ against it made a video workflow called "tts-enhance-video" classify
+    // as audio (tagged text_to_audio and billed as audio), and -- because this fallback never
+    // builds the emo_* rules -- it made mapEmotion dereference a rule that does not exist and crash
+    // with a raw TypeError at the real upstream call.
     type: "video",
     timeoutSeconds: 1800,
     // No seconds control is declared, so an unmapped workflow never advertises
@@ -4636,67 +870,48 @@ function unmappedWorkflow(workflowId) {
     input_reference: images,
     audios: audios,
     videos: videos,
-    // A pass-through entry whose `upstream` equals any input label, so a mapped
-    // workflow's own resolution spelling reaches it unchanged. Declared workflows
-    // map their labelled enums exactly; this one has no labels to map.
+    // A pass-through entry whose `upstream` equals any input label, so a mapped workflow's own
+    // resolution spelling reaches it unchanged.
     resolutions: [{ resolution: "adaptive", orientation: "adaptive", upstream: "adaptive", passthrough: true }],
     rules: rules,
     unmapped: true,
   };
 }
-// Resolve the workflow a request runs as, and the upstream id it is sent to.
-//
-// Validation and the upstream id are decided separately, and that separation is
-// the whole point:
-//   * If the caller named a declared workflow, THAT workflow's capability table
-//     validates the request, whatever the channel mapped it to. Otherwise an
-//     operator mapping a declared model to a private id would silently strip the
-//     declared model's prompt/seconds/media/resolution limits, and a customer
-//     could buy an out-of-range generation.
-//   * The upstream id is the mapped one when the host resolved a mapping, because
-//     that is where the operator's request should actually run; otherwise it is
-//     the declared name itself.
-//   * Only when the caller's name is undeclared -- a self-chosen name we hold no
-//     table for -- does the permissive profile validate, against the mapped id.
+// Resolve the workflow a request runs as, and the upstream id it is sent to. Validation and the
+// upstream id are decided separately, and that separation is the whole point: * If the caller named
+// a declared workflow, THAT workflow's capability table validates the request, whatever the channel
+// mapped it to.
 function resolveWorkflow(mappedModel, requestedModel) {
-  // Callers pass the RAW names. Resolving the alias inside (rather than at every call site)
-  // is what lets the retirement check below see the caller's actual model: a caller that
-  // named a removed official model arrived here as `undefined` once the alias table had been
-  // consulted, so the retired name was never examined and a channel mapping could run it.
+  // Callers pass the RAW names. Resolving the alias inside (rather than at every call site) is what
+  // lets the retirement check below see the caller's actual model: a caller that named a removed
+  // official model arrived here as `undefined` once the alias table had been consulted, so the
+  // retired name was never examined and a channel mapping could run it.
   const requestedRaw = text(requestedModel);
   const mappedRaw = text(mappedModel);
   // A retired official name is refused whether it arrives as the caller's model or as the
-  // operator's mapped id. Checking it only on the permissive fallback let a channel mapping
-  // resurrect a deliberately removed name -- and could even send that id upstream -- while
-  // the documented contract and this file's own comment promise it stays refused.
+  // operator's mapped id.
   for (const candidate of [requestedRaw, mappedRaw]) {
     if (candidate && RETIRED_MODELS.includes(candidate.toLowerCase())) {
       throw new Error(UNSUPPORTED_MODEL);
     }
   }
-  // BOTH names are resolved through the alias table. Applying it only to the caller's name
-  // meant an operator who mapped onto a public alias (say `IndexTTS-2`) got the permissive
-  // profile with the TTS audio requirement skipped, and the alias itself was sent upstream
-  // as the workflow id, which AutoDL does not know.
+  // BOTH names are resolved through the alias table. Applying it only to the caller's name meant an
+  // operator who mapped onto a public alias (say `IndexTTS-2`) got the permissive profile with the
+  // TTS audio requirement skipped, and the alias itself was sent upstream as the workflow id, which
+  // AutoDL does not know.
   const requested = text(workflowForName(requestedRaw) || requestedRaw);
   const mapped = text(workflowForName(mappedRaw) || mappedRaw);
-  // Validation follows a declared table whenever one of the two names has one.
-  // The caller's own name is preferred because it is what the request was written
-  // against; the operator's mapped id is next, since mapping onto a declared
-  // workflow means that workflow's rules are the ones the generation must satisfy.
-  // Only when neither is declared -- a self-chosen name with no table -- does the
-  // permissive profile apply.
+  // Validation follows a declared table whenever one of the two names has one. The caller's own
+  // name is preferred because it is what the request was written against; the operator's mapped id
+  // is next, since mapping onto a declared workflow means that workflow's rules are the ones the
+  // generation must satisfy.
   const declared = [requested, mapped].reduce(function (found, candidate) {
     return found || (candidate && has(WORKFLOWS, candidate) ? WORKFLOWS[candidate] : null);
   }, null);
   const upstream = text(mapped || requested);
   if (declared) {
-    // The id actually called is the mapped one when the host resolved a mapping,
-    // even onto a workflow we do not declare; otherwise the declared name itself.
-    // When both agree this is the shared table entry unchanged, so the common path
-    // allocates nothing.
-    // `tableId` keeps the declared identity when the upstream id differs, so
-    // motion/TTS billing still applies to a workflow mapped onto another id.
+    // The id actually called is the mapped one when the host resolved a mapping, even onto a
+    // workflow we do not declare; otherwise the declared name itself.
     return upstream === declared.workflowId
       ? declared
       : Object.assign({}, declared, { workflowId: upstream, tableId: declared.workflowId });
@@ -4704,10 +919,10 @@ function resolveWorkflow(mappedModel, requestedModel) {
   return unmappedWorkflow(upstream);
 }
 
-// The declared workflow whose capability table and billing rules govern this
-// config. It differs from `workflowId` only when a channel mapped a declared
-// model onto another upstream id; behaviour (motion measurement, TTS floor,
-// legacy spellings) must follow the table, never the upstream label.
+// The declared workflow whose capability table and billing rules govern this config. It differs
+// from `workflowId` only when a channel mapped a declared model onto another upstream id; behaviour
+// (motion measurement, TTS floor, legacy spellings) must follow the table, never the upstream
+// label.
 function tableId(config) { return config.tableId || config.workflowId; }
 
 function numberValue(value, rule, name) {
@@ -4736,6 +951,13 @@ function mapResolution(config, input) {
       orientation = legacy.orientation;
     }
   }
+  // Motion transfer used to publish 832p (portrait) / 464p (landscape); both are
+  // 464p now. Old spellings keep their old meaning.
+  if (tableId(config) === MOTION_WORKFLOW && (quality === "832p" || (quality === "464p" && orientation === undefined))) {
+    const legacy = quality === "832p" ? "portrait" : "landscape";
+    if (orientation !== undefined && orientation !== legacy) throw new Error("AutoDL: resolution and orientation conflict");
+    quality = "464p"; orientation = legacy;
+  }
   if (input.size !== undefined) {
     const exact = config.resolutions.find(function (entry) { return entry.size && entry.size === input.size; });
     if (!exact) throw new Error("AutoDL: unsupported size for this workflow; use its declared resolution and orientation");
@@ -4744,9 +966,8 @@ function mapResolution(config, input) {
   }
   quality = quality === undefined ? defaults.resolution : quality;
   orientation = orientation === undefined ? defaults.orientation : orientation;
-  // An unmapped workflow has no label table, so the caller's own resolution and
-  // orientation spellings pass through verbatim; the workflow upstream validates
-  // them. This is why the profile carries a passthrough entry at all.
+  // An unmapped workflow has no label table, so the caller's own resolution and orientation
+  // spellings pass through verbatim; the workflow upstream validates them.
   if (defaults.passthrough) return { resolution: quality, orientation: orientation, upstream: quality };
   const selected = config.resolutions.find(function (entry) { return entry.resolution === quality && entry.orientation === orientation; });
   if (!selected) throw new Error("AutoDL: unsupported resolution/orientation combination for this workflow; check workflows.json");
@@ -4767,10 +988,8 @@ function referenceURLs(value) {
   });
 }
 
-// OpenAI's Videos Create has no `images` field; it is the New API Sora
-// compatibility spelling ([]string of URLs). Map it onto the same reference
-// slots as input_reference instead of dropping it, because it carries real
-// pictures that would otherwise silently become a text-only generation.
+// OpenAI's Videos Create has no `images` field; it is the New API Sora compatibility spelling
+// ([]string of URLs).
 function referenceInput(input) {
   const hasNew = has(input, "input_reference"), hasLegacy = has(input, "images");
   if (hasNew && hasLegacy) throw new Error("AutoDL: use either input_reference or images, not both");
@@ -4821,20 +1040,18 @@ function mapEmotion(config, input, body) {
   if (mode === "reference" && !body.emo_ref_audio) throw new Error("AutoDL: audios[1] is required for reference emotion mode");
   for (const key of allowed) {
     if (key === "mode" || emotion[key] === undefined) continue;
-    // A missing rule means this config declares an emotion mode it never gave bounds
-    // for. Refusing is the correct answer; dereferencing it crashed with a raw
-    // TypeError, which reaches the operator as an unintelligible failure instead of
-    // a diagnosis. Every declared workflow has all ten rules, so this only guards a
-    // config that was assembled wrong.
+    // A missing rule means this config declares an emotion mode it never gave bounds for. Refusing
+    // is the correct answer; dereferencing it crashed with a raw TypeError, which reaches the
+    // operator as an unintelligible failure instead of a diagnosis.
     const rule = config.rules["emo_" + key];
     if (!rule) throw new Error("AutoDL: emotion." + key + " is not supported by this workflow");
     body["emo_" + key] = controlValue(rule, emotion[key], "emotion." + key);
   }
 }
 
-// Validate one scalar against its official rule. Shared by the workflow-specific
-// controls on both surfaces and by the raw MiniMax fields, so a value is judged
-// the same way whichever request format carried it.
+// Validate one scalar against its official rule. Shared by the workflow-specific controls on both
+// surfaces and by the raw MiniMax fields, so a value is judged the same way whichever request
+// format carried it.
 function controlValue(rule, value, name) {
   if (["integer", "number"].includes(rule.type)) return numberValue(value, rule, name);
   if (rule.type === "boolean") {
@@ -4852,11 +1069,8 @@ function controlValue(rule, value, name) {
   throw new Error("AutoDL: unsupported official rule type " + rule.type);
 }
 
-// Scalar controls a workflow declares beyond the unified fields, such as the
-// H3 nine-image `mode` / `style_preset` and the character-replacement
-// `video_subject_to_replace`. They have no unified spelling, so both surfaces
-// take them under their official names. An operator-mapped workflow has no
-// table to read them from and keeps its existing behaviour.
+// Scalar controls a workflow declares beyond the unified fields, such as the H3 nine-image `mode` /
+// `style_preset` and the character-replacement `video_subject_to_replace`.
 function workflowControls(config) {
   if (config.unmapped) return [];
   const media = config.input_reference.concat(config.audios, config.videos);
@@ -4870,9 +1084,8 @@ function workflowControls(config) {
 // Fields the OpenAI surface documents for itself plus the parameters this
 // adapter adds for AutoDL capabilities OpenAI has no equivalent for.
 const OPENAI_FIELDS = ["model", "prompt", "seconds", "duration", "size", "input_reference", "images", "resolution", "orientation", "audios", "videos", "seed", "emotion"];
-// Accepted only so an official OpenAI client is not rejected; AutoDL has no
-// counterpart for either, and neither carries media, so they are ignored. A
-// workflow that declares its own `mode` control reads it instead (see below).
+// Accepted only so an official OpenAI client is not rejected; AutoDL has no counterpart for either,
+// and neither carries media, so they are ignored.
 const OPENAI_IGNORED = ["metadata", "mode", "callback_url", "extra", "user", "n", "response_format", "fps", "width", "height"];
 
 function normalizeInput(config, input) {
@@ -4886,6 +1099,9 @@ function normalizeInput(config, input) {
     // A media-shaped field this adapter cannot place is refused rather than
     // dropped, so a caller never pays for a generation that lost its input.
     if (/^(image|images|input_ref|audio|video|ref_|file)/i.test(key) || object(input[key]) || Array.isArray(input[key])) throw new Error("AutoDL: unsupported request field " + key + "; use input_reference, audios and videos for media");
+    // Any other unknown field is refused too, as on the MiniMax surface: a
+    // misspelt control would otherwise be dropped and the render still billed.
+    throw new Error("AutoDL: unsupported request field " + key + " for this workflow");
   }
   const body = {}, facts = { requests: 1 };
   if (config.promptField) {
@@ -4910,9 +1126,9 @@ function normalizeInput(config, input) {
     // seeds the reservation and settlement bills the measured clip instead.
     facts.seconds = motionDeclaredSeconds(input);
   } else if (config.type === "audio") {
-    // TTS has no duration control either, but unlike motion transfer there is no
-    // caller declaration to read: the length is decided by the delivered audio, so
-    // the reservation is fixed and settlement replaces it with the measurement.
+    // TTS has no duration control either, but unlike motion transfer there is no caller declaration
+    // to read: the length is decided by the delivered audio, so the reservation is fixed and
+    // settlement replaces it with the measurement.
     if (input.seconds !== undefined || input.duration !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
     facts.seconds = TTS_DEFAULT_SECONDS;
   } else if (input.seconds !== undefined || input.duration !== undefined) throw new Error("AutoDL: this workflow has no seconds control; duration follows the reference media or generated speech");
@@ -4977,9 +1193,9 @@ function miniScenario(input) {
 const MINIMAX_RESOLUTIONS = { "480P": "480p", "768P": "768p", "2K": "1440p" };
 const MINIMAX_RATIOS = { "21:9": "landscape", "16:9": "landscape", "4:3": "landscape", "1:1": "square", "3:4": "portrait", "9:16": "portrait" };
 
-// MiniMax treats every valid i2va ratio as adaptive. Plugin API v1 has no
-// remote-media probe, so keep the official workflow's default direction instead
-// of pretending that URL text or a caller-specified ratio is a measured size.
+// MiniMax treats every valid i2va ratio as adaptive. Plugin API v1 has no remote-media probe, so
+// keep the official workflow's default direction instead of pretending that URL text or a
+// caller-specified ratio is a measured size.
 function miniOrientation(config, input, scenario, quality) {
   const ratio = input.ratio;
   if (ratio !== undefined && ratio !== "adaptive" && !(typeof ratio === "string" && has(MINIMAX_RATIOS, ratio))) throw new Error("AutoDL: MiniMax ratio must be adaptive, 21:9, 16:9, 4:3, 1:1, 3:4 or 9:16");
@@ -5002,16 +1218,14 @@ function savedMiniMax(input) {
 
 function requestWorkflow(ctx) {
   const input = ctx.requestBody;
-  // A MiniMax native decoder runs before channel selection and never sees the
-  // channel mapping, so its saved model is resolved again here against
-  // ctx.upstreamModel, exactly as the OpenAI decoder resolves it. Requiring the
-  // two to be identical refused every mapped MiniMax request at submission.
+  // A MiniMax native decoder runs before channel selection and never sees the channel mapping, so
+  // its saved model is resolved again here against ctx.upstreamModel, exactly as the OpenAI decoder
+  // resolves it.
   if (object(input) && has(input, "__autodl_minimax")) return resolveWorkflow(text(ctx.upstreamModel), savedMiniMax(input).model);
-  // Past this point the request already carries a resolved workflow id. Validation
-  // still follows the model the caller named, so a declared model keeps its own
-  // capability table even when a channel mapped it to a private id; a public alias
-  // resolves to the workflow it names; only a name with no table at all -- a
-  // self-chosen one -- falls back to the permissive profile.
+  // Past this point the request already carries a resolved workflow id. Validation still follows
+  // the model the caller named, so a declared model keeps its own capability table even when a
+  // channel mapped it to a private id; a public alias resolves to the workflow it names; only a
+  // name with no table at all -- a self-chosen one -- falls back to the permissive profile.
   return resolveWorkflow(text(ctx.upstreamModel), text(ctx.model));
 }
 
@@ -5019,9 +1233,9 @@ function normalizeMiniMax(config, input) {
   const scenario = miniScenario(input);
   if (scenario.reference_video && !config.videos.length) throw new Error("AutoDL: 当前 AutoDL 适配器没有对应的 reference_video workflow");
   const reserved = ["model", "content", "resolution", "duration", "audio_duration", "ratio", "seed"];
-  // Documented by MiniMax but with no AutoDL counterpart. They are control
-  // metadata only (no media), so accepting and ignoring them keeps an official
-  // client working instead of failing its request outright.
+  // Documented by MiniMax but with no AutoDL counterpart. They are control metadata only (no
+  // media), so accepting and ignoring them keeps an official client working instead of failing its
+  // request outright.
   const ignored = ["callback_url", "extra"];
   const mediaFields = config.input_reference.concat(config.audios, config.videos);
   const body = {};
@@ -5057,7 +1271,11 @@ function normalizeMiniMax(config, input) {
       quality = rawChoice ? rawChoice.resolution : input.resolution;
       if (Object.values(MINIMAX_RESOLUTIONS).includes(quality)) throw new Error("AutoDL: use MiniMax resolution spelling 480P, 768P or 2K");
     }
+    // Legacy motion spelling: 832p was the portrait 464p tier.
+    const legacyPortrait = tableId(config) === MOTION_WORKFLOW && quality === "832p";
+    if (legacyPortrait) quality = "464p";
     const orientation = miniOrientation(config, input, scenario, quality);
+    if (legacyPortrait && orientation !== "portrait") throw new Error("AutoDL: MiniMax ratio conflicts with the AutoDL resolution label");
     if (rawChoice && !scenario.frames && input.ratio !== undefined && input.ratio !== "adaptive" && rawChoice.orientation !== orientation) throw new Error("AutoDL: MiniMax ratio conflicts with the AutoDL resolution label");
     const selected = config.resolutions.find(function (entry) { return entry.resolution === quality && entry.orientation === orientation; });
     if (!selected) throw new Error("AutoDL: unsupported MiniMax resolution/ratio combination for this workflow");
@@ -5106,9 +1324,8 @@ function normalizeMiniMax(config, input) {
     normalized.facts.seconds = motionSeconds === undefined ? MOTION_DEFAULT_SECONDS : motionSeconds;
   }
   if (tableId(config) === TTS_WORKFLOW) {
-    // There is no duration parameter to read at all: the caller cannot influence
-    // the length, and the delivered file is the only source. Set the vendor's
-    // minimum-billable reservation here so the pre-charge is never short.
+    // There is no duration parameter to read at all: the caller cannot influence the length, and
+    // the delivered file is the only source.
     normalized.facts.seconds = TTS_DEFAULT_SECONDS;
   }
   return normalized;
@@ -5120,9 +1337,9 @@ function sameTable(a, b) { return !!a.unmapped === !!b.unmapped && tableId(a) ==
 function normalizeRequest(config, input) {
   if (object(input) && has(input, "__autodl_fields")) {
     if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "__autodl_minimax", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
-    // The integrity checks below compare the saved fields with the table the
-    // decoder used. `config` can differ from it: a native MiniMax decoder never
-    // sees the channel mapping, which only reaches the driver hooks.
+    // The integrity checks below compare the saved fields with the table the decoder used. `config`
+    // can differ from it: a native MiniMax decoder never sees the channel mapping, which only
+    // reaches the driver hooks.
     let decodedConfig = config, expected, expectedFacts, source;
     if (has(input, "__autodl_minimax")) {
       if (typeof input.__autodl_minimax !== "string") throw new Error("AutoDL: invalid internal MiniMax source");
@@ -5204,30 +1421,22 @@ function safeReason(ctx, value) {
   let message = text(value) || "AutoDL: workflow generation failed";
   for (const candidate of [ctx.apiKey, ctx.authHeader]) {
     if (typeof candidate !== "string" || !candidate) continue;
-    // The auth header carries a scheme prefix that is NOT part of the credential. Window
-    // the credential itself: windowing the whole header produced fragments containing
-    // "Bearer " plus a character or two of the key, which matched ordinary diagnostic text
-    // and redacted it -- a 7-character key was redacted through its 14-character header
-    // despite the documented minimum below, eating the space around it.
+    // The auth header carries a scheme prefix that is NOT part of the credential. Window the
+    // credential itself: windowing the whole header produced fragments containing "Bearer " plus a
+    // character or two of the key, which matched ordinary diagnostic text and redacted it -- a
+    // 7-character key was redacted through its 14-character header despite the documented minimum
+    // below, eating the space around it.
     const secret = candidate.replace(/^\s*Bearer\s+/i, "");
-    // Only redact a credential long enough that its occurrence is unambiguous. A
-    // short key (a misconfigured channel) would otherwise match ordinary words
-    // and shred the diagnostic an operator needs, e.g. "error" inside
-    // "upstream error: ...". Real AutoDL tokens are far longer than this.
+    // Only redact a credential long enough that its occurrence is unambiguous. A short key (a
+    // misconfigured channel) would otherwise match ordinary words and shred the diagnostic an
+    // operator needs, e.g.
     if (secret.length < MIN_REDACTABLE_SECRET) continue;
     const escape = function (part) { return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); };
-    // Redact the WHOLE credential first, as sent (header form) and bare, and
-    // CASE-INSENSITIVELY. An upstream may echo the credential in a different case, and a
-    // case-sensitive match left a 33-character mixed-case token fully readable. Doing this
-    // before the window pass also matters: window fragments can otherwise split a token
-    // into pieces the whole-value match no longer recognises.
+    // Redact the WHOLE credential first, as sent (header form) and bare, and CASE-INSENSITIVELY.
     message = message.replace(new RegExp(escape(candidate), "gi"), "[redacted]");
     message = message.replace(new RegExp(escape(secret), "gi"), "[redacted]");
-    // An upstream may echo the credential split across escapes, quotes or line
-    // breaks, which defeats a contiguous match, and the split can fall at any
-    // offset. Redact every window of the secret so no partial echo survives.
-    // Short windows for short secrets keep the guarantee that no window equals
-    // the whole secret, which would degenerate into a whole-key replace.
+    // An upstream may echo the credential split across escapes, quotes or line breaks, which
+    // defeats a contiguous match, and the split can fall at any offset.
     const size = Math.max(1, Math.min(8, secret.length - 1));
     const windows = {};
     for (let start = 0; start + size <= secret.length; start++) windows[secret.slice(start, start + size)] = true;
@@ -5339,11 +1548,8 @@ function mp4Duration(bytes) {
           }
         });
       });
-      // A file can carry several 'vide' tracks, but only the one with a sample
-      // table carries the delivered picture; sprites, posters and timed
-      // metadata have none. Prefer that track and keep the longest only among
-      // equals, because ranking by length alone lets an auxiliary track over-bill
-      // past the real clip (and past the caller's declared ceiling).
+      // A file can carry several 'vide' tracks, but only the one with a sample table carries the
+      // delivered picture; sprites, posters and timed metadata have none.
       if (handler === "vide" && timescale > 0 && Number.isFinite(duration)) {
         const value = duration / timescale;
         if (hasSamples && !videoSampled) { videoDuration = value; videoSampled = true; }
@@ -5400,16 +1606,9 @@ function webmDuration(bytes) {
 }
 
 
-// TTS bills per second of delivered audio (AutoDL's own price_type for the
-// workflow is `audio_sec_cost`), but the upstream returns no duration field and
-// the workflow exposes no duration parameter. So the length has to come from the
-// audio file itself, exactly as motion transfer measures its delivered clip.
-// WAV states its length in the header. Everything in a RIFF file is
-// little-endian, unlike the big-endian MP4/EBML readers above, so it needs its own
-// readers: reusing u32 read each chunk size as hundreds of millions and walked the
-// cursor off the end of the buffer, which made every WAV look unmeasurable.
-// Reads are bounds-checked because the probe may be a Range window, so a chunk
-// header can be cut off mid-way.
+// TTS bills per second of delivered audio (AutoDL's own price_type for the workflow is
+// `audio_sec_cost`), but the upstream returns no duration field and the workflow exposes no
+// duration parameter.
 function u16le(bytes, offset) {
   return bytes[offset] + bytes[offset + 1] * 0x100;
 }
@@ -5432,9 +1631,7 @@ let fetchesUsed = 0;
 function resetFetchBudget() { fetchesUsed = 0; }
 function fetchesLeft() { return FETCH_BUDGET - fetchesUsed; }
 
-// The single point through which every host fetch passes, so this count mirrors the host's
-// own. Routing only the Range reads through the budget left the direct HEAD probes
-// uncounted, and a fifth request was then attempted for a file that needed several windows.
+// The single point through which every host fetch passes, so this count mirrors the host's own.
 function budgetedFetch(options) {
   if (fetchesLeft() <= 0) throw new Error("media fetch budget exhausted");
   fetchesUsed++;
@@ -5445,33 +1642,21 @@ function isRiff(bytes) {
   return !!bytes && bytes.length >= 12 && ascii4(bytes, 0) === "RIFF" && ascii4(bytes, 8) === "WAVE";
 }
 
-// Walk a WAV's RIFF chunk chain, summing every `data` chunk.
-//
-// `first` is the file's first window; `fetchWindow(start, end)` may return further windows,
-// or null when the budget is exhausted. Walking is what makes a SPLICED WAV exact: the walk
-// previously ended when the window ran out, so a 170s file whose second chunk began past
-// 1 MiB billed 70s. The walk jumps by each chunk's declared size, so the number of windows
-// it needs grows with the number of CHUNKS, not with the file size -- head plus two more
-// completes every realistic shape, including a trailing 1 MB cover image.
-//
-// `complete` is false when the chain could not be followed to the end of the file, making
-// `audioBytes` a lower bound. The caller still bills it: a partial sum is closer to the
-// truth than the vendor minimum, and it can never over-charge.
+// Walk a WAV's RIFF chunk chain, summing every `data` chunk. `first` is the file's first window;
+// `fetchWindow(start, end)` may return further windows, or null when the budget is exhausted.
 function wavWalk(first, totalBytes, fetchWindow) {
   if (!first || first.length < 12) return null;
   if (ascii4(first, 0) !== "RIFF" || ascii4(first, 8) !== "WAVE") return null;
-  // The clamp uses the real resource size, never the window: clamping to the window
-  // truncated every file larger than it (a 3600s WAV billed 65.53325s) and, because that
-  // result is non-null, the caller's tail read never ran to correct it.
+  // The clamp uses the real resource size, never the window: clamping to the window truncated every
+  // file larger than it (a 3600s WAV billed 65.53325s) and, because that result is non-null, the
+  // caller's tail read never ran to correct it.
   let total = typeof totalBytes === "number" && isFinite(totalBytes) && totalBytes > 0 ? totalBytes : null;
   let window = first;
   let windowStart = 0;
   let offset = 12;
   let byteRate = 0;
-  // RIFF permits more than one `data` chunk (concatenating writers emit them) and a
-  // `data` chunk may appear before `fmt `. Every audio byte is billable, so the chunks are
-  // SUMMED rather than the first one returned. `openData` accumulates while byteRate is
-  // still unknown and is converted once `fmt ` provides it.
+  // RIFF permits more than one `data` chunk (concatenating writers emit them) and a `data` chunk
+  // may appear before `fmt `.
   let audioBytes = 0;
   let openData = 0;
   let sawData = false;
@@ -5503,10 +1688,8 @@ function wavWalk(first, totalBytes, fetchWindow) {
     } else if (id === "data") {
       sawData = true;
       const windowBytes = Math.max(windowStart + window.length - data, 0);
-      // A streamed WAV uses 0xffffffff (or 0) for an unknown size, meaning "to the end of
-      // the file"; otherwise the header states it. Either way the honest upper bound is how
-      // much file remains after this header, computed from the TOTAL when it is known.
-      // Clamping can only lower an inflated claim, never invent audio.
+      // A streamed WAV uses 0xffffffff (or 0) for an unknown size, meaning "to the end of the
+      // file"; otherwise the header states it.
       const remaining = total !== null ? Math.max(total - data, 0) : windowBytes;
       const declared = size === 0xffffffff || size === 0
         ? remaining
@@ -5534,35 +1717,27 @@ function wavDuration(bytes, totalBytes) {
   return walked.audioBytes / walked.byteRate;
 }
 
-// MP3 gives no single reliable length field. The Xing/Info frame count is the only
-// dependable source, so prefer it and otherwise report nothing: guessing from the
-// bitrate would let a padded file bill more seconds than it plays. The header sits
-// in the first frame, which the head probe always covers.
+// MP3 gives no single reliable length field. The Xing/Info frame count is the only dependable
+// source, so prefer it and otherwise report nothing: guessing from the bitrate would let a padded
+// file bill more seconds than it plays.
 function mp3Duration(bytes) {
   if (!bytes || bytes.length < 4) return null;
   let offset = 0;
   // Skip the ID3v2 tag. `ascii4` always returns FOUR characters, so comparing it to the
-  // three-character "ID3" was never true: the branch was dead, `offset` stayed 0, and the
-  // entire tag payload -- a cover image, typically -- was scanned for a frame sync. A sync
-  // plus a plausible Xing/Info inside that payload yielded a bogus duration from bytes the
-  // code explicitly intends to skip. The size is a 28-bit synchsafe integer.
+  // three-character "ID3" was never true: the branch was dead, `offset` stayed 0, and the entire
+  // tag payload -- a cover image, typically -- was scanned for a frame sync.
   if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33 && bytes.length >= 10) {
-    // A synchsafe integer has its high bit clear in every byte. If one is set the tag is
-    // malformed, the size cannot be trusted, and scanning from inside it could read a
-    // crafted sync+Xing as audio and bill a bogus duration (observed: 2612s from a tag
-    // payload). Refusing to measure is the honest answer; the caller falls back to the
-    // vendor minimum rather than inventing a length.
+    // A synchsafe integer has its high bit clear in every byte. If one is set the tag is malformed,
+    // the size cannot be trusted, and scanning from inside it could read a crafted sync+Xing as
+    // audio and bill a bogus duration (observed: 2612s from a tag payload).
     if ((bytes[6] | bytes[7] | bytes[8] | bytes[9]) & 0x80) return null;
     const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
     offset = 10 + size;
   }
-  // Locate a frame carrying Xing/Info. The scan must NOT stop at the first byte pair
-  // that merely looks like a sync: an encoder may put the header on a later frame, and
-  // 0xFF 0xE0 pairs occur inside ordinary payloads, so stopping there found no Xing/Info,
-  // returned null and made the whole file unmeasurable -- a 78s MP3 settled at the 10s
-  // floor. Every candidate is tried and the scan continues until one yields a frame
-  // count. The scan must also reach the end of the probe window, not stop 8 KB past the
-  // tag: an ID3v2 tag carrying cover art is routinely larger than that.
+  // Locate a frame carrying Xing/Info. The scan must NOT stop at the first byte pair that merely
+  // looks like a sync: an encoder may put the header on a later frame, and 0xFF 0xE0 pairs occur
+  // inside ordinary payloads, so stopping there found no Xing/Info, returned null and made the
+  // whole file unmeasurable -- a 78s MP3 settled at the 10s floor.
   const limit = bytes.length - 4;
   while (offset < limit) {
     // A RIFF header means this is not an MP3 at all; stop rather than scan a megabyte
@@ -5575,10 +1750,8 @@ function mp3Duration(bytes) {
     const sampleRate = sampleRates ? sampleRates[(bytes[offset + 2] >> 2) & 0x03] : undefined;
     if (sampleRate) {
       const sideInfo = versionBits === 3 ? (channelMode === 3 ? 17 : 32) : (channelMode === 3 ? 9 : 17);
-      // The protection bit (LSB of the second header byte) is 0 when the frame carries a
-      // 2-byte CRC, which sits between the header and the side information. Ignoring it
-      // looked for Xing/Info two bytes early, found nothing, and left a CRC-protected file
-      // unmeasurable -- and therefore billed at the vendor minimum.
+      // The protection bit (LSB of the second header byte) is 0 when the frame carries a 2-byte
+      // CRC, which sits between the header and the side information.
       const crc = (bytes[offset + 1] & 0x01) === 0 ? 2 : 0;
       const xing = offset + 4 + crc + sideInfo;
       if (xing + 12 <= bytes.length) {
@@ -5602,11 +1775,8 @@ function mp3Duration(bytes) {
   return null;
 }
 
-// Dispatch on the container rather than the URL extension, because signed CDN
-// links routinely carry no usable suffix and a wrong guess would misbill.
-// `totalBytes` is the real resource size when the server reported one; a WAV needs it
-// because the probe is only a window and a declared chunk size must be measured against
-// the file, not against the window.
+// Dispatch on the container rather than the URL extension, because signed CDN links routinely carry
+// no usable suffix and a wrong guess would misbill.
 function parseAudioDuration(bytes, totalBytes) {
   if (!bytes || bytes.length === 0) return null;
   const wav = wavDuration(bytes, totalBytes);
@@ -5633,10 +1803,9 @@ function mediaRange(url, start, end) {
   const contentRange = response.headers && response.headers["Content-Range"];
   const rangeMatch = typeof contentRange === "string" && contentRange.match(/\/(\d+)$/);
   const contentLength = response.headers && Number(response.headers["Content-Length"]);
-  // Content-Length only describes the whole resource on a 200. On a 206 it is
-  // the size of this partial body, which equals the probe length and would make
-  // the "is there more to read?" test below silently false, skipping the tail
-  // read for files whose moov sits at the end.
+  // Content-Length only describes the whole resource on a 200. On a 206 it is the size of this
+  // partial body, which equals the probe length and would make the "is there more to read?" test
+  // below silently false, skipping the tail read for files whose moov sits at the end.
   const total = rangeMatch
     ? Number(rangeMatch[1])
     : (response.status === 200 && Number.isSafeInteger(contentLength) ? contentLength : undefined);
@@ -5666,29 +1835,25 @@ function measuredOutputDuration(url) {
   }
 }
 
-// Delivered-audio measurement for the TTS workflow. WAV states its length up
-// front, so the head probe is usually enough; MP3 keeps its Xing/Info frame count
-// in the first frame too. The tail read is still attempted, because a WAV that
-// needs its `data` chunk size may have it past the first window for a long clip.
+// Delivered-audio measurement for the TTS workflow. WAV states its length up front, so the head
+// probe is usually enough; MP3 keeps its Xing/Info frame count in the first frame too.
 function measuredAudioDuration(url) {
   if (typeof utils === "undefined" || typeof utils.fetch !== "function") return null;
   if (typeof url !== "string" || !url) return null;
   try {
     const head = mediaRange(url, 0, MEDIA_PROBE_END);
-    // Establish the true size BEFORE parsing. The WAV parser needs it to clamp a declared
-    // chunk size against the FILE rather than against the probe window, and doing this
-    // first means the clamp is correct even when the server sent no Content-Range and the
-    // size has to come from a HEAD.
+    // Establish the true size BEFORE parsing. The WAV parser needs it to clamp a declared chunk
+    // size against the FILE rather than against the probe window, and doing this first means the
+    // clamp is correct even when the server sent no Content-Range and the size has to come from a
+    // HEAD.
     let total = head.total;
     if (!Number.isSafeInteger(total)) {
       const response = budgetedFetch({ url: url, method: "HEAD", responseType: "bytes" });
       const value = response && response.headers && Number(response.headers["Content-Length"]);
       total = Number.isSafeInteger(value) ? value : undefined;
     }
-    // A RIFF file is walked chunk by chunk rather than parsed from this one window: a
-    // spliced WAV puts later chunk headers beyond the window, which is exactly what
-    // under-billed it. The walk spends what remains of the hook's fetch budget, so it stops
-    // and returns a lower bound instead of asking for a request the host would refuse.
+    // A RIFF file is walked chunk by chunk rather than parsed from this one window: a spliced WAV
+    // puts later chunk headers beyond the window, which is exactly what under-billed it.
     if (isRiff(head.bytes)) {
       const walked = wavWalk(head.bytes, total, function (start, end) {
         if (fetchesLeft() <= 0) return null;
@@ -5709,20 +1874,15 @@ function measuredAudioDuration(url) {
   }
 }
 
-// Input media measurement for the motion-transfer workflow. The reference video
-// decides the billed length, so the plugin reads its track duration itself with a
-// bounded Range request (public URL) or an inline decode (data URL). The result is
-// cached per URL for the life of the plugin runtime, so the submission hook does
-// the work once, while the vendor renders, and every later poll reuses it.
+// Input media measurement for the motion-transfer workflow. The reference video decides the billed
+// length, so the plugin reads its track duration itself with a bounded Range request (public URL)
+// or an inline decode (data URL).
 const MEASURED_INPUTS = {};
 const MEASURED_INPUT_LIMIT = 64;
 const DATA_VIDEO_HEADERS = ["data:video/mp4;base64", "data:video/webm;base64"];
 
-// Decode inline base64 into bytes, capped to at most `limit` decoded bytes taken
-// from the front, or from the end when `fromTail` is true. The cap bounds the
-// decoded work, not the caller's payload, so a large inline reference is still
-// measured instead of silently skipped. Base64 groups are four characters to
-// three bytes, so the window is always aligned to a group boundary.
+// Decode inline base64 into bytes, capped to at most `limit` decoded bytes taken from the front, or
+// from the end when `fromTail` is true.
 function base64Bytes(payload, limit, fromTail) {
   const table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const clean = payload.replace(/=+$/, "");
@@ -5751,9 +1911,9 @@ function measuredInputDuration(url) {
   const lower = url.toLowerCase();
   const header = DATA_VIDEO_HEADERS.find(function (candidate) { return lower.startsWith(candidate + ","); });
   if (header) {
-    // A local file arrives inline; nothing to fetch. Read the head first, then
-    // the tail, mirroring the network path so an MP4 whose moov atom sits at the
-    // end is still measured instead of falling back to an unverified declaration.
+    // A local file arrives inline; nothing to fetch. Read the head first, then the tail, mirroring
+    // the network path so an MP4 whose moov atom sits at the end is still measured instead of
+    // falling back to an unverified declaration.
     const payload = url.slice(header.length + 1);
     try {
       seconds = parseVideoDuration(base64Bytes(payload, MEDIA_PROBE_BYTES, false));
@@ -5808,26 +1968,16 @@ function results(body, fallbackType) {
   });
 }
 
-// CANCELLED/CANCELED map to FAILURE so a cancelled upstream task terminates on
-// the next poll and refunds, instead of polling until the 30-minute deadline as
-// an unknown status. extractUsageOnComplete and miniTask already treat them as
-// terminal, so omitting them here was the odd one out.
-// Terminal-failure detection shared by polling and settlement. Both halves of
-// this file must agree: parseTaskResult maps upstream tokens to the internal
-// enum, native.miniTask re-renders that enum to lowercase for the host, and the
-// settlement hook is handed whichever spelling the host persisted. Enumerating
-// only one vocabulary left failures billed.
+// CANCELLED/CANCELED map to FAILURE so a cancelled upstream task terminates on the next poll and
+// refunds, instead of polling until the 30-minute deadline as an unknown status.
 const FAILURE_STATUSES = ["FAILURE", "FAILED", "CANCELLED", "CANCELED", "ERROR", "TIMEOUT", "EXPIRED"];
 function failureStatus(value) {
   const status = text(value).toUpperCase();
   return FAILURE_STATUSES.includes(status);
 }
 
-// Terminal-SUCCESS detection, case-insensitive and tolerant of the spellings a renderer
-// may hand back. Settlement and rendering must agree on what "done" means: gating
-// settlement on the exact literal "SUCCESS" meant a task reported as "success" skipped
-// BOTH the measurement and the vendor floor and settled its bare reservation, while
-// every other status check in this file was already case-insensitive.
+// Terminal-SUCCESS detection, case-insensitive and tolerant of the spellings a renderer may hand
+// back.
 const SUCCESS_STATUSES = ["SUCCESS", "SUCCEEDED", "COMPLETED"];
 function successStatus(value) {
   const status = text(value).toUpperCase();
@@ -5848,11 +1998,9 @@ function taskAction(config, input) {
     const body = normalizeRequest(config, input).body;
     return config.type === "audio" ? "text_to_audio" : config.videos.some(function (key) { return has(body, key); }) ? "video_to_video" : config.input_reference.some(function (key) { return has(body, key); }) ? "image_to_video" : "text_to_video";
   }
-  // decodeCompatible stores the already-normalized MiniMax body as
-  // __autodl_fields key/value pairs, so the upstream slot names (ref_image_0,
-  // ref_video) are the reliable signal here; input_reference/images are absent
-  // by then. Reading only the OpenAI spellings mislabeled every reference
-  // MiniMax request as text_to_video.
+  // decodeCompatible stores the already-normalized MiniMax body as __autodl_fields key/value pairs,
+  // so the upstream slot names (ref_image_0, ref_video) are the reliable signal here;
+  // input_reference/images are absent by then.
   if (object(input) && Array.isArray(input.__autodl_fields)) {
     // Read the body as it will be sent: a MiniMax alias was decoded with generic
     // slot names, and the mapped table only names its own slots at submission.
@@ -5867,9 +2015,7 @@ function taskAction(config, input) {
 }
 
 export function buildSubmitRequest(ctx) {
-  // Reset here, not in the helpers: the host counts per hook call, and one hook can
-  // measure more than once (a submit whose response is already terminal measures the
-  // reference clip and the delivered one).
+  // The host's fetch budget is per hook call.
   resetFetchBudget();
   if ((ctx.files || []).length) throw new Error("AutoDL: binary uploads are not supported by this adapter; encode a standard image Data URL or use public URLs in input_reference");
   const config = requestWorkflow(ctx);
@@ -5888,9 +2034,7 @@ export function buildSubmitRequest(ctx) {
 }
 
 export function parseSubmitResponse(ctx, response) {
-  // Reset here, not in the helpers: the host counts per hook call, and one hook can
-  // measure more than once (a submit whose response is already terminal measures the
-  // reference clip and the delivered one).
+  // The host's fetch budget is per hook call.
   resetFetchBudget();
   if (response.statusCode < 200 || response.statusCode >= 300) throw new Error(httpError(response.statusCode));
   const body = envelope(response.body);
@@ -5907,9 +2051,7 @@ export function parseSubmitResponse(ctx, response) {
 }
 
 export function buildQueryRequest(ctx) {
-  // Reset here, not in the helpers: the host counts per hook call, and one hook can
-  // measure more than once (a submit whose response is already terminal measures the
-  // reference clip and the delivered one).
+  // The host's fetch budget is per hook call.
   resetFetchBudget();
   return {
     url: endpoint(ctx, "/api/v1/comfyui/comfyui_workflow/result/" + encodeURIComponent(taskId(ctx.taskId))),
@@ -5930,55 +2072,48 @@ function parseTaskResultInner(ctx, body, response) {
   if (status === "FAILURE") return { status: status, reason: safeReason(ctx, data.message || (object(data.error) ? data.error.message : data.error)) };
   if (status === "SUCCESS") {
     try {
-      // Resolve public aliases here as well as on submission: a caller may name
-      // IndexTTS-2 or the motion alias directly, and looking the name up raw made
-      // polling fail for exactly the requests this plugin accepts standalone. When
-      // the name has no table at all -- an operator's private workflow id -- fall
-      // back to the type saved at submission, which is the authoritative record of
-      // what this task actually is.
+      // Resolve public aliases here as well as on submission: a caller may name IndexTTS-2 or the
+      // motion alias directly, and looking the name up raw made polling fail for exactly the
+      // requests this plugin accepts standalone.
       const named = workflowForName(ctx.upstreamModel) || workflowForName(ctx.model);
-      // A plain membership test, not workflow(): that helper throws for an unknown
-      // name, and throwing here turned every poll of an unmapped private name --
-      // the very case 1.0.13 set out to support -- into a failed task.
+      // A plain membership test, not workflow(): that helper throws for an unknown name, and
+      // throwing here turned every poll of an unmapped private name -- the very case 1.0.13 set out
+      // to support -- into a failed task.
       const config = has(WORKFLOWS, named) ? WORKFLOWS[named] : null;
       const saved = object(ctx.state) ? ctx.state : {};
       const type = config ? config.type : text(saved.type);
       if (!type) throw new Error("AutoDL: cannot determine the media type of this task");
-      // Resolve a saved id through the alias table too: an unmapped private name can
-      // have been saved with a public alias as its workflowId, and leaving it raw here
-      // would skip the measurement branch below (recording no measuredSeconds) even
-      // though settlement would later resolve it and expect one.
-      // The saved table identity wins: a mapped upstream id names no table, and
-      // the facts being settled were computed with the saved one.
+      // Resolve a saved id through the alias table too: an unmapped private name can have been
+      // saved with a public alias as its workflowId, and leaving it raw here would skip the
+      // measurement branch below (recording no measuredSeconds) even though settlement would later
+      // resolve it and expect one.
       const savedKind = text(saved.kind) || workflowForName(text(saved.workflowId)) || text(saved.workflowId);
       const kind = text(saved.kind) || (config && has(WORKFLOWS, config.workflowId) ? config.workflowId : savedKind);
       const outputs = results(body, type).filter(function (item) { return item.type === type; });
       if (!outputs.length) throw new Error("AutoDL: SUCCESS response contains no expected media output");
       const parsed = { status: "SUCCESS", progress: "100%", url: outputs[0].url };
-      // Stock rc.43 exposes byte-range fetches only from polling hooks. Keep
-      // the declared reservation for submission, then opportunistically save
-      // a bounded measurement for settlement: the video track for motion
-      // transfer, the audio stream for TTS.
+      // Stock rc.43 exposes byte-range fetches only from polling hooks. Keep the declared
+      // reservation for submission, then opportunistically save a bounded measurement for
+      // settlement: the video track for motion transfer, the audio stream for TTS.
       if (kind === MOTION_WORKFLOW) {
         const seconds = measuredOutputDuration(outputs[0].url);
         if (seconds !== null) parsed.state = Object.assign({}, saved, { measuredSeconds: seconds });
       } else if (kind === TTS_WORKFLOW) {
-        // The audio track is the only source of the billable length, so measure it
-        // here as well as at settlement: this call happens while the task is still
-        // being polled, and a later hook call gets a fresh fetch budget.
+        // The audio track is the only source of the billable length, so measure it here as well as
+        // at settlement: this call happens while the task is still being polled, and a later hook
+        // call gets a fresh fetch budget.
         const seconds = measuredAudioDuration(outputs[0].url);
-        // Record the floored length, so the value saved while polling and the value
-        // billed at settlement are the same number and neither undercuts the vendor
-        // minimum (see the settlement note below for why the floor lives in code).
+        // Record the floored length, so the value saved while polling and the value billed at
+        // settlement are the same number and neither undercuts the vendor minimum (see the
+        // settlement note below for why the floor lives in code).
         if (seconds !== null) parsed.state = Object.assign({}, saved, { measuredSeconds: Math.max(seconds, TTS_DEFAULT_SECONDS) });
       }
       return parsed;
     } catch (error) { return { status: "FAILURE", reason: error.message }; }
   }
   const state = ctx.state;
-  // Strict typeof, matching the rule this file states for the plugin runtime: if
-  // this test silently failed, a stuck task would poll forever instead of
-  // hitting the deadline.
+  // Strict typeof, matching the rule this file states for the plugin runtime: if this test silently
+  // failed, a stuck task would poll forever instead of hitting the deadline.
   if (state && typeof state.submittedAt === "number" && typeof state.timeoutSeconds === "number" && utils.unixNow() - state.submittedAt >= state.timeoutSeconds) {
     return { status: "FAILURE", reason: "AutoDL: generation exceeded the 30-minute plugin deadline; the upstream task may still be running" };
   }
@@ -5987,48 +2122,37 @@ function parseTaskResultInner(ctx, body, response) {
   return { status: status };
 }
 
-// Stock rc.43 runs this hook with the state persisted by the previous poll and
-// adopts the state written by the terminal poll only afterwards, so the duration
-// read while polling is not part of the hook context. The completion result does
-// carry the media URL and every hook call gets its own byte-range budget, so
-// settlement repeats the bounded probe. The reference video was already measured
-// at submission, and motion transfer renders one output second per input second,
-// so the measured input length is the strongest available signal.
+// Stock rc.43 runs this hook with the state persisted by the previous poll and adopts the state
+// written by the terminal poll only afterwards, so the duration read while polling is not part of
+// the hook context.
 function completionStatus(result) {
   if (object(result)) return text(result.status);
   if (typeof result === "string") return text(result);
   return "";
 }
 
-// The longest clip the vendor's own pricing can plausibly describe (one hour).
-// Used to CLAMP a measurement that exceeds it rather than discard it: a real
-// 3601-second deliverable is a real cost, and rejecting the measurement refunded
-// the whole task down to the vendor minimum. Clamping keeps the bill plausible
-// and bounded while never charging for more than was delivered.
+// The longest clip the vendor's own pricing can plausibly describe (one hour). Used to CLAMP a
+// measurement that exceeds it rather than discard it: a real 3601-second deliverable is a real
+// cost, and rejecting the measurement refunded the whole task down to the vendor minimum.
 const MAX_BILLABLE_SECONDS = 3600;
 
-// The plugin runtime only reports usable numbers to strict typeof comparisons,
-// so bound candidates without Number.isFinite. This is a VALIDATION test: it
-// answers "is this a usable duration at all", and a value outside the plausible
-// range is rejected rather than silently reinterpreted.
+// The plugin runtime only reports usable numbers to strict typeof comparisons, so bound candidates
+// without Number.isFinite.
 function motionSecondsInRange(value) {
   return typeof value === "number" && value > 1e-9 && value <= MAX_BILLABLE_SECONDS ? value : null;
 }
 
-// A measurement is evidence about a real file, so an implausibly large one is
-// clamped to the ceiling instead of being thrown away. Only a value that is not a
-// usable number at all yields null.
+// A measurement is evidence about a real file, so an implausibly large one is clamped to the
+// ceiling instead of being thrown away.
 function measuredSecondsInRange(value) {
   if (typeof value !== "number" || !(value > 1e-9)) return null;
   return Math.min(value, MAX_BILLABLE_SECONDS);
 }
 
-// MiniMax's official query response carries an authoritative usage block:
-//   "usage": {"total_seconds": 5, "input_seconds": 0, "output_seconds": 5, ...}
-// AutoDL exposes nothing equivalent and its top-level `duration` is render wall
-// time, NOT video length, so only the official usage block is read and only as
-// a last resort. AutoDL therefore never reaches this, and reading `duration`
-// unconditionally would bill a 3-minute render as 196 seconds.
+// MiniMax's official query response carries an authoritative usage block: "usage":
+// {"total_seconds": 5, "input_seconds": 0, "output_seconds": 5, ...} AutoDL exposes nothing
+// equivalent and its top-level `duration` is render wall time, NOT video length, so only the
+// official usage block is read and only as a last resort.
 function upstreamDeclaredSeconds(body) {
   if (!object(body)) return null;
   const usage = object(body.usage) ? body.usage : null;
@@ -6037,37 +2161,27 @@ function upstreamDeclaredSeconds(body) {
     const seconds = motionSecondsInRange(candidate);
     if (seconds !== null) return seconds;
   }
-  // The block's own seconds are required. A bare `duration` beside a usage object
-  // that lacks them is still un-corroborated render wall time, and trusting it
-  // would charge a 3-minute render as 196 seconds. Nothing is lost by refusing:
-  // MiniMax always reports total_seconds/output_seconds alongside its duration.
+  // The block's own seconds are required. A bare `duration` beside a usage object that lacks them
+  // is still un-corroborated render wall time, and trusting it would charge a 3-minute render as
+  // 196 seconds.
   return null;
 }
 
-// The host's fetch budget is per HOOK CALL, so the reset belongs to the exported entry
-// points only. `parseSubmitResponse` measures the reference clip and then calls this same
-// logic for the delivered one; resetting inside the shared body gave that second
-// measurement a fresh budget, letting one host call spend up to seven fetches -- past the
-// four the host grants. The inner function therefore owns no reset, and the submit path
-// calls it directly so both measurements share one budget.
+// The host's fetch budget is per HOOK CALL, so the reset belongs to the exported entry points only.
 export function parseTaskResult(ctx, body, response) {
   resetFetchBudget();
   return parseTaskResultInner(ctx, body, response);
 }
 
 export function extractUsage(ctx) {
-  // Reset here, not in the helpers: the host counts per hook call, and one hook can
-  // measure more than once (a submit whose response is already terminal measures the
-  // reference clip and the delivered one).
+  // The host's fetch budget is per hook call.
   resetFetchBudget();
   return normalized(ctx).facts;
 }
 
 // `body` is the raw upstream polling payload the host forwards to this hook.
 export function extractUsageOnComplete(task, result, body) {
-  // Reset here, not in the helpers: the host counts per hook call, and one hook can
-  // measure more than once (a submit whose response is already terminal measures the
-  // reference clip and the delivered one).
+  // The host's fetch budget is per hook call.
   resetFetchBudget();
   const state = task && task.state;
   if (!object(state) || !object(state.facts)) throw new Error("AutoDL: saved generation usage is missing");
@@ -6077,62 +2191,30 @@ export function extractUsageOnComplete(task, result, body) {
   const succeeded = successStatus(status);
   // data.duration is processing wall time, NOT generated video seconds.
   const facts = Object.assign({}, state.facts);
-  // Resolve the saved id through the alias table before branching on it. A state
-  // written with a public alias -- `IndexTTS-2` rather than `indextts2-v1` -- would
-  // otherwise miss both settlement branches, so the clip would never be measured and
-  // the TTS minimum would never be applied: the task would settle at whatever
-  // reservation the alias happened to carry. Aliases are resolved everywhere else
-  // (submission, polling, decoding), so settlement must not be the one place that
-  // trusts the raw id.
-  // `kind` is the declared table saved at submission; it outlives a channel
-  // mapping that sent the task to a differently named upstream workflow.
+  // Resolve the saved id through the alias table before branching on it. A state written with a
+  // public alias -- `IndexTTS-2` rather than `indextts2-v1` -- would otherwise miss both settlement
+  // branches, so the clip would never be measured and the TTS minimum would never be applied: the
+  // task would settle at whatever reservation the alias happened to carry.
   const kind = text(state.kind) || (has(WORKFLOWS, state.workflowId) ? state.workflowId : (workflowForName(state.workflowId) || state.workflowId));
   if (succeeded && kind === MOTION_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
-    // Reuse the full probe: the head Range read alone cannot see an MP4 whose
-    // moov atom sits after the first megabyte, which is common for anything but
-    // short clips. Calling mediaRange directly here would silently settle such a
-    // file at the declared value instead of the measured one.
+    // Reuse the full probe: the head Range read alone cannot see an MP4 whose moov atom sits after
+    // the first megabyte, which is common for anything but short clips.
     const seconds = url ? measuredOutputDuration(url) : null;
-    // Priority: freshest real measurement, then the value measured while
-    // polling, then the reference clip the caller submitted, and only last the
-    // upstream's own usage block. A measurement always wins because it
-    // describes the file that was actually delivered.
+    // Priority: freshest measurement of the delivered clip, then the one saved while polling, then
+    // the upstream usage block. The reference clip's length is never billed.
     const settled = measuredSecondsInRange(seconds)
       || measuredSecondsInRange(state.measuredSeconds)
       || upstreamDeclaredSeconds(body);
-    // The delivered file is authoritative. The caller's declaration is only the
-    // pre-charge reservation and deliberately does NOT cap the bill: motion
-    // transfer has no upstream duration parameter, so the declaration never
-    // reaches the vendor, and capping at it let a caller declare one second,
-    // submit a ten-second reference clip and pay a tenth of the price. A
-    // declaration still acts as the reservation, so nothing here bills zero:
-    // when no candidate measured anything, the reservation stands.
-    //
-    // The REFERENCE CLIP's length must NOT appear in this chain. It was measured
-    // only to show the caller what was submitted, and it is not evidence about the
-    // output: motion transfer renders the detected person track, so a 60-second
-    // reference routinely yields a much shorter clip. Billing the reference length
-    // when the delivered probe failed over-charged by the difference (a 60-second
-    // reference against a 3-second clip billed 60 seconds). Falling through to the
-    // reservation is the honest answer when the delivered file cannot be measured.
+    // The delivered file is authoritative. The caller's declaration is only the pre-charge
+    // reservation and deliberately does NOT cap the bill: motion transfer has no upstream duration
+    // parameter, so the declaration never reaches the vendor, and capping at it let a caller
+    // declare one second, submit a ten-second reference clip and pay a tenth of the price.
     if (settled !== null) facts.seconds = settled;
     else if (motionSecondsInRange(facts.seconds) === null) facts.seconds = MOTION_DEFAULT_SECONDS;
   }
-  // TTS bills per delivered audio second, and the upstream reports no duration,
-  // so the delivered file is the only honest source. Unlike motion transfer there
-  // is no caller declaration to fall back on and no reference clip that predicts
-  // the length -- the script decides it -- so a failed measurement keeps the
-  // reservation rather than inventing a better number.
-  //
-  // The vendor also charges a minimum (AutoDL billing_config.minimum_price, raw 10,
-  // i.e. CNY 0.010 = ten seconds at CNY 0.001/s). That floor lives here rather than in
-  // the pricing expression because the model marketplace would not render this
-  // workflow's price once a conditional was nested inside the rate: the single-level
-  // `hour() ? tier() : tier()` form renders and the nested one did not (checked
-  // against the live marketplace), and a model whose price fails to render silently
-  // looks free. Flooring the settled seconds is exact, so the displayed CNY 0.001/s
-  // stays honest and the minimum is still charged.
+  // TTS bills per delivered audio second, and the upstream reports no duration, so the delivered
+  // file is the only honest source.
   if (succeeded && kind === TTS_WORKFLOW) {
     const url = object(result) ? text(result.url) : "";
     const settled = measuredSecondsInRange(url ? measuredAudioDuration(url) : null)
@@ -6140,20 +2222,15 @@ export function extractUsageOnComplete(task, result, body) {
       || upstreamDeclaredSeconds(body);
     if (settled !== null) facts.seconds = Math.max(settled, TTS_DEFAULT_SECONDS);
     else {
-      // No measurement was available, so the saved reservation stands -- but it must
-      // still be raised to the vendor minimum. The previous `else if` only replaced an
-      // INVALID saved value, so a saved 5 (valid, positive, in range) settled below the
-      // CNY 0.010 floor. A stored value below the minimum cannot be earned: submission
-      // writes 10 and polling floors at 10, so anything lower is a corrupt record, and
-      // charging less than the vendor minimum is a loss on every such task.
+      // No measurement was available, so the saved reservation stands -- but it must still be
+      // raised to the vendor minimum.
       const saved = motionSecondsInRange(facts.seconds);
       facts.seconds = saved === null ? TTS_DEFAULT_SECONDS : Math.max(saved, TTS_DEFAULT_SECONDS);
     }
   }
-  // Compare the status by meaning, not by exact spelling. native.miniTask
-  // renders this plugin's own FAILURE/CANCELLED as the lowercase strings
-  // "failed"/"cancelled", so matching only the internal enum left a failed task
-  // on the MiniMax surface charged in full.
+  // Compare the status by meaning, not by exact spelling. native.miniTask renders this plugin's own
+  // FAILURE/CANCELLED as the lowercase strings "failed"/"cancelled", so matching only the internal
+  // enum left a failed task on the MiniMax surface charged in full.
   if (failureStatus(status)) {
     facts.requests = 0;
     if (facts.seconds !== undefined) facts.seconds = 0;
@@ -6162,15 +2239,13 @@ export function extractUsageOnComplete(task, result, body) {
 }
 
 function artifacts(task) {
-  // Compared through the shared tolerant predicate, matching the render hooks and
-  // settlement. A lowercase "success" -- or a "succeeded" handed back by a renderer --
-  // would otherwise list no media at all.
+  // Compared through the shared tolerant predicate, matching the render hooks and settlement. A
+  // lowercase "success" -- or a "succeeded" handed back by a renderer -- would otherwise list no
+  // media at all.
   if (!object(task) || !successStatus(task.status)) return [];
-  // "No media" is a normal empty list, not an exception: a malformed envelope, an absent
-  // or empty results array, or a response that never carried one all mean there is nothing
-  // to list, and the render hooks report that as such. Anything the strict parser rejects
-  // BEYOND that -- a listed entry whose URL is a file://, javascript: or data: URL -- must
-  // still throw, so a caller is never handed a scheme the host will then fetch.
+  // "No media" is a normal empty list, not an exception: a malformed envelope, an absent or empty
+  // results array, or a response that never carried one all mean there is nothing to list, and the
+  // render hooks report that as such.
   let payload;
   try { payload = envelope(task.data); } catch (_) { return []; }
   if (!Array.isArray(payload.data.results) || payload.data.results.length === 0) return [];
@@ -6184,13 +2259,10 @@ function artifacts(task) {
 }
 
 export function listArtifacts(task) {
-  // Reset here, not in the helpers: the host counts per hook call, and one hook can
-  // measure more than once (a submit whose response is already terminal measures the
-  // reference clip and the delivered one).
+  // The host's fetch budget is per hook call.
   resetFetchBudget();
-  // Deliberately NOT wrapped in a catch-all: `artifacts` already returns an empty list for
-  // a success with no media, while still refusing an entry with a forbidden URL scheme.
-  // Swallowing every error here would silently hand a caller a file:// or javascript: URL.
+  // Deliberately NOT wrapped in a catch-all: `artifacts` already returns an empty list for a
+  // success with no media, while still refusing an entry with a forbidden URL scheme.
   return artifacts(task).map(function (item) {
     const result = { key: item.key, type: item.type };
     if (item.mimeType) result.mimeType = item.mimeType;
@@ -6199,9 +2271,7 @@ export function listArtifacts(task) {
 }
 
 export function buildContentRequest(ctx) {
-  // Reset here, not in the helpers: the host counts per hook call, and one hook can
-  // measure more than once (a submit whose response is already terminal measures the
-  // reference clip and the delivered one).
+  // The host's fetch budget is per hook call.
   resetFetchBudget();
   const item = artifacts({ status: "SUCCESS", data: ctx.data, action: ctx.action }).find(function (entry) { return entry.key === ctx.artifactKey; });
   if (!item) throw new Error("AutoDL: artifact not found");
@@ -6209,10 +2279,8 @@ export function buildContentRequest(ctx) {
   // rather than a raw TypeError out of a render hook.
   const method = object(ctx.clientRequest) ? ctx.clientRequest.method : undefined;
   if (method !== "GET" && method !== "HEAD") throw new Error("AutoDL: content only supports GET and HEAD");
-  // Host validates public destinations/redirects and forwards safe Range headers.
-  // Never send the AutoDL token to the dynamic result/CDN host.
-  // AutoDL's TOS URLs are signed for GET. The host closes the upstream body
-  // after copying headers when the client requested HEAD.
+  // Host validates public destinations/redirects and forwards safe Range headers. Never send the
+  // AutoDL token to the dynamic result/CDN host.
   return { url: item.url, method: "GET", credentialless: true };
 }
 
@@ -6247,10 +2315,8 @@ function decode(ctx, pinnedModel) {
   const model = pinnedModel || text(request.model);
   if (!model) throw new Error("AutoDL: model is required");
   request.model = model;
-  // The channel-mapped workflow id means the operator already decided which
-  // workflow this name runs as, so a self-chosen name is valid here even though
-  // it appears in no capability table of ours. resolveWorkflow resolves the alias table
-  // itself, so the caller's name is passed through raw.
+  // The channel-mapped workflow id means the operator already decided which workflow this name runs
+  // as, so a self-chosen name is valid here even though it appears in no capability table of ours.
   const config = resolveWorkflow(ctx.upstreamModel, model);
   normalizeInput(config, request);
   const action = taskAction(config, request);
@@ -6272,10 +2338,9 @@ function decodeCompatible(ctx, pinnedModel) {
   // generated resolution enum label as a billing enum value. Facts stay explicit.
   const normalizedBody = normalizeMiniMax(config, request);
   const canonical = Object.assign({ model: model, __autodl_fields: Object.entries(normalizedBody.body) }, normalizedBody.facts);
-  // The saved source lets every later hook revalidate the canonical request.
-  // It names the table that validated the request (or the alias itself when no
-  // table applies yet), never a mapped upstream id: submission resolves the
-  // channel mapping again from ctx.upstreamModel.
+  // The saved source lets every later hook revalidate the canonical request. It names the table
+  // that validated the request (or the alias itself when no table applies yet), never a mapped
+  // upstream id: submission resolves the channel mapping again from ctx.upstreamModel.
   canonical.__autodl_minimax = JSON.stringify(Object.assign({}, request, { model: config.unmapped ? config.workflowId : tableId(config) }));
   return { kind: "submit", model: model, action: taskAction(config, canonical), requestBody: canonical };
 }
@@ -6290,10 +2355,8 @@ export const native = {
     // A render hook that throws turns a client poll into a generic 500, so a malformed
     // or absent task record becomes a structured result instead.
     if (!object(task)) return { task: { status: "failed", error: { code: "video_generation_failed", message: "AutoDL: task record is missing" } } };
-    // CANCELLED/CANCELED are both terminal upstream tokens; omitting CANCELED
-    // made it render as "running" so the host kept polling a dead task. EXPIRED is
-    // terminal for the same reason, and SUCCEEDED/COMPLETED are success spellings a
-    // renderer may hand back -- all three previously rendered as "running".
+    // CANCELLED/CANCELED are both terminal upstream tokens; omitting CANCELED made it render as
+    // "running" so the host kept polling a dead task.
     const statuses = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", UNKNOWN: "running", SUCCESS: "succeeded", SUCCEEDED: "succeeded", COMPLETED: "succeeded", FAILURE: "failed", FAILED: "failed", CANCELLED: "cancelled", CANCELED: "cancelled", ERROR: "failed", TIMEOUT: "failed", EXPIRED: "failed" };
     // Branch on the SAME case-insensitive key the table is read with. Testing the raw
     // spelling meant a lowercase "success" rendered as succeeded with no media attached.
@@ -6312,13 +2375,11 @@ export const native = {
         result.modality = output.type;
       }
     }
-    // The upstream fail_reason is free text that can quote the credential it rejected,
-    // so it is redacted exactly as the OpenAI surface already redacts it. This path
-    // reached the end user with the raw AutoDL token in it.
+    // The upstream fail_reason is free text that can quote the credential it rejected, so it is
+    // redacted exactly as the OpenAI surface already redacts it.
     if (failureStatus(key)) result.error = { code: "video_generation_failed", message: safeReason(ctx, task.fail_reason) };
-    // rc.41 TaskView excludes request/model/usage/private state. AutoDL's
-    // data.duration measures processing time, not video duration. Omit fields
-    // we cannot confirm instead of inventing official metadata or token usage.
+    // rc.41 TaskView excludes request/model/usage/private state. AutoDL's data.duration measures
+    // processing time, not video duration.
     return { task: result };
   },
 };
@@ -6327,21 +2388,15 @@ export const protocols = {
   openai_video: {
     decodeRequest: function (ctx) { return decodeCompatible(ctx, ctx.model); },
     render: function (ctx, task) {
-      // A render hook that throws turns a client poll into a generic 500, so a missing or
-      // malformed record becomes a structured result. `ctx` is this hook's own parameter
-      // and is needed for credential redaction: naming it `_ctx` while referencing `ctx`
-      // below threw a ReferenceError on EVERY failure rendered through the OpenAI
-      // retrieve path, which is exactly when a caller most needs the message.
+      // A render hook that throws turns a client poll into a generic 500, so a missing or malformed
+      // record becomes a structured result.
       if (!object(task)) return { error: { code: "video_generation_failed", message: "AutoDL: task record is missing" } };
       // The host supplies standard public ID/model/status/progress/timestamps.
       const result = {};
       if (successStatus(task.status)) {
-        // The render view carries no `action`, so it cannot know the modality.
-        // Prefer a video artifact, but fall back to whatever the task actually
-        // produced: filtering to video alone and then dereferencing [0] threw on
-        // every audio-only task and wiped the results list. ListArtifacts-style
-        // guarding applies here too: a success with no usable media is reported as
-        // an error, not as a crash.
+        // The render view carries no `action`, so it cannot know the modality. Prefer a video
+        // artifact, but fall back to whatever the task actually produced: filtering to video alone
+        // and then dereferencing [0] threw on every audio-only task and wiped the results list.
         let items = [];
         try { items = artifacts(task); } catch (_) { items = []; }
         const videos = items.filter(function (item) { return item.type === "video"; });

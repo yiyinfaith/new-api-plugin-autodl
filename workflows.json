@@ -3845,7 +3845,7 @@
       ],
       "resolutions": [
         {
-          "resolution": "832p",
+          "resolution": "464p",
           "orientation": "portrait",
           "upstream": "464*832px(竖版)"
         },
