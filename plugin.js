@@ -990,13 +990,16 @@ function mapResolution(config, input) {
     if (orientation !== undefined && orientation !== legacy) throw new Error("AutoDL: resolution and orientation conflict");
     quality = "464p"; orientation = legacy;
   }
+  // Normalise the tier spelling before it is compared with an exact size, so 768P + 1344x768 is
+  // one request, not a conflict. The legacy spellings above are read as written.
+  if (quality !== undefined) quality = tierFor(config, quality);
   if (input.size !== undefined) {
     const exact = config.resolutions.find(function (entry) { return entry.size && entry.size === input.size; });
     if (!exact) throw new Error("AutoDL: unsupported size for this workflow; use its declared resolution and orientation");
     if ((quality !== undefined && quality !== exact.resolution) || (orientation !== undefined && orientation !== exact.orientation)) throw new Error("AutoDL: size, resolution and orientation conflict");
     quality = exact.resolution; orientation = exact.orientation;
   }
-  quality = quality === undefined ? defaults.resolution : tierFor(config, quality);
+  quality = quality === undefined ? defaults.resolution : quality;
   orientation = orientation === undefined ? defaults.orientation : orientation;
   // An unmapped workflow has no label table, so the caller's own resolution and orientation
   // spellings pass through verbatim; the workflow upstream validates them.

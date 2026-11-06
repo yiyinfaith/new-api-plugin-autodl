@@ -2626,6 +2626,14 @@ test('OpenAI accepts upper-case and near tiers', () => {
   assert.equal(body('480P'), '480p横(864*480)');
   assert.equal(body('720p'), '768p横(1344*768)');
   assert.equal(body('1080p'), '1088p横(1920*1088)');
+  // A tier spelling and the exact size it names are one request, not a conflict.
+  assert.equal(p.buildSubmitRequest(ctx('minimax_h3_z0901', { model: 'minimax_h3_z0901', prompt: 'cat', resolution: '768P', size: '1344x768' })).body.resolution, '768p横(1344*768)');
+  assert.throws(() => p.buildSubmitRequest(ctx('minimax_h3_z0901', { model: 'minimax_h3_z0901', prompt: 'cat', resolution: '480P', size: '1344x768' })), /size, resolution and orientation conflict/);
+  // The motion legacy spellings still read as written; a near tier keeps the default direction.
+  const motion = resolution => p.extractUsage(ctx(motionModel, { ...examples[motionModel], resolution, orientation: undefined }));
+  assert.equal(motion('464p').orientation, 'landscape');
+  assert.equal(motion('832p').orientation, 'portrait');
+  assert.equal(motion('480p').orientation, 'portrait');
 });
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all ${Object.keys(catalog).length} workflows.`);
