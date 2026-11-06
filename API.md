@@ -1,23 +1,26 @@
 # AutoDL 插件接口参考
 
-版本 **1.1.4**。本文件是调用方的字段参考；安装、渠道和价格配置见 [README](README.md)。示例中的 `https://media.example.com/...` 需换成真实可公开访问的媒体。
+版本 **1.1.5**。本文件是调用方的字段参考；安装、渠道和价格配置见 [README](README.md)。示例中的 `https://media.example.com/...` 需换成真实可公开访问的媒体。
 
 ## 接口一览
 
 | 格式 | 创建 | 查询 | 成功产物 | 模型 |
 |---|---|---|---|---|
 | OpenAI Videos | `POST /v1/videos` | `GET /v1/videos/{id}` | `url`、`results[]`；`GET /v1/videos/{id}/content` 下载 | 26 个视频工作流 |
-| MiniMax V2 | `POST /v2/video_generation` | `GET /v2/query/video_generation/{task_id}` | `task.content.url` | 全部 27 个（TTS 只在这里） |
+| MiniMax V2 | `POST /v2/video_generation` | `GET /v2/query/video_generation/{task_id}` | `task.content.url` | 全部 27 个 |
+| AutoDL 原生 | `POST /autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}` | `data.results[].url` | 全部 27 个 |
+| 阿里云百炼 DashScope | `POST /autodl/api/v1/services/aigc/image2video/video-synthesis` | `GET /autodl/api/v1/tasks/{task_id}` | `output.results.video_url` | `wan2.2-animate-move` |
 
-- 鉴权用 New API 的 Key：`Authorization: Bearer <NEW_API_KEY>`，不要传 AutoDL Token。
-- 路径决定格式，`model` 决定工作流。`model` 填 workflow ID；`wan2.2-animate-move`（动作迁移）和 `IndexTTS-2`（TTS）是插件自带别名。
+- **AutoDL 原生和 DashScope 的路径必须带 `/autodl` 前缀**：它们的官方路径以 `/api/` 开头，而 `/api` 属于 New API 自己，宿主（rc.48+）只在插件 key 前缀下提供这两组路由。调用方把官方 Base URL 换成 `https://你的域名/autodl`，路径其余部分照抄官方。
+- 鉴权用 New API 的 Key：`Authorization: Bearer <NEW_API_KEY>`，不要传 AutoDL Token。AutoDL 原生格式也可以照官方写法不带 `Bearer`。
+- 路径决定格式，`model` 决定工作流。`model` 填 workflow ID（AutoDL 原生格式写在路径里）；`wan2.2-animate-move`（动作迁移）和 `IndexTTS-2`（TTS）是插件自带别名。
 - 任务是异步的：创建后用返回的 New API 任务 ID 轮询，不要用上游 ID，也不要重复提交。
 
 ## 通用规则
 
 - **媒体输入**：公网 HTTP(S) URL，或标准 Base64 Data URL（如 `data:image/png;base64,…`、`data:audio/wav;base64,…`、`data:video/mp4;base64,…`）。MIME 类别必须与字段一致，Base64 必须是标准字母表且补位正确。不支持裸 Base64、文件路径、`file_id` 和文件上传。大文件请用 URL（宿主限制请求体大小）。官网接受的格式：图片 JPEG/PNG/WebP；音频 MP3/WAV（多数 H3 还接受 FLAC）；视频 MP4/WebM。
 - **严格校验**：媒体数量、时长、分辨率、文本长度超出工作流范围直接报错，插件不截断、不补齐、不降档，报错的请求不会扣费。
-- **未知字段**：两种格式都拒绝未知字段（`unsupported request field …` / `unsupported or mixed MiniMax field …`），避免拼错的参数被静默丢弃。少数官方兼容字段例外，见各格式说明。
+- **未知字段**：OpenAI、MiniMax、DashScope 拒绝未知字段（`unsupported request field …` / `unsupported or mixed MiniMax field …` / `unsupported DashScope … field …`），避免拼错的参数被静默丢弃；少数官方兼容字段例外，见各格式说明。AutoDL 原生格式是透传，未知字段原样发给 AutoDL。
 - **超时**：排队或运行超过 30 分钟，任务按失败结束并退回 New API 预扣；上游任务可能仍在运行，AutoDL 侧不会因此退款。
 - **产物**：只返回 HTTP(S) URL，是 24 小时有效的签名链接，请及时保存。下载链接不附带任何密钥。
 
@@ -153,7 +156,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_AP
 
 ### TTS（indextts2-v1 / IndexTTS-2）
 
-只能走 MiniMax V2，不传 `duration` / `resolution` / `ratio`（传了会报错）。`text` 1–2048 字符；`audio_url` 1–2 段：第 1 段是音色参考（必填），第 2 段是情感参考。
+走 MiniMax V2（下面的写法）或 [AutoDL 原生](#autodl-原生)（官网字段 `prompt_text`、`prompt_simple`、`emo_ref_audio`、`emo_*`）。不传 `duration` / `resolution` / `ratio`（传了会报错）。`text` 1–2048 字符；`audio_url` 1–2 段：第 1 段是音色参考（必填），第 2 段是情感参考。
 
 | 顶层字段 | 取值 |
 |---|---|
@@ -165,9 +168,77 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_AP
 {"model":"IndexTTS-2","content":[{"type":"text","text":"用平静的语气读这句话。"},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://media.example.com/voice.wav"}}],"emo_control_method":"使用情感向量控制","emo_calm":0.3}
 ```
 
+## AutoDL 原生
+
+和 [AutoDL ComfyUI API](https://autodl.art/docs/comfyui_api/) 相同，只是地址换成 `https://你的域名/autodl`、密钥换成 New API Key：
+
+| 官方 | 经 New API |
+|---|---|
+| `POST https://autodl.art/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `POST https://你的域名/autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}` |
+| `GET https://autodl.art/api/v1/comfyui/comfyui_workflow/result/{task_id}` | `GET https://你的域名/autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}` |
+
+- 路径里的 `workflow_id` 就是模型（也可以是别名或渠道映射名），body 不需要 `model`。
+- body 用 AutoDL 官网字段：文本 `prompt`（TTS 为 `prompt_text`）、时长 `duration`（对口型为 `audio_duration`）、分辨率是**完整官网标签**（如 `768p竖`、`768p横(1344*768)`、`464*832px(竖版)`，不接受 `768p` 这种档位简写）、图片 `ref_image_0…` / `first_frame` / `last_frame` / `ref_image`、音频 `ref_audio_0…` / `prompt_simple` / `emo_ref_audio`、视频 `ref_video`，以及 `seed`、`mode`、`style_preset`、`video_subject_to_replace`、`emo_*` 等。每个工作流的完整字段见 [examples.json](examples.json) 的 `_formats.autodl` 和 [workflows.json](workflows.json)。
+- **原样转发**：body（含未知字段、数字字符串）一字不改地发给 AutoDL，省略的字段也不补默认值。插件只做计费需要的检查：`duration` / `audio_duration` 在范围内（省略按官网默认值计费），`resolution` 是该工作流的标签（省略按默认档位计费），媒体字段是 HTTP(S) URL 或标准 Data URL；工作流没有的 `duration` / `resolution` 会报错。必填项、文本长度等业务规则由 AutoDL 校验，失败的任务不扣费。
+- 动作迁移没有时长字段，固定预扣 5 秒，结算按成片实测；TTS 预扣 10 秒，结算按成片实测。
+
+```bash
+curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v" \
+  -H "Authorization: Bearer $NEW_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"prompt":"镜头平稳推进","duration":5,"resolution":"480p横","first_frame":"https://media.example.com/first.png","last_frame":"https://media.example.com/last.png"}'
+```
+
+```json
+{"code":"Success","msg":"","data":{"task_id":"task_xxx","status":"QUEUED"},"request_id":""}
+```
+
+```json
+{"code":"Success","msg":"","data":{"task_id":"task_xxx","status":"SUCCESS","results":[{"url":"https://…/result.mp4","type":"video","file_type":"mp4","output_type":"output"}]},"request_id":""}
+```
+
+`data.status` 为 `QUEUED` / `RUNNING` / `SUCCESS` / `FAILED`，与官网一致；失败时 `data.message` 是脱敏后的原因。`task_id` 是 New API 任务 ID。
+
+## 阿里云百炼 DashScope
+
+和百炼 [wan2.2-animate-move（图生动作）](https://www.alibabacloud.com/help/en/model-studio/wan-animate-move-api) 相同，只是地址换成 `https://你的域名/autodl`、密钥换成 New API Key，背后跑 AutoDL 的动作迁移工作流：
+
+| 官方 | 经 New API |
+|---|---|
+| `POST https://dashscope.aliyuncs.com/api/v1/services/aigc/image2video/video-synthesis` | `POST https://你的域名/autodl/api/v1/services/aigc/image2video/video-synthesis` |
+| `GET https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}` | `GET https://你的域名/autodl/api/v1/tasks/{task_id}` |
+
+| 字段 | 说明 |
+|---|---|
+| `model` | 必填，只能是 `wan2.2-animate-move`。 |
+| `input.image_url` | 必填，人物图片，HTTP(S) URL 或标准 Data URL。 |
+| `input.video_url` | 必填，动作参考视频，HTTP(S) URL 或标准 Data URL。 |
+| `input.watermark` | 可选，只能省略或 `false`（AutoDL 不加水印）。 |
+| `parameters.mode` | 必填，只能是 `wan-std`；`wan-pro` 会报错（AutoDL 没有对应的专业模式）。 |
+| `parameters.check_image` | 可选，布尔，接受但不起作用。 |
+| `parameters.orientation` | AutoDL 扩展，可选：`portrait`（默认，464×832）/ `landscape`（832×464）。百炼按输入图比例出片，AutoDL 需要显式选方向。 |
+| `parameters.resolution` | AutoDL 扩展，可选：`464p`（目前唯一档位）。 |
+
+其他字段一律报错。`X-DashScope-Async: enable` 可带可不带（本接口总是异步）。
+
+```bash
+curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/image2video/video-synthesis" \
+  -H "Authorization: Bearer $NEW_API_KEY" -H 'Content-Type: application/json' -H 'X-DashScope-Async: enable' \
+  -d '{"model":"wan2.2-animate-move","input":{"image_url":"https://media.example.com/person.png","video_url":"https://media.example.com/dance.mp4"},"parameters":{"mode":"wan-std","orientation":"landscape"}}'
+```
+
+```json
+{"request_id":"","output":{"task_id":"task_xxx","task_status":"PENDING"}}
+```
+
+```json
+{"request_id":"","output":{"task_id":"task_xxx","task_status":"SUCCEEDED","submit_time":"2026-11-05 10:00:00.000","end_time":"2026-11-05 10:03:00.000","results":{"video_url":"https://…/result.mp4"}}}
+```
+
+`task_status` 为 `PENDING` / `RUNNING` / `SUCCEEDED` / `FAILED` / `CANCELED`；失败时带 `output.code`、`output.message`。官方的 `usage` 块不返回（计费以 New API 账单为准），`request_id` 为空。预扣 5 秒，结算按成片实测时长。
+
 ## 工作流
 
-价格为 2026-11-05 官网单价（元/成片秒，北京时间 08:00–24:00 高峰，00:00–08:00 低峰）。媒体数量「0–9」表示可以不传。完整规则见 [workflows.json](workflows.json)，两种格式的请求示例见 [examples.json](examples.json)，官网原始定义见 [official-workflows.json](official-workflows.json)。
+价格为 2026-11-05 官网单价（元/成片秒，北京时间 08:00–24:00 高峰，00:00–08:00 低峰）。媒体数量「0–9」表示可以不传。完整规则见 [workflows.json](workflows.json)，四种格式的请求示例见 [examples.json](examples.json)，官网原始定义见 [official-workflows.json](official-workflows.json)。
 
 | 模型（workflow ID） | 输入媒体 | 文本 | 时长（秒） | 分辨率（方向） | 额外参数 | 官方价 元/秒<br>高峰/低峰 |
 |---|---|---|---|---|---|---|
@@ -238,10 +309,10 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_AP
 
 ## 渠道模型映射
 
-两种格式的 `model` 都可以是你在渠道里配置的映射名：
+四种格式的 `model`（AutoDL 原生格式是路径里的 workflow ID）都可以是你在渠道里配置的映射名：
 
 - 映射到声明过的工作流时，按该工作流的规则校验和计费；调用方填的是声明过的工作流、渠道又把它映射到别的上游 ID 时，仍按调用方填的工作流校验和计费，请求发往映射后的 ID。
-- MiniMax 原生接口解码时还拿不到映射，插件会在提交时按映射后的工作流重新校验和生成请求，效果与 OpenAI 格式一致。
+- MiniMax、AutoDL 原生、DashScope 接口解码时还拿不到映射，插件会在提交时按映射后的工作流重新校验和计费，效果与 OpenAI 格式一致。DashScope 的 `wan2.2-animate-move` 只能映射到动作迁移工作流。
 - 映射到插件不认识的工作流时只做结构校验（字段、媒体格式），范围由上游校验。
 - 已移除的官方模型名 `MiniMax-H3`、`MiniMax-H3-Max` 不能通过映射恢复。
 - 映射名需要单独配置价格。
@@ -251,9 +322,12 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_AP
 | 报错 | 原因 / 处理 |
 |---|---|
 | `model_price_error` | 请求的 model（包括别名、映射名）没有配置价格。 |
+| AutoDL 原生 / DashScope 返回 404 或网页 | 路径前漏了 `/autodl`。 |
 | `no_eligible_channel` | 渠道未启用、没有该模型，或 Key 所在分组无权使用。 |
 | `invalid media URL` | 不是 HTTP(S) URL 或标准 Data URL，或 MIME 与字段不符。 |
-| `unsupported request field …` / `unsupported or mixed MiniMax field …` | 未知或拼错的字段，或该工作流不支持此参数。 |
+| `unsupported request field …` / `unsupported or mixed MiniMax field …` / `unsupported DashScope … field …` | 未知或拼错的字段，或该工作流不支持此参数。 |
+| `this workflow has no duration field` / `unsupported resolution for this workflow` | AutoDL 原生格式里时长字段名或分辨率标签不对，按报错列出的官网标签改。 |
+| `wan-pro is not available` / `cannot add a watermark` | DashScope 只支持 `wan-std`、不加水印。 |
 | `… must be … between …` | 时长、seed 等超出范围。 |
 | `unsupported resolution/orientation combination` / `unsupported MiniMax resolution/ratio combination` | 该工作流没有这个档位或方向。 |
 | `this workflow does not accept a text prompt` | 对口型、动作迁移不接受文本。 |

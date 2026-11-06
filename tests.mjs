@@ -954,17 +954,27 @@ function hostJSON(value) {
   return value;
 }
 const v2Context = request => ({ method: 'POST', path: '/v2/video_generation', body: { kind: 'json', value: hostJSON(request) } });
-test('only the namespace-safe interfaces are registered', () => {
+test('the three native surfaces are registered at their vendor paths', () => {
   assert.deepEqual(p.meta.routes.map(r => [r.method, r.path]), [
     ['POST', '/v2/video_generation'], ['GET', '/v2/query/video_generation/:task_id'],
+    ['POST', '/api/v1/comfyui/comfyui_workflow/:workflow_id'], ['GET', '/api/v1/comfyui/comfyui_workflow/result/:task_id'],
+    ['POST', '/api/v1/services/aigc/image2video/video-synthesis'], ['GET', '/api/v1/tasks/:task_id'],
   ]);
   assert.equal(formats.minimax_api.create_path, '/v2/video_generation');
   assert.equal(formats.minimax_api.query_path, '/v2/query/video_generation/{task_id}');
-  // Nothing may reference the host-reserved /api namespace or the removed proxy prefix.
   for (const route of p.meta.routes) {
-    assert.ok(!route.path.startsWith('/api'), route.path);
-    // The plugin must not need an origin-proxy prefix either.
+    // The plugin must not need an origin-proxy prefix: /api/... is served by the host under /autodl.
     assert.ok(!/bridge|proxy|rewrite/i.test(route.path), route.path);
+    // Reserved namespaces make the plugin fail to compile (v1.md): /v1/tasks, /assets.
+    assert.ok(!route.path.startsWith('/v1/tasks') && !route.path.startsWith('/assets'), route.path);
+    // Every /api route needs the /autodl copy, so the key itself must never be a host segment.
+    assert.ok(route.path.startsWith('/v2/') || route.path.startsWith('/api/v1/'), route.path);
+  }
+  assert.equal(p.meta.key, 'autodl');
+  // Query routes read the default task_id parameter.
+  for (const route of p.meta.routes.filter(r => r.type === 'query')) assert.ok(route.path.endsWith('/:task_id') && !route.decode, route.path);
+  for (const route of p.meta.routes) {
+    for (const member of [route.decode, route.render].filter(Boolean)) assert.equal(typeof p.native[member], 'function', member);
   }
   // A plugin route may not intersect a HOST STATIC route: router/plugin-router.go
   // rejects such a plugin from public routing entirely, taking every route and model
@@ -980,10 +990,8 @@ test('only the namespace-safe interfaces are registered', () => {
         route.path + ' would collide with the host static route ' + reserved + ' and get the whole plugin rejected');
     }
   }
-  assert.ok(p.meta.routes.every(r => r.path === '/v2/video_generation' || r.path.startsWith('/v2/query/')),
-    'every plugin route must stay in a namespace the host does not serve statically');
-  // Plugin API v1 has no audio protocol, so the MiniMax V2 route is the ONLY TTS entry
-  // point; no audio-shaped route may be registered.
+  // Plugin API v1 has no audio protocol, so TTS is reached only through the MiniMax V2 and
+  // AutoDL native routes; no audio-shaped route may be registered.
   assert.ok(!p.meta.routes.some(r => /audio/.test(r.path)), 'no audio-shaped plugin route may be registered');
   // Only the video protocol is claimed. Plugin API v1 has no audio protocol, so TTS is
   // served solely by the MiniMax V2 native route.
@@ -2326,6 +2334,178 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
     const prices = read('./prices.json').models;
     for (const row of official) assert.ok(prices[row.uuid] && /u\("seconds"\)/.test(prices[row.uuid].expression), row.uuid);
     for (const alias of ['wan2.2-animate-move', 'IndexTTS-2']) assert.ok(prices[alias], alias);
+  });
+}
+// AutoDL native API (/autodl/api/v1/comfyui/comfyui_workflow/:workflow_id): the body is sent
+// verbatim, only billing inputs are checked.
+{
+  const rawContext = (workflowId, body) => ({ method: 'POST', path: '/api/v1/comfyui/comfyui_workflow/' + workflowId, params: { workflow_id: workflowId }, body: { kind: 'json', value: body } });
+  const nativeDriver = (intent, upstreamModel = intent.model) => ({ ...base, model: intent.model, upstreamModel, requestBody: intent.requestBody });
+  for (const model of Object.keys(catalog)) {
+    // The upstream body the OpenAI surface builds is, by definition, a valid AutoDL native body.
+    const openai = ctx(model);
+    const nativeBody = p.buildSubmitRequest(openai).body;
+    const intent = p.native.rawCreate(rawContext(model, nativeBody));
+    test(model + ': native body is forwarded verbatim and billed like the OpenAI request', () => {
+      assert.equal(intent.model, model);
+      const submit = p.buildSubmitRequest(nativeDriver(intent));
+      assert.deepEqual(submit.body, nativeBody);
+      assert.equal(submit.url, base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + model);
+      assert.equal(submit.rewriteModel, model);
+      assert.equal(submit.action, p.buildSubmitRequest(openai).action);
+      const expected = { ...p.extractUsage(openai) };
+      // Motion has no length field: the native reservation is the default, settlement measures.
+      if (model === motionModel) expected.seconds = 5;
+      assert.deepEqual(p.extractUsage(nativeDriver(intent)), expected);
+    });
+  }
+  test('every examples.json native example is accepted and forwarded verbatim', () => {
+    assert.deepEqual(Object.keys(formats.autodl).sort(), Object.keys(catalog).sort());
+    for (const [model, body] of Object.entries(formats.autodl)) {
+      const intent = p.native.rawCreate(rawContext(model, body));
+      assert.deepEqual(p.buildSubmitRequest(nativeDriver(intent)).body, body, model);
+    }
+    const dash = p.native.dashCreate({ body: { kind: 'json', value: formats.dashscope['wan2.2-animate-move'] } });
+    assert.equal(dash.model, 'wan2.2-animate-move');
+  });
+  const h3 = 'minimax_h3_z0901';
+  const h3Body = p.buildSubmitRequest(ctx(h3)).body;
+  test('native unknown fields and numeric strings pass through untouched', () => {
+    const body = { ...h3Body, future_control: { nested: [1, 'x'] }, duration: '6' };
+    const intent = p.native.rawCreate(rawContext(h3, body));
+    assert.deepEqual(p.buildSubmitRequest(nativeDriver(intent)).body, body);
+    assert.equal(p.extractUsage(nativeDriver(intent)).seconds, 6);
+  });
+  test('native omitted duration and resolution bill the official defaults without being added', () => {
+    const { duration, resolution, ...rest } = h3Body;
+    const intent = p.native.rawCreate(rawContext(h3, rest));
+    assert.deepEqual(p.buildSubmitRequest(nativeDriver(intent)).body, rest);
+    const facts = p.extractUsage(nativeDriver(intent));
+    assert.equal(facts.seconds, catalog[h3].rules.duration.default);
+    assert.equal(facts.resolution, catalog[h3].resolutions.find(r => r.upstream === catalog[h3].rules.resolution.default).resolution);
+  });
+  for (const [label, workflowId, body, error] of [
+    ['out-of-range duration', h3, { ...h3Body, duration: 999 }, 'duration must be'],
+    ['unified tier instead of the AutoDL label', h3, { ...h3Body, resolution: '768p' }, 'unsupported resolution'],
+    ['duration on motion transfer', motionModel, { ref_image: 'https://cdn.example.com/a.png', ref_video: 'https://cdn.example.com/a.mp4', duration: 5 }, 'no duration field'],
+    ['resolution on TTS', 'indextts2-v1', { prompt_text: 'hi', prompt_simple: 'https://cdn.example.com/a.wav', resolution: 'x' }, 'no resolution field'],
+    ['invalid media', motionModel, { ref_image: 'not-a-url', ref_video: 'https://cdn.example.com/a.mp4' }, 'invalid media URL'],
+    ['a host file placeholder', h3, { ...h3Body, extra: { __fileRef: 'request_file:x', encoding: 'base64' } }, '__fileRef'],
+    ['retired official model', 'MiniMax-H3', h3Body, 'unsupported model'],
+  ]) nativeFixture('native rejects ' + label, 'rawCreate', [rawContext(workflowId, body)], null, error);
+  nativeFixture('native requires a workflow id', 'rawCreate', [{ params: {}, body: { kind: 'json', value: h3Body } }], null, 'workflow id');
+  nativeFixture('native requires a JSON object', 'rawCreate', [{ params: { workflow_id: h3 }, body: { kind: 'json', value: [] } }], null, 'JSON object');
+  test('native saved facts cannot be tampered with', () => {
+    const intent = p.native.rawCreate(rawContext(h3, h3Body));
+    assert.throws(() => p.extractUsage(nativeDriver({ ...intent, requestBody: { ...intent.requestBody, seconds: 1 } })), /usage facts conflict/);
+    assert.throws(() => p.extractUsage(nativeDriver({ ...intent, requestBody: { ...intent.requestBody, extra: 1 } })), /invalid internal native/);
+    assert.throws(() => p.extractUsage(nativeDriver({ ...intent, requestBody: { ...intent.requestBody, __autodl_native: '{bad' } })), /invalid internal native/);
+  });
+  test('native accepts an undeclared workflow id the channel lists', () => {
+    const body = { prompt: 'x', duration: 7, resolution: 'whatever', anything: true };
+    const intent = p.native.rawCreate(rawContext('minimax_h3_future', body));
+    const submit = p.buildSubmitRequest(nativeDriver(intent));
+    assert.deepEqual(submit.body, body);
+    assert.equal(submit.url, base.baseUrl + 'api/v1/comfyui/comfyui_workflow/minimax_h3_future');
+    assert.deepEqual(p.extractUsage(nativeDriver(intent)), { requests: 1, seconds: 7 });
+  });
+  test('native channel mapping onto a declared workflow bills by that table', () => {
+    const intent = p.native.rawCreate(rawContext('my-h3', { prompt: 'x', duration: 6, resolution: catalog[h3].rules.resolution.default }));
+    const driver = nativeDriver(intent, h3);
+    assert.equal(p.buildSubmitRequest(driver).url, base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + h3);
+    assert.equal(p.buildSubmitRequest(driver).rewriteModel, h3);
+    assert.equal(p.extractUsage(driver).resolution, catalog[h3].resolutions.find(r => r.upstream === catalog[h3].rules.resolution.default).resolution);
+  });
+  test('native motion keeps its measured settlement', () => {
+    const intent = p.native.rawCreate(rawContext(motionModel, { ref_image: 'https://cdn.example.com/a.png', ref_video: 'https://cdn.example.com/a.mp4' }));
+    assert.equal(intent.action, 'video_to_video');
+    const submitted = p.parseSubmitResponse(nativeDriver(intent), { statusCode: 200, body: envelope('QUEUED') });
+    assert.equal(submitted.state.kind, motionModel);
+    const state = { ...submitted.state, measuredSeconds: 3.2 };
+    assert.equal(p.extractUsageOnComplete({ ...base, state }, { status: 'SUCCESS', url: '' }, {}).seconds, 3.2);
+  });
+  nativeFixture('native create answers in the AutoDL envelope', 'rawCreated', [{}, { task_id: 'task_pub', status: 'SUBMITTED' }], { code: 'Success', msg: '', data: { task_id: 'task_pub', status: 'QUEUED' }, request_id: '' });
+  for (const [status, expected] of [['NOT_START', 'QUEUED'], ['SUBMITTED', 'QUEUED'], ['QUEUED', 'QUEUED'], ['IN_PROGRESS', 'RUNNING'], ['UNKNOWN', 'RUNNING'], ['FAILURE', 'FAILED'], ['CANCELLED', 'FAILED']]) {
+    test('native query maps ' + status, () => assert.equal(p.native.rawTask(base, { task_id: 't', status }).data.status, expected));
+  }
+  test('native query returns AutoDL results with their descriptors', () => {
+    const data = envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4?sig=1', type: 'video', file_type: 'mp4', output_type: 'output' }]);
+    assert.deepEqual(p.native.rawTask(base, { task_id: 'task_pub', status: 'SUCCESS', action: 'text_to_video', data }), {
+      code: 'Success', msg: '', request_id: '',
+      data: { task_id: 'task_pub', status: 'SUCCESS', results: [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4?sig=1', type: 'video', file_type: 'mp4', output_type: 'output' }] },
+    });
+  });
+  test('native query failure reason is redacted', () => {
+    const out = p.native.rawTask(base, { task_id: 't', status: 'FAILURE', fail_reason: 'bad token fake-autodl-token' });
+    assert.equal(out.data.status, 'FAILED');
+    assert.ok(!out.data.message.includes('fake-autodl-token'));
+    assert.equal(p.native.rawTask(base, null).data.status, 'FAILED');
+  });
+}
+// Alibaba Cloud DashScope wan2.2-animate-move (/autodl/api/v1/services/aigc/image2video/video-synthesis).
+{
+  const official = { model: 'wan2.2-animate-move', input: { image_url: 'https://cdn.example.com/person.png', video_url: 'https://cdn.example.com/move.mp4' }, parameters: { mode: 'wan-std', check_image: true } };
+  const dashContext = body => ({ method: 'POST', path: '/api/v1/services/aigc/image2video/video-synthesis', body: { kind: 'json', value: hostJSON(body) } });
+  const dashDriver = (intent, upstreamModel = 'wan2.2-animate-move') => ({ ...base, model: intent.model, upstreamModel, requestBody: intent.requestBody });
+  const intent = p.native.dashCreate(dashContext(official));
+  test('DashScope official request maps onto the motion workflow', () => {
+    assert.equal(intent.model, 'wan2.2-animate-move');
+    assert.equal(intent.action, 'video_to_video');
+    const submit = p.buildSubmitRequest(dashDriver(intent));
+    assert.equal(submit.url, base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + motionModel);
+    assert.equal(submit.rewriteModel, motionModel);
+    assert.deepEqual(submit.body, { ref_image: official.input.image_url, ref_video: official.input.video_url, resolution: '464*832px(竖版)' });
+    assert.deepEqual(p.extractUsage(dashDriver(intent)), { requests: 1, seconds: 5, resolution: '464p', orientation: 'portrait' });
+    // A channel that maps the alias onto the workflow id gives the same request.
+    assert.deepEqual(p.buildSubmitRequest(dashDriver(intent, motionModel)).body, submit.body);
+  });
+  test('DashScope AutoDL extension selects the landscape tier', () => {
+    const landscape = p.native.dashCreate(dashContext({ ...official, parameters: { mode: 'wan-std', resolution: '464p', orientation: 'landscape' } }));
+    assert.equal(p.buildSubmitRequest(dashDriver(landscape)).body.resolution, '832*464px(横版)');
+    assert.equal(p.extractUsage(dashDriver(landscape)).orientation, 'landscape');
+  });
+  test('DashScope tolerates watermark false and either check_image', () => {
+    for (const body of [{ ...official, input: { ...official.input, watermark: false } }, { ...official, parameters: { mode: 'wan-std', check_image: false } }]) {
+      assert.deepEqual(p.buildSubmitRequest(dashDriver(p.native.dashCreate(dashContext(body)))).body, p.buildSubmitRequest(dashDriver(intent)).body);
+    }
+  });
+  for (const [label, body, error] of [
+    ['wan-pro', { ...official, parameters: { mode: 'wan-pro' } }, 'wan-pro is not available'],
+    ['a missing mode', { ...official, parameters: {} }, 'mode is required'],
+    ['missing parameters', { model: official.model, input: official.input }, 'parameters must be an object'],
+    ['a watermark', { ...official, input: { ...official.input, watermark: true } }, 'cannot add a watermark'],
+    ['another model', { ...official, model: 'wan2.2-animate-mix' }, 'model must be wan2.2-animate-move'],
+    ['the workflow id as model', { ...official, model: motionModel }, 'model must be wan2.2-animate-move'],
+    ['an unknown top-level field', { ...official, seconds: 5 }, 'unsupported DashScope field seconds'],
+    ['an unknown input field', { ...official, input: { ...official.input, audio_url: 'https://cdn.example.com/a.wav' } }, 'unsupported DashScope input field audio_url'],
+    ['an unknown parameters field', { ...official, parameters: { mode: 'wan-std', seed: 1 } }, 'unsupported DashScope parameters field seed'],
+    ['an unknown tier', { ...official, parameters: { mode: 'wan-std', resolution: '720p' } }, 'unsupported parameters.resolution'],
+    ['a missing video', { ...official, input: { image_url: official.input.image_url } }, 'invalid media URL'],
+    ['a non-boolean check_image', { ...official, parameters: { mode: 'wan-std', check_image: 'yes' } }, 'check_image must be boolean'],
+  ]) nativeFixture('DashScope rejects ' + label, 'dashCreate', [dashContext(body)], null, error);
+  test('DashScope saved fields cannot be tampered with', () => {
+    const fields = intent.requestBody.__autodl_fields.map(([k, v]) => [k, k === 'ref_video' ? 'https://cdn.example.com/other.mp4' : v]);
+    assert.throws(() => p.buildSubmitRequest(dashDriver({ ...intent, requestBody: { ...intent.requestBody, __autodl_fields: fields } })), /DashScope fields conflict/);
+    assert.throws(() => p.extractUsage(dashDriver({ ...intent, requestBody: { ...intent.requestBody, seconds: 1 } })), /usage facts conflict/);
+    assert.throws(() => p.extractUsage(dashDriver({ ...intent, requestBody: { ...intent.requestBody, __autodl_minimax: '{}' } })), /invalid internal/);
+  });
+  nativeFixture('DashScope create answers PENDING', 'dashCreated', [{}, { task_id: 'task_pub', status: 'SUBMITTED' }], { request_id: '', output: { task_id: 'task_pub', task_status: 'PENDING' } });
+  for (const [status, expected] of [['SUBMITTED', 'PENDING'], ['QUEUED', 'PENDING'], ['IN_PROGRESS', 'RUNNING'], ['UNKNOWN', 'RUNNING'], ['FAILURE', 'FAILED'], ['CANCELLED', 'CANCELED']]) {
+    test('DashScope query maps ' + status, () => assert.equal(p.native.dashTask(base, { task_id: 't', status }).output.task_status, expected));
+  }
+  test('DashScope query returns the video URL and UTC+8 times', () => {
+    const data = envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4', type: 'video', file_type: 'mp4' }]);
+    assert.deepEqual(p.native.dashTask(base, { task_id: 'task_pub', status: 'SUCCESS', action: 'video_to_video', data, created_at: 1758180720, updated_at: 1758180881 }), {
+      request_id: '',
+      output: { task_id: 'task_pub', task_status: 'SUCCEEDED', submit_time: '2025-09-18 15:32:00.000', end_time: '2025-09-18 15:34:41.000', results: { video_url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4' } },
+    });
+  });
+  test('DashScope query failure carries a redacted message', () => {
+    const out = p.native.dashTask(base, { task_id: 't', status: 'FAILURE', fail_reason: 'Bearer fake-autodl-token rejected' }).output;
+    assert.equal(out.code, 'InternalError');
+    assert.ok(!out.message.includes('fake-autodl-token'));
+    assert.equal(p.native.dashTask(base, { task_id: 't', status: 'SUCCESS', data: envelope('SUCCESS', []) }).output.task_status, 'FAILED');
+    assert.equal(p.native.dashTask(base, null).output.task_status, 'UNKNOWN');
   });
 }
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');

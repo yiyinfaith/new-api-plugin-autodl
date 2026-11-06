@@ -173,7 +173,32 @@ def examples(catalogue, previous):
         minimax[uuid] = {"model": uuid, "content": content, "resolution": tier, "ratio": "9:16", entry["secondsField"]: seconds}
     formats = dict(previous.get("_formats", {}))
     formats["minimax"] = minimax
+    # AutoDL's own API takes the workflow's upstream body as-is, so its example is derived from the
+    # table every time: prompt, the default length and resolution, and every required media slot.
+    formats["autodl"] = {uuid: native_example(entry) for uuid, entry in catalogue.items()}
+    formats["dashscope"] = {"wan2.2-animate-move": {
+        "model": "wan2.2-animate-move",
+        "input": {"image_url": f"{HOST}reference-1.png", "video_url": f"{HOST}reference-1.mp4"},
+        "parameters": {"mode": "wan-std"},
+    }}
     return {**openai, "_formats": formats}
+
+
+def native_example(entry):
+    rules, body = entry["rules"], {}
+    field = entry["promptField"]
+    if field:
+        body[field] = "用平静的语气读这句话。" if entry["type"] == "audio" else ("保留手里的话筒" if rules[field].get("required") is False else "一只猫在雪地中奔跑")
+    if entry["secondsField"]:
+        body[entry["secondsField"]] = rules[entry["secondsField"]]["default"]
+    if entry["resolutions"]:
+        body["resolution"] = rules["resolution"]["default"]
+    extension, counts = {"image": "png", "audio": "wav", "video": "mp4"}, {}
+    for key, rule in rules.items():
+        if rule["type"] in extension and rule.get("required"):
+            counts[rule["type"]] = counts.get(rule["type"], 0) + 1
+            body[key] = f"{HOST}reference-{counts[rule['type']]}.{extension[rule['type']]}"
+    return body
 
 
 # ---------------------------------------------------------------- prices

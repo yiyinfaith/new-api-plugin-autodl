@@ -756,7 +756,7 @@ export const meta = {
   apiVersion: 1,
   key: "autodl",
   name: "AutoDL",
-  version: "1.1.4",
+  version: "1.1.5",
   author: { name: "Yiyin" },
   description: { en: "All " + WORKFLOW_COUNT + " AutoDL.Art ComfyUI video and audio workflows with unified request parameters", zh: "统一参数接入 AutoDL.Art 全部 " + WORKFLOW_COUNT + " 个 ComfyUI 视频与音频工作流" },
   icon: "text:AD",
@@ -769,15 +769,22 @@ export const meta = {
   models: Object.keys(WORKFLOWS).concat([MOTION_ALIAS, TTS_ALIAS]),
   fetchMode: "per_task",
   // The channel-mapped OpenAI motion alias stays selectable; its OpenAI decoder is unchanged. The
-  // TTS alias is deliberately absent: this plugin exposes TTS only through the MiniMax V2 surface,
-  // and adding it here would advertise a model on /v1/videos that the audio path cannot serve.
+  // TTS alias is deliberately absent: TTS is served by the MiniMax V2 and AutoDL native routes, and
+  // adding it here would advertise a model on /v1/videos that the audio path cannot serve.
   protocols: [{ name: "openai_video", models: VIDEO_MODELS.concat([MOTION_ALIAS]) }],
-  // Only the MiniMax V2 routes are registered. Neither OpenAI (/v1/videos) nor MiniMax (/v2/...)
-  // intersects a host-reserved namespace, so this plugin needs no origin-proxy rewrite and runs
-  // from a single file install.
+  // Every route is the vendor's own path. The host also serves each one under /autodl/..., and that
+  // copy is the only address of the /api/... routes: /api is a host namespace, so New API rc.48+
+  // skips their top-level copy (skipped_routes, host_namespace) instead of rejecting the plugin.
   routes: [
+    // MiniMax V2.
     { method: "POST", path: "/v2/video_generation", type: "submit", decode: "miniCreate", render: "miniCreated" },
     { method: "GET", path: "/v2/query/video_generation/:task_id", type: "query", render: "miniTask" },
+    // AutoDL's own ComfyUI API: /autodl/api/v1/comfyui/comfyui_workflow/...
+    { method: "POST", path: "/api/v1/comfyui/comfyui_workflow/:workflow_id", type: "submit", decode: "rawCreate", render: "rawCreated" },
+    { method: "GET", path: "/api/v1/comfyui/comfyui_workflow/result/:task_id", type: "query", render: "rawTask" },
+    // Alibaba Cloud DashScope (Model Studio) wan2.2-animate-move: /autodl/api/v1/...
+    { method: "POST", path: "/api/v1/services/aigc/image2video/video-synthesis", type: "submit", decode: "dashCreate", render: "dashCreated" },
+    { method: "GET", path: "/api/v1/tasks/:task_id", type: "query", render: "dashTask" },
   ],
   usageSchema: REQUEST_SCHEMA,
   // Both public aliases advertise their own usage profile so each can be priced separately, and
@@ -1144,8 +1151,9 @@ function normalizeInput(config, input) {
   return { body: body, facts: facts, type: config.type };
 }
 
-// OpenAI and MiniMax generate a validated upstream body. Native requests keep
-// their JSON body separate from the read-only task/billing analysis below.
+// Validate a body written in AutoDL's own field names and derive its billing facts. Shared by the
+// MiniMax and DashScope surfaces once they have mapped their fields; the AutoDL native surface
+// sends the caller's body untouched instead (analyzeNative).
 function normalizeMiniMaxBody(config, input) {
   if (!object(input)) throw new Error("AutoDL: MiniMax body must be a JSON object");
   const body = {}, facts = { requests: 1 };
@@ -1222,6 +1230,9 @@ function requestWorkflow(ctx) {
   // its saved model is resolved again here against ctx.upstreamModel, exactly as the OpenAI decoder
   // resolves it.
   if (object(input) && has(input, "__autodl_minimax")) return resolveWorkflow(text(ctx.upstreamModel), savedMiniMax(input).model);
+  // The DashScope surface has one model, the motion alias.
+  if (object(input) && has(input, "__autodl_dashscope")) return resolveWorkflow(text(ctx.upstreamModel), MOTION_ALIAS);
+  if (object(input) && has(input, "__autodl_native")) return resolveWorkflow(text(ctx.upstreamModel), text(input.model));
   // Past this point the request already carries a resolved workflow id. Validation still follows
   // the model the caller named, so a declared model keeps its own capability table even when a
   // channel mapped it to a private id; a public alias resolves to the workflow it names; only a
@@ -1331,16 +1342,128 @@ function normalizeMiniMax(config, input) {
   return normalized;
 }
 
+// AutoDL's own API: the body is sent upstream exactly as the caller wrote it, unknown fields
+// included, and the workflow id comes from the path. Only what billing depends on is checked here:
+// the duration and resolution that price the task, and the media strings AutoDL will fetch.
+// Required fields and business limits are left to AutoDL itself.
+function containsFileRef(value) {
+  if (Array.isArray(value)) return value.some(containsFileRef);
+  return object(value) && (has(value, "__fileRef") || Object.keys(value).some(function (key) { return containsFileRef(value[key]); }));
+}
+
+function analyzeNative(config, raw) {
+  if (!object(raw)) throw new Error("AutoDL: the AutoDL native API requires a JSON object body");
+  // The host would try to expand such an object into an uploaded file; AutoDL has no field like it.
+  if (containsFileRef(raw)) throw new Error("AutoDL: __fileRef objects are not AutoDL fields; send media as public URLs or Data URLs");
+  for (const key of Object.keys(raw)) {
+    const rule = has(config.rules, key) ? config.rules[key] : null;
+    if (rule && ["image", "audio", "video"].includes(rule.type)) inputMedia(raw[key], rule.type);
+  }
+  const facts = { requests: 1 };
+  if (config.unmapped) {
+    // No table: bill the caller's own length field, else the generic default, as the other
+    // surfaces do for a self-chosen name.
+    const key = has(raw, "duration") ? "duration" : has(raw, "audio_duration") ? "audio_duration" : null;
+    facts.seconds = key ? numberValue(raw[key], config.rules[key], key) : config.rules.duration.default;
+  } else {
+    // A length field the workflow does not have would be billed at the default and ignored upstream.
+    for (const key of ["duration", "audio_duration"]) {
+      if (has(raw, key) && key !== config.secondsField) throw new Error("AutoDL: this workflow has no " + key + " field");
+    }
+    if (config.secondsField) {
+      const key = config.secondsField, rule = config.rules[key];
+      facts.seconds = numberValue(has(raw, key) ? raw[key] : rule.default, rule, key);
+    } else if (tableId(config) === MOTION_WORKFLOW) facts.seconds = MOTION_DEFAULT_SECONDS;
+    else if (config.type === "audio") facts.seconds = TTS_DEFAULT_SECONDS;
+    if (config.resolutions.length) {
+      const value = has(raw, "resolution") ? raw.resolution : config.rules.resolution.default;
+      const selected = config.resolutions.find(function (entry) { return entry.upstream === value; });
+      if (!selected) throw new Error("AutoDL: unsupported resolution for this workflow; use one of: " + config.resolutions.map(function (entry) { return entry.upstream; }).join(", "));
+      facts.resolution = selected.resolution; facts.orientation = selected.orientation;
+    } else if (has(raw, "resolution")) throw new Error("AutoDL: this workflow has no resolution field");
+  }
+  const present = function (keys) { return keys.some(function (key) { return has(raw, key); }); };
+  const action = config.type === "audio" ? "text_to_audio" : present(config.videos) ? "video_to_video" : present(config.input_reference.concat(["first_frame", "last_frame"])) ? "image_to_video" : "text_to_video";
+  return { body: raw, facts: facts, type: config.type, action: action };
+}
+
+const NATIVE_KEYS = ["model", "__autodl_native", "requests", "seconds", "resolution", "orientation"];
+
+// Re-read the saved native body. The facts are checked against the table the decoder used; a
+// channel mapping onto another declared workflow (known only now) then decides the final ones.
+function savedNative(config, input) {
+  if (Object.keys(input).some(function (key) { return !NATIVE_KEYS.includes(key); }) || typeof input.__autodl_native !== "string") throw new Error("AutoDL: invalid internal native request");
+  let raw;
+  try { raw = JSON.parse(input.__autodl_native); } catch (_) { throw new Error("AutoDL: invalid internal native request"); }
+  const decodedConfig = resolveWorkflow("", input.model);
+  const analysis = analyzeNative(decodedConfig, raw);
+  for (const key of ["requests", "seconds", "resolution", "orientation"]) {
+    if (has(input, key) !== has(analysis.facts, key) || input[key] !== analysis.facts[key]) throw new Error("AutoDL: internal native usage facts conflict");
+  }
+  return sameTable(decodedConfig, config) ? analysis : analyzeNative(config, raw);
+}
+
+// Alibaba Cloud DashScope wan2.2-animate-move, mapped onto AutoDL's motion-transfer workflow. The
+// official fields are kept; `parameters.resolution` / `parameters.orientation` are the AutoDL
+// extension for its output tier, which DashScope has no field for.
+const DASHSCOPE_FIELDS = ["model", "input", "parameters"];
+const DASHSCOPE_INPUT = ["image_url", "video_url", "watermark"];
+const DASHSCOPE_PARAMETERS = ["mode", "check_image", "resolution", "orientation"];
+
+function normalizeDashScope(config, source) {
+  if (!object(source)) throw new Error("AutoDL: DashScope body must be a JSON object");
+  for (const key of Object.keys(source)) if (!DASHSCOPE_FIELDS.includes(key)) throw new Error("AutoDL: unsupported DashScope field " + key);
+  if (source.model !== MOTION_ALIAS) throw new Error("AutoDL: DashScope model must be " + MOTION_ALIAS);
+  if (!object(source.input)) throw new Error("AutoDL: DashScope input must be an object with image_url and video_url");
+  if (!object(source.parameters)) throw new Error("AutoDL: DashScope parameters must be an object with mode");
+  const input = source.input, parameters = source.parameters;
+  for (const key of Object.keys(input)) if (!DASHSCOPE_INPUT.includes(key)) throw new Error("AutoDL: unsupported DashScope input field " + key);
+  for (const key of Object.keys(parameters)) if (!DASHSCOPE_PARAMETERS.includes(key)) throw new Error("AutoDL: unsupported DashScope parameters field " + key);
+  if (parameters.mode === "wan-pro") throw new Error("AutoDL: parameters.mode wan-pro is not available; AutoDL's motion-transfer workflow serves wan-std only");
+  if (parameters.mode !== "wan-std") throw new Error("AutoDL: DashScope parameters.mode is required and must be wan-std");
+  if (has(input, "watermark") && typeof input.watermark !== "boolean") throw new Error("AutoDL: DashScope input.watermark must be boolean");
+  if (input.watermark === true) throw new Error("AutoDL: the motion-transfer workflow cannot add a watermark; omit input.watermark or set it to false");
+  // Accepted for compatibility; AutoDL has no switch for the image pre-check either way.
+  if (has(parameters, "check_image") && typeof parameters.check_image !== "boolean") throw new Error("AutoDL: DashScope parameters.check_image must be boolean");
+  const defaults = config.resolutions.find(function (entry) { return entry.upstream === config.rules.resolution.default; });
+  const quality = parameters.resolution === undefined ? defaults.resolution : parameters.resolution;
+  const orientation = parameters.orientation === undefined ? defaults.orientation : parameters.orientation;
+  const selected = config.resolutions.find(function (entry) { return entry.resolution === quality && entry.orientation === orientation; });
+  if (!selected) throw new Error("AutoDL: unsupported parameters.resolution/orientation; use " + config.resolutions.map(function (entry) { return entry.resolution + " + " + entry.orientation; }).join(" or "));
+  const normalized = normalizeMiniMaxBody(config, { ref_image: inputMedia(input.image_url, "image"), ref_video: inputMedia(input.video_url, "video"), resolution: selected.upstream });
+  // No duration field upstream: reserve the default, settlement bills the delivered clip.
+  normalized.facts.seconds = MOTION_DEFAULT_SECONDS;
+  return normalized;
+}
+
+function savedDashScope(input) {
+  let source;
+  try { source = JSON.parse(input.__autodl_dashscope); } catch (_) { throw new Error("AutoDL: invalid internal DashScope source"); }
+  return source;
+}
+
 // Two configs describe the same capability table (and so produce the same body).
 function sameTable(a, b) { return !!a.unmapped === !!b.unmapped && tableId(a) === tableId(b); }
 
 function normalizeRequest(config, input) {
+  if (object(input) && has(input, "__autodl_native")) return savedNative(config, input);
   if (object(input) && has(input, "__autodl_fields")) {
-    if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "__autodl_minimax", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
+    if (Object.keys(input).some(function (key) { return !["model", "__autodl_fields", "__autodl_minimax", "__autodl_dashscope", "requests", "seconds", "resolution", "orientation"].includes(key); }) || !Array.isArray(input.__autodl_fields)) throw new Error("AutoDL: invalid internal normalized request");
+    if (has(input, "__autodl_minimax") && has(input, "__autodl_dashscope")) throw new Error("AutoDL: invalid internal normalized request");
     // The integrity checks below compare the saved fields with the table the decoder used. `config`
     // can differ from it: a native MiniMax decoder never sees the channel mapping, which only
     // reaches the driver hooks.
     let decodedConfig = config, expected, expectedFacts, source;
+    if (has(input, "__autodl_dashscope")) {
+      if (typeof input.__autodl_dashscope !== "string") throw new Error("AutoDL: invalid internal DashScope source");
+      decodedConfig = resolveWorkflow("", MOTION_ALIAS);
+      // A channel may map the alias onto another upstream id, but the body is always the
+      // motion-transfer one.
+      if (!sameTable(decodedConfig, config)) throw new Error("AutoDL: the DashScope API serves only motion transfer; map " + MOTION_ALIAS + " to the motion-transfer workflow");
+      const normalizedSource = normalizeDashScope(decodedConfig, savedDashScope(input));
+      expected = normalizedSource.body;
+      expectedFacts = normalizedSource.facts;
+    }
     if (has(input, "__autodl_minimax")) {
       if (typeof input.__autodl_minimax !== "string") throw new Error("AutoDL: invalid internal MiniMax source");
       source = savedMiniMax(input);
@@ -1359,7 +1482,7 @@ function normalizeRequest(config, input) {
     const motion = tableId(decodedConfig) === MOTION_WORKFLOW && !decodedConfig.unmapped;
     if (motion && result.facts.seconds === undefined) throw new Error("AutoDL: motion transfer billing seconds are missing");
     if (expected) {
-      if (Object.keys(result.body).length !== Object.keys(expected).length || Object.keys(expected).some(function (key) { return !has(result.body, key) || result.body[key] !== expected[key]; })) throw new Error("AutoDL: internal MiniMax fields conflict with the official request");
+      if (Object.keys(result.body).length !== Object.keys(expected).length || Object.keys(expected).some(function (key) { return !has(result.body, key) || result.body[key] !== expected[key]; })) throw new Error("AutoDL: internal " + (has(input, "__autodl_dashscope") ? "DashScope" : "MiniMax") + " fields conflict with the official request");
     }
     for (const key of ["requests", "seconds", "resolution", "orientation"]) if (has(input, key) && input[key] !== result.facts[key]) throw new Error("AutoDL: internal usage facts conflict");
     if (motion && !has(input, "seconds")) throw new Error("AutoDL: internal motion billing seconds are missing");
@@ -1994,6 +2117,7 @@ function mappedStatus(value) {
 }
 
 function taskAction(config, input) {
+  if (object(input) && has(input, "__autodl_native")) return savedNative(config, input).action;
   if (object(input) && has(input, "content")) {
     const body = normalizeRequest(config, input).body;
     return config.type === "audio" ? "text_to_audio" : config.videos.some(function (key) { return has(body, key); }) ? "video_to_video" : config.input_reference.some(function (key) { return has(body, key); }) ? "image_to_video" : "text_to_video";
@@ -2027,9 +2151,9 @@ export function buildSubmitRequest(ctx) {
     headers: credentials(ctx),
     body: parsed.body,
   };
-  // The MiniMax surface keeps the caller's external model name and pins the
+  // The native surfaces keep the caller's external model name and pin the
   // resolved workflow for polling. OpenAI already carries the workflow id.
-  if (object(ctx.requestBody) && has(ctx.requestBody, "__autodl_minimax")) request.rewriteModel = config.workflowId;
+  if (object(ctx.requestBody) && ["__autodl_minimax", "__autodl_dashscope", "__autodl_native"].some(function (key) { return has(ctx.requestBody, key); })) request.rewriteModel = config.workflowId;
   return request;
 }
 
@@ -2357,7 +2481,100 @@ function decodeCompatible(ctx, pinnedModel) {
   return { kind: "submit", model: model, action: taskAction(config, canonical), requestBody: canonical };
 }
 
+function decodeNative(ctx) {
+  const model = text((ctx.params || {}).workflow_id);
+  if (!model) throw new Error("AutoDL: the AutoDL native API requires a workflow id in the path");
+  if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value))) throw new Error("AutoDL: the AutoDL native API requires a JSON object body");
+  const analysis = analyzeNative(resolveWorkflow("", model), ctx.body.value);
+  // The host scans request fields for usage facts, so the caller's body travels as one opaque
+  // string beside the facts it was billed by.
+  const request = Object.assign({ model: model, __autodl_native: JSON.stringify(ctx.body.value) }, analysis.facts);
+  return { kind: "submit", model: model, action: analysis.action, requestBody: request };
+}
+
+function decodeDashScope(ctx) {
+  if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value))) throw new Error("AutoDL: the DashScope API requires a JSON object body");
+  const source = copyRequest(ctx.body.value);
+  const parsed = normalizeDashScope(resolveWorkflow("", MOTION_ALIAS), source);
+  const request = Object.assign({ model: MOTION_ALIAS, __autodl_fields: Object.entries(parsed.body) }, parsed.facts);
+  request.__autodl_dashscope = JSON.stringify(source);
+  return { kind: "submit", model: MOTION_ALIAS, action: "video_to_video", requestBody: request };
+}
+
+// One status vocabulary per surface, read from the host's task status.
+function surfaceStatus(task, names) {
+  const key = text(object(task) ? task.status : "").toUpperCase();
+  if (successStatus(key)) return names.success;
+  if (["CANCELLED", "CANCELED"].includes(key)) return names.cancelled;
+  if (failureStatus(key)) return names.failure;
+  if (["NOT_START", "SUBMITTED", "QUEUED"].includes(key)) return names.queued;
+  return names.running;
+}
+
+// AutoDL reports results as {url, type, file_type, output_type}; keep its own descriptors beside
+// the validated URL.
+function nativeResults(task) {
+  let items = [], raw = [];
+  try { items = artifacts(task); } catch (_) { items = []; }
+  try { raw = envelope(task.data).data.results; } catch (_) { raw = []; }
+  return items.map(function (item, index) {
+    const entry = { url: item.url, type: item.type }, source = Array.isArray(raw) ? raw[index] : null;
+    if (object(source)) for (const key of ["file_type", "output_type"]) if (typeof source[key] === "string") entry[key] = source[key];
+    return entry;
+  });
+}
+
+// DashScope times are UTC+8 "YYYY-MM-DD HH:mm:ss.SSS".
+function dashTime(value) {
+  if (typeof value !== "number" || !(value > 0)) return null;
+  try {
+    const stamp = new Date((value > 1e12 ? value : value * 1000) + 8 * 3600 * 1000).toISOString();
+    return stamp.slice(0, 10) + " " + stamp.slice(11, 23);
+  } catch (_) { return null; }
+}
+
+const AUTODL_STATUS_NAMES = { success: "SUCCESS", failure: "FAILED", cancelled: "FAILED", queued: "QUEUED", running: "RUNNING" };
+const DASHSCOPE_STATUS_NAMES = { success: "SUCCEEDED", failure: "FAILED", cancelled: "CANCELED", queued: "PENDING", running: "RUNNING" };
+
 export const native = {
+  rawCreate: decodeNative,
+  rawCreated: function (_ctx, task) {
+    return { code: "Success", msg: "", data: { task_id: object(task) ? text(task.task_id) : "", status: "QUEUED" }, request_id: "" };
+  },
+  rawTask: function (ctx, task) {
+    // A render hook that throws turns a client poll into a generic 500.
+    if (!object(task)) return { code: "Success", msg: "", data: { task_id: "", status: "FAILED", message: "AutoDL: task record is missing", results: [] }, request_id: "" };
+    const status = surfaceStatus(task, AUTODL_STATUS_NAMES);
+    const data = { task_id: task.task_id, status: status, results: status === "SUCCESS" ? nativeResults(task) : [] };
+    if (status === "FAILED") data.message = safeReason(ctx, task.fail_reason);
+    return { code: "Success", msg: "", data: data, request_id: "" };
+  },
+  dashCreate: decodeDashScope,
+  dashCreated: function (_ctx, task) {
+    return { request_id: "", output: { task_id: object(task) ? text(task.task_id) : "", task_status: "PENDING" } };
+  },
+  dashTask: function (ctx, task) {
+    if (!object(task)) return { request_id: "", output: { task_id: "", task_status: "UNKNOWN" } };
+    const output = { task_id: task.task_id, task_status: surfaceStatus(task, DASHSCOPE_STATUS_NAMES) };
+    const submitted = dashTime(task.created_at);
+    if (submitted) output.submit_time = submitted;
+    if (output.task_status === "SUCCEEDED") {
+      let items = [];
+      try { items = artifacts(task); } catch (_) { items = []; }
+      const video = items.find(function (item) { return item.type === "video"; });
+      if (video) output.results = { video_url: video.url };
+      else { output.task_status = "FAILED"; output.code = "InternalError"; output.message = "AutoDL: task produced no video"; }
+    } else if (["FAILED", "CANCELED"].includes(output.task_status)) {
+      output.code = output.task_status === "CANCELED" ? "TaskCanceled" : "InternalError";
+      output.message = safeReason(ctx, task.fail_reason);
+    }
+    if (["SUCCEEDED", "FAILED", "CANCELED"].includes(output.task_status)) {
+      const ended = dashTime(task.updated_at);
+      if (ended) output.end_time = ended;
+    }
+    // TaskView carries no settled usage, so DashScope's usage block is omitted rather than guessed.
+    return { request_id: "", output: output };
+  },
   miniCreate: function (ctx) {
     if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value) && has(ctx.body.value, "content"))) throw new Error("AutoDL: MiniMax V2 requires a JSON object with model and content");
     return decodeCompatible(ctx);

@@ -1,6 +1,6 @@
 """Verify submit request shapes with urlopen mocked; never contact a service.
 
-Only the two remaining surfaces are exercised: OpenAI Videos and MiniMax V2.
+All four formats are exercised: OpenAI Videos, MiniMax V2, AutoDL native and DashScope.
 """
 import importlib.util, io, json, os, pathlib, sys, tempfile
 from unittest.mock import patch
@@ -38,12 +38,33 @@ with tempfile.TemporaryDirectory(prefix='autodl-client-qa-') as directory:
                 try: client.main()
                 except Captured: checks += 1
                 else: raise AssertionError('Expected submit capture')
-    # 2. The removed surfaces are no longer selectable formats.
-    for removed in ['autodl', 'dashscope', 'native']:
-        with patch.dict(os.environ, {'NEW_API_KEY':'fake-newapi-key'}), patch.object(sys,'argv',['test-task.py','--format',removed,'--request',str(folder/'openai.json'),'--out',str(folder/'x.mp4')]), patch.object(client.urllib.request,'urlopen') as network:
+    # 2. AutoDL native and DashScope go to their /autodl paths; the native body carries no model.
+    native_body = examples['_formats']['autodl'][model]
+    dash_body = {'model': 'wan2.2-animate-move', 'input': {'image_url': 'https://cdn.example.com/p.png', 'video_url': 'https://cdn.example.com/m.mp4'}, 'parameters': {'mode': 'wan-std'}}
+    native_file = folder/'native.json'; native_file.write_text(json.dumps(native_body), encoding='utf-8')
+    dash_file = folder/'dash.json'; dash_file.write_text(json.dumps(dash_body), encoding='utf-8')
+    for fmt, extra, body, path in [
+        ('autodl', ['--example', model], native_body, '/autodl/api/v1/comfyui/comfyui_workflow/' + model),
+        ('autodl', ['--request', str(native_file), '--workflow', model], native_body, '/autodl/api/v1/comfyui/comfyui_workflow/' + model),
+        ('dashscope', ['--request', str(dash_file)], dash_body, '/autodl/api/v1/services/aigc/image2video/video-synthesis'),
+    ]:
+        def capture_surface(request, _path=path, _body=body, _fmt=fmt, **kwargs):
+            assert request.full_url == 'https://newapi.example' + _path, request.full_url
+            assert request.get_method() == 'POST'
+            assert request.headers['Authorization'] == 'Bearer fake-newapi-key'
+            assert json.loads(request.data) == _body
+            assert (request.get_header('X-dashscope-async') == 'enable') == (_fmt == 'dashscope')
+            raise Captured()
+        argv = ['test-task.py', '--format', fmt, *extra, '--out', str(folder/'surface.mp4')]
+        with patch.dict(os.environ, {'NEW_API_BASE_URL': 'https://newapi.example', 'NEW_API_KEY': 'fake-newapi-key'}), patch.object(sys, 'argv', argv), patch.object(client.urllib.request, 'urlopen', capture_surface):
             try: client.main()
-            except (ValueError, SystemExit): checks += 1
-            else: raise AssertionError(removed + ' format still accepted')
+            except Captured: checks += 1
+            else: raise AssertionError('Expected ' + fmt + ' submit capture')
+    for argv in [['--format', 'autodl', '--request', str(native_file)], ['--format', 'openai', '--request', str(native_file), '--workflow', model]]:
+        with patch.dict(os.environ, {'NEW_API_KEY': 'fake-newapi-key'}), patch.object(sys, 'argv', ['test-task.py', *argv, '--out', str(folder/'x.mp4')]), patch.object(client.urllib.request, 'urlopen') as network:
+            try: client.main()
+            except ValueError as error: assert '--workflow' in str(error); checks += 1
+            else: raise AssertionError('workflow misuse accepted')
             network.assert_not_called()
     # 3. The removed official model aliases can no longer be selected.
     for alias in ['MiniMax-H3', 'MiniMax-H3-Max']:
@@ -83,6 +104,44 @@ with tempfile.TemporaryDirectory(prefix='autodl-client-flow-') as directory:
         assert output.read_bytes() == b'fake-video-content' and len(calls) == 3
         assert not output.with_name(output.name+'.part').exists()
         checks += 1
+# 4b. Full flow for AutoDL native and DashScope: provider URLs are downloaded without the key.
+with tempfile.TemporaryDirectory(prefix='autodl-client-surfaces-') as directory:
+    folder = pathlib.Path(directory)
+    video = 'https://cdn.example.com/result.mp4'
+    dash_file = folder/'dash.json'
+    dash_file.write_text(json.dumps({'model': 'wan2.2-animate-move', 'input': {'image_url': 'https://cdn.example.com/p.png', 'video_url': 'https://cdn.example.com/m.mp4'}, 'parameters': {'mode': 'wan-std'}}), encoding='utf-8')
+    flows = {
+        'autodl': (['--example', model], {'code': 'Success', 'msg': '', 'data': {'task_id': 'task_test', 'status': 'QUEUED'}, 'request_id': ''},
+                   '/autodl/api/v1/comfyui/comfyui_workflow/result/task_test',
+                   {'code': 'Success', 'msg': '', 'data': {'task_id': 'task_test', 'status': 'SUCCESS', 'results': [{'url': video, 'type': 'video', 'file_type': 'mp4'}]}, 'request_id': ''}),
+        'dashscope': (['--request', str(dash_file)], {'request_id': '', 'output': {'task_id': 'task_test', 'task_status': 'PENDING'}},
+                      '/autodl/api/v1/tasks/task_test',
+                      {'request_id': '', 'output': {'task_id': 'task_test', 'task_status': 'SUCCEEDED', 'results': {'video_url': video}}}),
+    }
+    for fmt, (extra, created, query, finished) in flows.items():
+        calls = []
+        def surface_network(request, _created=created, _query=query, _finished=finished, **kwargs):
+            calls.append(request.full_url)
+            if request.get_method() == 'POST': return io.BytesIO(json.dumps(_created).encode())
+            if request.full_url == 'https://newapi.example' + _query:
+                assert request.headers['Authorization'] == 'Bearer fake-newapi-key'
+                return io.BytesIO(json.dumps(_finished).encode())
+            assert request.full_url == video and not request.has_header('Authorization')
+            return io.BytesIO(b'fake-video-content')
+        output = folder/(fmt + '.mp4')
+        argv = ['test-task.py', '--format', fmt, *extra, '--out', str(output)]
+        with patch.dict(os.environ, {'NEW_API_BASE_URL': 'https://newapi.example', 'NEW_API_KEY': 'fake-newapi-key'}), patch.object(sys, 'argv', argv), patch.object(client.urllib.request, 'urlopen', surface_network):
+            client.main()
+        assert output.read_bytes() == b'fake-video-content' and len(calls) == 3
+        checks += 1
+    # A failed native task surfaces its message.
+    def failed_network(request, **kwargs):
+        if request.get_method() == 'POST': return io.BytesIO(b'{"code":"Success","data":{"task_id":"task_f","status":"QUEUED"}}')
+        return io.BytesIO(json.dumps({'code': 'Success', 'data': {'task_id': 'task_f', 'status': 'FAILED', 'message': 'upstream said no', 'results': []}}).encode())
+    with patch.dict(os.environ, {'NEW_API_KEY': 'fake'}), patch.object(sys, 'argv', ['test-task.py', '--format', 'autodl', '--example', model, '--out', str(folder/'failed.mp4')]), patch.object(client.urllib.request, 'urlopen', failed_network):
+        try: client.main()
+        except RuntimeError as error: assert 'upstream said no' in str(error); checks += 1
+        else: raise AssertionError('failed native task reported success')
 # 5. Audit regressions never submit a real job: all urlopen calls are replaced.
 spec = importlib.util.spec_from_file_location('autodl_video_client', ROOT/'test-video.py')
 video_client = importlib.util.module_from_spec(spec)

@@ -840,7 +840,9 @@
     "billing_seconds": {
       "motion_openai": "seconds",
       "motion_minimax": "duration",
-      "note": "Motion transfer has no fixed AutoDL default. Declare the real reference-video seconds; the plugin also measures the reference at submission and falls back to this declaration. It never trims the upstream output."
+      "motion_autodl": null,
+      "motion_dashscope": null,
+      "note": "Motion transfer has no AutoDL length field. OpenAI seconds / MiniMax duration only set the reservation (default 5); the AutoDL native and DashScope formats always reserve 5. Settlement bills the measured length of the delivered clip, never the reference video. The output is never trimmed."
     },
     "compatibility": {
       "openai_images_alias": {
@@ -888,6 +890,228 @@
       },
       "note": "input_reference is the recommended reference field; images is an equivalent New API Sora compatibility alias mapped to the same ref_image_* slots. metadata/mode/user/n/response_format and MiniMax callback_url/extra are accepted and ignored because AutoDL has no counterpart. Media-shaped or unknown object fields still fail loudly so a picture is never dropped silently."
     },
-    "_note": "Only the OpenAI Videos and MiniMax V2 request formats remain. Every entry is an AutoDL workflow id; the official MiniMax model-name aliases and the AutoDL native / DashScope surfaces were removed in 1.0.5."
+    "_note": "Four request formats: OpenAI Videos (top-level entries), MiniMax V2 (_formats.minimax), AutoDL's own API (_formats.autodl, POST /autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}) and Alibaba Cloud DashScope (_formats.dashscope, POST /autodl/api/v1/services/aigc/image2video/video-synthesis). The last two are served only under the /autodl prefix (New API rc.48+). The official MiniMax model-name aliases stay removed.",
+    "autodl_api": {
+      "create_path": "/autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}",
+      "query_path": "/autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}",
+      "create_response": {
+        "code": "Success",
+        "msg": "",
+        "data": {
+          "task_id": "task_example",
+          "status": "QUEUED"
+        },
+        "request_id": ""
+      },
+      "query_response": {
+        "code": "Success",
+        "msg": "",
+        "data": {
+          "task_id": "task_example",
+          "status": "SUCCESS",
+          "results": [
+            {
+              "url": "https://your-public-file-host.example/result.mp4",
+              "type": "video",
+              "file_type": "mp4",
+              "output_type": "output"
+            }
+          ]
+        },
+        "request_id": ""
+      }
+    },
+    "dashscope_api": {
+      "create_path": "/autodl/api/v1/services/aigc/image2video/video-synthesis",
+      "query_path": "/autodl/api/v1/tasks/{task_id}",
+      "create_response": {
+        "request_id": "",
+        "output": {
+          "task_id": "task_example",
+          "task_status": "PENDING"
+        }
+      },
+      "query_response": {
+        "request_id": "",
+        "output": {
+          "task_id": "task_example",
+          "task_status": "SUCCEEDED",
+          "submit_time": "2026-11-05 10:00:00.000",
+          "end_time": "2026-11-05 10:03:00.000",
+          "results": {
+            "video_url": "https://your-public-file-host.example/result.mp4"
+          }
+        }
+      }
+    },
+    "autodl": {
+      "minimax_h3_zm_titim": {
+        "prompt": "保留手里的话筒",
+        "duration": 10,
+        "resolution": "768p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png",
+        "ref_video": "https://your-public-file-host.example/reference-1.mp4"
+      },
+      "minimax_h3_zm_titi": {
+        "prompt": "保留手里的话筒",
+        "duration": 10,
+        "resolution": "768p竖",
+        "ref_image": "https://your-public-file-host.example/reference-1.png",
+        "ref_video": "https://your-public-file-host.example/reference-1.mp4"
+      },
+      "minimax_h3_zm_u22": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_zm_u24": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_lightx2v_v5_15s": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_image_audio_to_video_v2_15s": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖"
+      },
+      "indextts2-v1": {
+        "prompt_text": "用平静的语气读这句话。",
+        "prompt_simple": "https://your-public-file-host.example/reference-1.wav"
+      },
+      "minimax_h3_zm_nono": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_lightx2v_v5": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_lightx2v_no_pic": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖"
+      },
+      "minimax_h3_zm_u30": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_803": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖(768*1376)"
+      },
+      "minimax_h3_lightx2v": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖",
+        "first_frame": "https://your-public-file-host.example/reference-1.png",
+        "last_frame": "https://your-public-file-host.example/reference-2.png"
+      },
+      "minimax_h3_zm_u08": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_image_audio_to_video_v2": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖"
+      },
+      "minimax_h3_z0902": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖(768*1376)",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_801": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖(768*1376)",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_802": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖(768*1376)"
+      },
+      "minimax_h3_805": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖(768*1376)"
+      },
+      "minimax_h3_804": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖(768*1376)"
+      },
+      "minimax_h3_image_audio_to_video": {
+        "audio_duration": 5,
+        "resolution": "768p竖",
+        "ref_audio_0": "https://your-public-file-host.example/reference-1.wav",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_b99_002": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "736p竖",
+        "first_frame": "https://your-public-file-host.example/reference-1.png",
+        "last_frame": "https://your-public-file-host.example/reference-2.png"
+      },
+      "wan2.2animate-v4-motion_retargeting": {
+        "resolution": "464*832px(竖版)",
+        "ref_image": "https://your-public-file-host.example/reference-1.png",
+        "ref_video": "https://your-public-file-host.example/reference-1.mp4"
+      },
+      "minimax_h3_z0901": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖(768*1344)"
+      },
+      "minimax_h3_z0903": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "768p竖(768*1376)",
+        "ref_audio_0": "https://your-public-file-host.example/reference-1.wav",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_b99_003_12s": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "736p竖",
+        "ref_image_0": "https://your-public-file-host.example/reference-1.png"
+      },
+      "minimax_h3_b99_001": {
+        "prompt": "一只猫在雪地中奔跑",
+        "duration": 5,
+        "resolution": "736p竖"
+      }
+    },
+    "dashscope": {
+      "wan2.2-animate-move": {
+        "model": "wan2.2-animate-move",
+        "input": {
+          "image_url": "https://your-public-file-host.example/reference-1.png",
+          "video_url": "https://your-public-file-host.example/reference-1.mp4"
+        },
+        "parameters": {
+          "mode": "wan-std"
+        }
+      }
+    }
   }
 }
