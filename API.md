@@ -6,10 +6,12 @@
 
 | 格式 | 创建 | 查询 | 成功产物 | 模型 |
 |---|---|---|---|---|
-| OpenAI Videos | `POST /v1/videos` | `GET /v1/videos/{id}` | `url`、`results[]`；`GET /v1/videos/{id}/content` 下载 | 26 个视频工作流 |
-| MiniMax V2 | `POST /v2/video_generation` | `GET /v2/query/video_generation/{task_id}` | `task.content.url` | 全部 27 个 |
-| AutoDL 原生 | `POST /autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}` | `data.results[].url` | 全部 27 个 |
-| 阿里云百炼 DashScope | `POST /autodl/api/v1/services/aigc/image2video/video-synthesis` | `GET /autodl/api/v1/tasks/{task_id}` | `output.results.video_url` | `wan2.2-animate-move` |
+| OpenAI Videos | `POST /v1/videos` | `GET /v1/videos/{id}` | `url`、`results[]`；`GET /v1/videos/{id}/content` 下载 | 全部 |
+| MiniMax V2 | `POST /v2/video_generation` | `GET /v2/query/video_generation/{task_id}` | `task.content.url` | 全部 |
+| AutoDL 原生 | `POST /autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}` | `data.results[].url` | 全部 |
+| 阿里云百炼 DashScope | `POST /autodl/api/v1/services/aigc/video-generation/video-synthesis`（另两个百炼创建路径也行，见下文） | `GET /autodl/api/v1/tasks/{task_id}` | `output.video_url`；TTS 为 `output.audio.url` | 全部 |
+
+「全部」指 27 个工作流加两个别名 `wan2.2-animate-move`、`IndexTTS-2`，TTS 也包括在内。
 
 - **AutoDL 原生和 DashScope 的路径必须带 `/autodl` 前缀**：它们的官方路径以 `/api/` 开头，而 `/api` 属于 New API 自己，宿主（rc.48+）只在插件 key 前缀下提供这两组路由。调用方把官方 Base URL 换成 `https://你的域名/autodl`，路径其余部分照抄官方。
 - 鉴权用 New API 的 Key：`Authorization: Bearer <NEW_API_KEY>`，不要传 AutoDL Token。AutoDL 原生格式也可以照官方写法不带 `Bearer`。
@@ -19,7 +21,8 @@
 ## 通用规则
 
 - **媒体输入**：公网 HTTP(S) URL，或标准 Base64 Data URL（如 `data:image/png;base64,…`、`data:audio/wav;base64,…`、`data:video/mp4;base64,…`）。MIME 类别必须与字段一致，Base64 必须是标准字母表且补位正确。不支持裸 Base64、文件路径、`file_id` 和文件上传。大文件请用 URL（宿主限制请求体大小）。官网接受的格式：图片 JPEG/PNG/WebP；音频 MP3/WAV（多数 H3 还接受 FLAC）；视频 MP4/WebM。
-- **严格校验**：媒体数量、时长、分辨率、文本长度超出工作流范围直接报错，插件不截断、不补齐、不降档，报错的请求不会扣费。
+- **严格校验**：媒体数量、时长、文本长度超出工作流范围直接报错，插件不截断、不补齐，报错的请求不会扣费。
+- **分辨率容错**（OpenAI、MiniMax、DashScope）：档位大小写都认（`480P` = `480p`，`2K` = `1440p`）；工作流没有的档位就近匹配到它有的、相差不超过 48 的档位（`720P` → `736p` / `768p`，`1080P` ↔ `1088p`），差得更远才报错。省略分辨率、方向或比例时用工作流默认值（多为竖屏）。AutoDL 原生格式透传，仍要写完整官网标签。
 - **未知字段**：OpenAI、MiniMax、DashScope 拒绝未知字段（`unsupported request field …` / `unsupported or mixed MiniMax field …` / `unsupported DashScope … field …`），避免拼错的参数被静默丢弃；少数官方兼容字段例外，见各格式说明。AutoDL 原生格式是透传，未知字段原样发给 AutoDL。
 - **超时**：排队或运行超过 30 分钟，任务按失败结束并退回 New API 预扣；上游任务可能仍在运行，AutoDL 侧不会因此退款。
 - **产物**：只返回 HTTP(S) URL，是 24 小时有效的签名链接，请及时保存。下载链接不附带任何密钥。
@@ -30,10 +33,10 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `model` | string | 必填。视频 workflow ID 或 `wan2.2-animate-move`。 |
+| `model` | string | 必填。workflow ID 或别名 `wan2.2-animate-move`、`IndexTTS-2`（TTS 也走这里）。 |
 | `prompt` | string | 有文本槽位的工作流必填（角色替换可省略）；对口型和动作迁移不接受。长度上限见工作流表。 |
 | `seconds` | integer / 数字字符串 | 可选，默认 5（角色替换 10）。范围见工作流表。`duration` 是等价写法，两者同时传必须一致。动作迁移只用于预扣，可为 1–3600 的小数。 |
-| `resolution` | string | 可选，档位如 `480p`、`768p`、`1088p`、`736p`、`960p`、`464p`，可用值见工作流表。 |
+| `resolution` | string | 可选，档位如 `480p`、`768p`、`1088p`、`736p`、`960p`、`464p`，可用值见工作流表；大小写和相近档位按[分辨率容错](#通用规则)处理。 |
 | `orientation` | string | 可选，`portrait` / `landscape` / `square`，默认竖屏。 |
 | `size` | string | 可选，精确像素 `宽x高`，只对下方尺寸表里的工作流有效；与 resolution/orientation 冲突时报错。 |
 | `input_reference` | object / object[] | 参考图：`{"image_url":"…"}` 或其数组，也接受 URL 字符串或字符串数组。首尾帧传 2 张，依次为首帧、尾帧。 |
@@ -44,8 +47,10 @@
 | `mode` | string | 801/802/803：`高速模式` / `高质模式`（默认）。 |
 | `style_preset` | string | 804/805：`文戏模式-真人-文戏`、`文戏模式-真人-文戏+真实质感`、`武打模式-真人-武戏`、`武打模式-真人-武戏+真实质感`（默认）、`漫剧模式-漫剧-文戏`、`漫剧模式-漫剧-武戏`。 |
 | `video_subject_to_replace` | string | titim：视频中要替换的主体，英文，多个用英文逗号分隔，默认 `person`，1–100 字符。 |
+| `emotion` | object | TTS：`{"mode":"vector","happy":0.8,…,"random":false}`，`mode` 取 `voice` / `reference` / `vector`，见 [TTS](#ttsindextts2-v1--indextts-2)。 |
+| `input` / `voice` | string | TTS 专用，OpenAI 语音接口的写法：`input` 等于 `prompt`，`voice` 是音色参考音频**链接**（等于 `audios` 的第 1 段）。 |
 
-兼容字段 `metadata`、`user`、`n`、`response_format`、`fps`、`width`、`height`、`callback_url`、`extra`，以及工作流未声明时的 `mode`，会被接受并忽略（OpenAI/Sora 客户端常带这些字段）。`minimax_h3_lightx2v_no_pic` 额外兼容完整官网标签（如 `"resolution":"480p横"`）。表单（multipart/form）提交时，`input_reference` 可以是 JSON、裸 URL 或重复字段，`audios` / `videos` 需 JSON 编码。
+兼容字段 `metadata`、`user`、`n`、`response_format`、`fps`、`width`、`height`、`callback_url`、`extra`、TTS 的 `instructions` / `speed`，以及工作流未声明时的 `mode`，会被接受并忽略（OpenAI/Sora 客户端常带这些字段）。`minimax_h3_lightx2v_no_pic` 额外兼容完整官网标签（如 `"resolution":"480p横"`）。表单（multipart/form）提交时，`input_reference` 可以是 JSON、裸 URL 或重复字段，`audios` / `videos` 需 JSON 编码。
 
 ### 示例
 
@@ -95,8 +100,8 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_AP
 |---|---|---|
 | `model` | string | 必填。workflow ID 或别名。 |
 | `content` | object[] | 必填。文本和媒体，见下表。 |
-| `resolution` | string | 有分辨率的工作流必填。`480P`、`768P`、`2K`（=1440p）；其他档位写小写，如 `736p`、`960p`、`1080p`、`1088p`、`464p`；也接受完整官网标签。不接受小写的 `480p` / `768p` / `1440p`。 |
-| `ratio` | string | `adaptive`、`21:9`、`16:9`、`4:3`、`1:1`、`3:4`、`9:16`，决定方向。纯文生视频必填且不能是 `adaptive`；有参考媒体时可省略（按 `adaptive`）。 |
+| `resolution` | string | 可选，省略用工作流默认档位。`480P`、`768P`、`2K`（=1440p）或其他档位如 `1080P`、`736p`，大小写都认、相近档位就近匹配；也接受完整官网标签。 |
+| `ratio` | string | 可选，`adaptive`、`21:9`、`16:9`、`4:3`、`1:1`、`3:4`、`9:16`，决定方向；省略或 `adaptive` 用工作流默认方向。 |
 | `duration` | integer / 数字字符串 | 可选，默认 5（角色替换 10）。对口型工作流改用 `audio_duration`。动作迁移只用于预扣，可为 1–3600 的小数。 |
 | `audio_duration` | integer / 数字字符串 | 仅 `minimax_h3_image_audio_to_video`，1–15，默认 5。 |
 | `seed` | integer / 数字字符串 | 可选，仅有 seed 的工作流。 |
@@ -156,7 +161,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_AP
 
 ### TTS（indextts2-v1 / IndexTTS-2）
 
-走 MiniMax V2（下面的写法）或 [AutoDL 原生](#autodl-原生)（官网字段 `prompt_text`、`prompt_simple`、`emo_ref_audio`、`emo_*`）。不传 `duration` / `resolution` / `ratio`（传了会报错）。`text` 1–2048 字符；`audio_url` 1–2 段：第 1 段是音色参考（必填），第 2 段是情感参考。
+四种格式都能调：MiniMax V2（下面的写法）、OpenAI（`prompt`/`input` + `audios`/`voice` + `emotion`）、[AutoDL 原生](#autodl-原生)（官网字段 `prompt_text`、`prompt_simple`、`emo_ref_audio`、`emo_*`）、[DashScope](#阿里云百炼-dashscope)（`input.text` + `input.voice`）。不传 `duration` / `resolution` / `ratio`（传了会报错）。`text` 1–2048 字符；`audio_url` 1–2 段：第 1 段是音色参考（必填），第 2 段是情感参考。
 
 | 顶层字段 | 取值 |
 |---|---|
@@ -166,6 +171,12 @@ curl -sS -X POST "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_AP
 
 ```json
 {"model":"IndexTTS-2","content":[{"type":"text","text":"用平静的语气读这句话。"},{"type":"audio_url","role":"reference_audio","audio_url":{"url":"https://media.example.com/voice.wav"}}],"emo_control_method":"使用情感向量控制","emo_calm":0.3}
+```
+
+OpenAI 写法（`POST /v1/videos`，成品用 `/v1/videos/{id}/content` 下载，是 WAV 音频）：
+
+```json
+{"model":"IndexTTS-2","input":"用平静的语气读这句话。","voice":"https://media.example.com/voice.wav","emotion":{"mode":"vector","calm":0.3}}
 ```
 
 ## AutoDL 原生
@@ -200,30 +211,55 @@ curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/comfyui/comfyui_workflow/minim
 
 ## 阿里云百炼 DashScope
 
-和百炼 [wan2.2-animate-move（图生动作）](https://www.alibabacloud.com/help/en/model-studio/wan-animate-move-api) 相同，只是地址换成 `https://你的域名/autodl`、密钥换成 New API Key，背后跑 AutoDL 的动作迁移工作流：
+沿用百炼视频生成的请求结构，地址换成 `https://你的域名/autodl`、密钥换成 New API Key。百炼上没有 H3 / IndexTTS 这些模型，所以 `model` 填 AutoDL 的 workflow ID 或别名；其余字段按百炼写，新旧几代写法都认：
 
 | 官方 | 经 New API |
 |---|---|
-| `POST https://dashscope.aliyuncs.com/api/v1/services/aigc/image2video/video-synthesis` | `POST https://你的域名/autodl/api/v1/services/aigc/image2video/video-synthesis` |
+| `POST https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis`（文生、首帧、参考生视频） | `POST https://你的域名/autodl/api/v1/services/aigc/video-generation/video-synthesis` |
+| `POST …/api/v1/services/aigc/image2video/video-synthesis`（首尾帧、animate-move） | `POST https://你的域名/autodl/api/v1/services/aigc/image2video/video-synthesis` |
+| `POST …/api/v1/services/aigc/multimodal-generation/generation`（Qwen-TTS） | `POST https://你的域名/autodl/api/v1/services/aigc/multimodal-generation/generation` |
 | `GET https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}` | `GET https://你的域名/autodl/api/v1/tasks/{task_id}` |
+
+三个创建路径对所有模型都一样，任选一个；请求体决定用什么媒体，路径不影响。
 
 | 字段 | 说明 |
 |---|---|
-| `model` | 必填，只能是 `wan2.2-animate-move`。 |
-| `input.image_url` | 必填，人物图片，HTTP(S) URL 或标准 Data URL。 |
-| `input.video_url` | 必填，动作参考视频，HTTP(S) URL 或标准 Data URL。 |
-| `input.watermark` | 可选，只能省略或 `false`（AutoDL 不加水印）。 |
-| `parameters.mode` | 必填，只能是 `wan-std`；`wan-pro` 会报错（AutoDL 没有对应的专业模式）。 |
-| `parameters.check_image` | 可选，布尔，接受但不起作用。 |
-| `parameters.orientation` | AutoDL 扩展，可选：`portrait`（默认，464×832）/ `landscape`（832×464）。百炼按输入图比例出片，AutoDL 需要显式选方向。 |
-| `parameters.resolution` | AutoDL 扩展，可选：`464p`（目前唯一档位）。 |
+| `model` | 必填。workflow ID，或别名 `wan2.2-animate-move`、`IndexTTS-2`，或渠道映射名。 |
+| `input.prompt` | 文本，规则同 OpenAI 的 `prompt`。TTS 也可写 `input.text`（Qwen-TTS 写法）。 |
+| `input.media[]` | 百炼 Wan 2.7 写法，每项 `{"type":…,"url":…}`：`first_frame`、`last_frame`、`reference_image`、`reference_video`、`driving_audio`；`reference_image` / `reference_video` 上的 `reference_voice` 当作一段参考音频。`first_clip`（视频续写）AutoDL 没有对应能力，会报错。 |
+| `input.img_url` / `first_frame_url` / `last_frame_url` | 旧写法：首帧、尾帧。非首尾帧工作流里，首帧当作第 1 张参考图。 |
+| `input.ref_images_url` / `reference_urls` / `reference_video_urls` | 旧写法：参考图或视频列表。`reference_urls` 按扩展名区分图片和视频（mp4/mov/webm 等算视频）。 |
+| `input.image_url` / `video_url` | animate-move 写法：参考图、参考视频。 |
+| `input.audio_url` | 参考音频（旧版 Wan 的驱动音频）。 |
+| `input.voice` | TTS 的音色参考音频**链接**（IndexTTS-2 克隆音色，不接受 `Cherry` 这类音色名）；再给 `audio_url` 就是情感参考音频。 |
+| `parameters.duration` | 时长，规则同 OpenAI 的 `seconds`。 |
+| `parameters.resolution` | `480P`、`720P`、`1080P` 或 AutoDL 档位（`768P`、`2K`…），大小写都认，就近匹配（见[通用规则](#通用规则)）。 |
+| `parameters.ratio` | `16:9`、`9:16`、`1:1`、`4:3`、`3:4`、`21:9`，决定方向；`adaptive` 等于不传。 |
+| `parameters.size` | 旧写法 `1280*720`：和工作流的精确尺寸相同就用它，否则按宽高定方向、按短边匹配档位。 |
+| `parameters.seed` | 同 OpenAI。 |
+| `parameters.mode` | 801/802/803 上是 AutoDL 的 `高速模式` / `高质模式`；其他工作流只接受 `wan-std`（可省略），`wan-pro` 报错。 |
+| `parameters.style_preset` / `video_subject_to_replace` / `orientation` / `emotion` | AutoDL 扩展，取值同 OpenAI。 |
+| 接受并忽略 | `input.negative_prompt`、`input.language_type`、`input.watermark`，`parameters.prompt_extend`、`watermark`、`shot_type`、`audio`、`check_image`。AutoDL 不加水印、不改写提示词。 |
 
-其他字段一律报错。`X-DashScope-Async: enable` 可带可不带（本接口总是异步）。
+其他字段报错。`X-DashScope-Async: enable` 可带可不带（这里总是异步，TTS 也一样，要轮询结果）。动作迁移的 `parameters.duration` 只用于预扣（默认 5 秒），结算按成片实测。每个工作流的完整示例见 [examples.json](examples.json) 的 `_formats.dashscope`。
 
 ```bash
-curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/image2video/video-synthesis" \
+# 文生视频（百炼 wan2.7 写法：resolution + ratio）
+curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/video-generation/video-synthesis" \
   -H "Authorization: Bearer $NEW_API_KEY" -H 'Content-Type: application/json' -H 'X-DashScope-Async: enable' \
-  -d '{"model":"wan2.2-animate-move","input":{"image_url":"https://media.example.com/person.png","video_url":"https://media.example.com/dance.mp4"},"parameters":{"mode":"wan-std","orientation":"landscape"}}'
+  -d '{"model":"minimax_h3_z0901","input":{"prompt":"一只猫在雪地中奔跑"},"parameters":{"resolution":"720P","ratio":"16:9","duration":5}}'
+```
+
+```json
+{"model":"minimax_h3_zm_u08","input":{"prompt":"人物面向镜头说话","media":[{"type":"reference_image","url":"https://media.example.com/person.png","reference_voice":"https://media.example.com/speech.wav"}]},"parameters":{"resolution":"768P","ratio":"9:16","duration":5}}
+```
+
+```json
+{"model":"wan2.2-animate-move","input":{"image_url":"https://media.example.com/person.png","video_url":"https://media.example.com/dance.mp4"},"parameters":{"mode":"wan-std","orientation":"landscape"}}
+```
+
+```json
+{"model":"IndexTTS-2","input":{"text":"用平静的语气读这句话。","voice":"https://media.example.com/voice.wav"},"parameters":{"emotion":{"mode":"vector","calm":0.3}}}
 ```
 
 ```json
@@ -231,10 +267,14 @@ curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/image2video/vide
 ```
 
 ```json
-{"request_id":"","output":{"task_id":"task_xxx","task_status":"SUCCEEDED","submit_time":"2026-11-05 10:00:00.000","end_time":"2026-11-05 10:03:00.000","results":{"video_url":"https://…/result.mp4"}}}
+{"request_id":"","output":{"task_id":"task_xxx","task_status":"SUCCEEDED","submit_time":"2026-11-05 10:00:00.000","end_time":"2026-11-05 10:03:00.000","video_url":"https://…/result.mp4","results":{"video_url":"https://…/result.mp4"}}}
 ```
 
-`task_status` 为 `PENDING` / `RUNNING` / `SUCCEEDED` / `FAILED` / `CANCELED`；失败时带 `output.code`、`output.message`。官方的 `usage` 块不返回（计费以 New API 账单为准），`request_id` 为空。预扣 5 秒，结算按成片实测时长。
+```json
+{"request_id":"","output":{"task_id":"task_xxx","task_status":"SUCCEEDED","audio":{"url":"https://…/result.wav"}}}
+```
+
+`task_status` 为 `PENDING` / `RUNNING` / `SUCCEEDED` / `FAILED` / `CANCELED`；失败时带 `output.code`、`output.message`。视频同时给出 `output.video_url`（当前百炼写法）和 `output.results.video_url`（animate-move 写法），TTS 给 `output.audio.url`（Qwen-TTS 写法）。官方的 `usage` 块不返回（计费以 New API 账单为准），`request_id` 为空。
 
 ## 工作流
 
@@ -312,7 +352,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/image2video/vide
 四种格式的 `model`（AutoDL 原生格式是路径里的 workflow ID）都可以是你在渠道里配置的映射名：
 
 - 映射到声明过的工作流时，按该工作流的规则校验和计费；调用方填的是声明过的工作流、渠道又把它映射到别的上游 ID 时，仍按调用方填的工作流校验和计费，请求发往映射后的 ID。
-- MiniMax、AutoDL 原生、DashScope 接口解码时还拿不到映射，插件会在提交时按映射后的工作流重新校验和计费，效果与 OpenAI 格式一致。DashScope 的 `wan2.2-animate-move` 只能映射到动作迁移工作流。
+- MiniMax、AutoDL 原生、DashScope 接口解码时还拿不到映射，插件会在提交时按映射后的工作流重新校验和计费，效果与 OpenAI 格式一致。
 - 映射到插件不认识的工作流时只做结构校验（字段、媒体格式），范围由上游校验。
 - 已移除的官方模型名 `MiniMax-H3`、`MiniMax-H3-Max` 不能通过映射恢复。
 - 映射名需要单独配置价格。
@@ -327,11 +367,12 @@ curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/image2video/vide
 | `invalid media URL` | 不是 HTTP(S) URL 或标准 Data URL，或 MIME 与字段不符。 |
 | `unsupported request field …` / `unsupported or mixed MiniMax field …` / `unsupported DashScope … field …` | 未知或拼错的字段，或该工作流不支持此参数。 |
 | `this workflow has no duration field` / `unsupported resolution for this workflow` | AutoDL 原生格式里时长字段名或分辨率标签不对，按报错列出的官网标签改。 |
-| `wan-pro is not available` / `cannot add a watermark` | DashScope 只支持 `wan-std`、不加水印。 |
+| `wan-pro is not available` | DashScope 只支持 `wan-std`。 |
+| `first_clip … has no AutoDL counterpart` | AutoDL 没有视频续写，用 `reference_video`。 |
+| `voice must be a reference audio URL` | TTS 的 `voice` 要填音色参考音频链接，不是音色名。 |
 | `… must be … between …` | 时长、seed 等超出范围。 |
 | `unsupported resolution/orientation combination` / `unsupported MiniMax resolution/ratio combination` | 该工作流没有这个档位或方向。 |
 | `this workflow does not accept a text prompt` | 对口型、动作迁移不接受文本。 |
-| `MiniMax text-to-video ratio is required` | 纯文生视频必须给具体比例。 |
 | `AutoDL: authentication failed` | 渠道密钥要填 ComfyUI 分组 Token 原文，不加 `Bearer`。 |
 | `generation exceeded the 30-minute plugin deadline` | 超时按失败结算并退款。 |
 | 429 / 5xx | 上游限流或异常；先查询已有任务，再退避重试，避免重复扣费。 |

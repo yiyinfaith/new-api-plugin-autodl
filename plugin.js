@@ -684,7 +684,6 @@ const WORKFLOWS = {
 };
 
 
-const VIDEO_MODELS = Object.keys(WORKFLOWS).filter(function (model) { return WORKFLOWS[model].type === "video"; });
 const REQUEST_SCHEMA = { requests: { type: "number", unit: "count", unitLabel: { en: "request", zh: "次" }, description: { en: "Generation request unit price", zh: "生成请求单价" } } };
 const WORKFLOW_COUNT = Object.keys(WORKFLOWS).length;
 const UNSUPPORTED_MODEL = "AutoDL: unsupported model; select one of the " + WORKFLOW_COUNT + " declared models";
@@ -768,10 +767,9 @@ export const meta = {
   allowedHosts: ["cg-comfyui-prod.tos-cn-beijing.volces.com"],
   models: Object.keys(WORKFLOWS).concat([MOTION_ALIAS, TTS_ALIAS]),
   fetchMode: "per_task",
-  // The channel-mapped OpenAI motion alias stays selectable; its OpenAI decoder is unchanged. The
-  // TTS alias is deliberately absent: TTS is served by the MiniMax V2 and AutoDL native routes, and
-  // adding it here would advertise a model on /v1/videos that the audio path cannot serve.
-  protocols: [{ name: "openai_video", models: VIDEO_MODELS.concat([MOTION_ALIAS]) }],
+  // Every workflow and both aliases are callable on /v1/videos, TTS included: its audio artifact is
+  // rendered and downloaded through the same retrieve/content endpoints as a video.
+  protocols: [{ name: "openai_video", models: Object.keys(WORKFLOWS).concat([MOTION_ALIAS, TTS_ALIAS]) }],
   // Every route is the vendor's own path. The host also serves each one under /autodl/..., and that
   // copy is the only address of the /api/... routes: /api is a host namespace, so New API rc.48+
   // skips their top-level copy (skipped_routes, host_namespace) instead of rejecting the plugin.
@@ -782,8 +780,11 @@ export const meta = {
     // AutoDL's own ComfyUI API: /autodl/api/v1/comfyui/comfyui_workflow/...
     { method: "POST", path: "/api/v1/comfyui/comfyui_workflow/:workflow_id", type: "submit", decode: "rawCreate", render: "rawCreated" },
     { method: "GET", path: "/api/v1/comfyui/comfyui_workflow/result/:task_id", type: "query", render: "rawTask" },
-    // Alibaba Cloud DashScope (Model Studio) wan2.2-animate-move: /autodl/api/v1/...
+    // Alibaba Cloud DashScope (Model Studio): Bailian's video, image-to-video and TTS create paths all
+    // take every workflow; the body decides the media, not the path. /autodl/api/v1/...
+    { method: "POST", path: "/api/v1/services/aigc/video-generation/video-synthesis", type: "submit", decode: "dashCreate", render: "dashCreated" },
     { method: "POST", path: "/api/v1/services/aigc/image2video/video-synthesis", type: "submit", decode: "dashCreate", render: "dashCreated" },
+    { method: "POST", path: "/api/v1/services/aigc/multimodal-generation/generation", type: "submit", decode: "dashCreate", render: "dashCreated" },
     { method: "GET", path: "/api/v1/tasks/:task_id", type: "query", render: "dashTask" },
   ],
   usageSchema: REQUEST_SCHEMA,
@@ -941,6 +942,30 @@ function numberValue(value, rule, name) {
   return number;
 }
 
+// Tier spellings differ between the formats: AutoDL writes 480p/768p/1088p, MiniMax and DashScope
+// write 480P/720P/1080P, MiniMax also 2K. Any case is accepted, and a tier the workflow does not
+// have is matched to the nearest one it does within TIER_TOLERANCE lines (720P -> 736p/768p,
+// 1080P <-> 1088p). Anything further away is left as written so the caller gets an error instead
+// of a silent change of quality.
+const TIER_TOLERANCE = 48;
+function tierFor(config, value) {
+  if (typeof value !== "string") return value;
+  const tiers = Array.from(new Set(config.resolutions.map(function (entry) { return entry.resolution; })));
+  if (tiers.includes(value)) return value;
+  const spelled = value.trim().toLowerCase() === "2k" ? "1440p" : value.trim().toLowerCase();
+  if (tiers.includes(spelled)) return spelled;
+  const wanted = spelled.match(/^(\d{3,4})p$/);
+  if (!wanted) return value;
+  let best = null;
+  for (const tier of tiers) {
+    const lines = tier.match(/^(\d+)p$/);
+    if (!lines) continue;
+    const distance = Math.abs(Number(lines[1]) - Number(wanted[1]));
+    if (distance <= TIER_TOLERANCE && (!best || distance < best.distance)) best = { tier: tier, distance: distance };
+  }
+  return best ? best.tier : value;
+}
+
 function mapResolution(config, input) {
   if (!config.resolutions.length) {
     if (input.resolution !== undefined || input.orientation !== undefined || input.size !== undefined) throw new Error("AutoDL: this workflow has no resolution or orientation control");
@@ -971,7 +996,7 @@ function mapResolution(config, input) {
     if ((quality !== undefined && quality !== exact.resolution) || (orientation !== undefined && orientation !== exact.orientation)) throw new Error("AutoDL: size, resolution and orientation conflict");
     quality = exact.resolution; orientation = exact.orientation;
   }
-  quality = quality === undefined ? defaults.resolution : quality;
+  quality = quality === undefined ? defaults.resolution : tierFor(config, quality);
   orientation = orientation === undefined ? defaults.orientation : orientation;
   // An unmapped workflow has no label table, so the caller's own resolution and orientation
   // spellings pass through verbatim; the workflow upstream validates them.
@@ -1094,9 +1119,31 @@ const OPENAI_FIELDS = ["model", "prompt", "seconds", "duration", "size", "input_
 // Accepted only so an official OpenAI client is not rejected; AutoDL has no counterpart for either,
 // and neither carries media, so they are ignored.
 const OPENAI_IGNORED = ["metadata", "mode", "callback_url", "extra", "user", "n", "response_format", "fps", "width", "height"];
+// TTS on /v1/videos also takes the OpenAI speech spellings: `input` is the text and `voice` the
+// voice reference -- an audio link here, since IndexTTS-2 clones a voice instead of naming one.
+// `instructions` and `speed` have no AutoDL control and are ignored.
+const OPENAI_SPEECH_IGNORED = ["instructions", "speed"];
+
+function speechAliases(input) {
+  const copy = copyRequest(input);
+  if (has(copy, "input")) {
+    if (has(copy, "prompt") && copy.prompt !== copy.input) throw new Error("AutoDL: prompt and input conflict");
+    copy.prompt = copy.input;
+    delete copy.input;
+  }
+  if (has(copy, "voice")) {
+    if (typeof copy.voice !== "string" || !/^(https?:|data:)/i.test(copy.voice.trim())) throw new Error("AutoDL: voice must be a reference audio URL or Data URL; IndexTTS-2 clones the voice from it");
+    if (has(copy, "audios")) throw new Error("AutoDL: use either voice or audios, not both");
+    copy.audios = [copy.voice];
+    delete copy.voice;
+  }
+  for (const key of OPENAI_SPEECH_IGNORED) delete copy[key];
+  return copy;
+}
 
 function normalizeInput(config, input) {
   if (!object(input)) throw new Error("AutoDL: request body must be an object");
+  if (config.type === "audio") input = speechAliases(input);
   const controls = workflowControls(config);
   for (const key of Object.keys(input)) {
     if (OPENAI_FIELDS.includes(key) || OPENAI_IGNORED.includes(key) || controls.includes(key)) continue;
@@ -1207,7 +1254,8 @@ const MINIMAX_RATIOS = { "21:9": "landscape", "16:9": "landscape", "4:3": "lands
 function miniOrientation(config, input, scenario, quality) {
   const ratio = input.ratio;
   if (ratio !== undefined && ratio !== "adaptive" && !(typeof ratio === "string" && has(MINIMAX_RATIOS, ratio))) throw new Error("AutoDL: MiniMax ratio must be adaptive, 21:9, 16:9, 4:3, 1:1, 3:4 or 9:16");
-  if (!scenario.frames && !scenario.references && (ratio === undefined || ratio === "adaptive")) throw new Error("AutoDL: MiniMax text-to-video ratio is required and cannot be adaptive");
+  // A text-to-video request without a concrete ratio falls back to the workflow's default direction,
+  // as every other request already does.
   const defaults = config.resolutions.find(function (entry) { return entry.upstream === config.rules.resolution.default; });
   const adaptive = scenario.frames || ratio === undefined || ratio === "adaptive";
   let orientation = adaptive ? defaults.orientation : MINIMAX_RATIOS[ratio];
@@ -1231,7 +1279,7 @@ function requestWorkflow(ctx) {
   // resolves it.
   if (object(input) && has(input, "__autodl_minimax")) return resolveWorkflow(text(ctx.upstreamModel), savedMiniMax(input).model);
   // The DashScope surface has one model, the motion alias.
-  if (object(input) && has(input, "__autodl_dashscope")) return resolveWorkflow(text(ctx.upstreamModel), MOTION_ALIAS);
+  if (object(input) && has(input, "__autodl_dashscope")) return resolveWorkflow(text(ctx.upstreamModel), savedDashScope(input).model);
   if (object(input) && has(input, "__autodl_native")) return resolveWorkflow(text(ctx.upstreamModel), text(input.model));
   // Past this point the request already carries a resolved workflow id. Validation still follows
   // the model the caller named, so a declared model keeps its own capability table even when a
@@ -1270,18 +1318,21 @@ function normalizeMiniMax(config, input) {
   if (config.resolutions.length && config.resolutions[0].passthrough) {
     // No label table: keep the caller's spelling. When a channel maps this name
     // onto a declared workflow, submission re-derives the body from that table.
-    if (typeof input.resolution !== "string" || !input.resolution.trim()) throw new Error("AutoDL: MiniMax resolution is required for this workflow");
+    if (input.resolution !== undefined && (typeof input.resolution !== "string" || !input.resolution.trim())) throw new Error("AutoDL: MiniMax resolution must be a non-empty string");
     if (input.ratio !== undefined && input.ratio !== "adaptive" && !(typeof input.ratio === "string" && has(MINIMAX_RATIOS, input.ratio))) throw new Error("AutoDL: MiniMax ratio must be adaptive, 21:9, 16:9, 4:3, 1:1, 3:4 or 9:16");
-    body.resolution = input.resolution;
+    // Omitted: the generic default fills it, and submission re-derives it from the mapped table.
+    if (input.resolution !== undefined) body.resolution = input.resolution;
   } else if (config.resolutions.length) {
-    if (typeof input.resolution !== "string") throw new Error("AutoDL: MiniMax resolution is required for this workflow");
-    let quality = has(MINIMAX_RESOLUTIONS, input.resolution) ? MINIMAX_RESOLUTIONS[input.resolution] : undefined;
-    const rawChoice = config.resolutions.find(function (entry) { return entry.upstream === input.resolution; });
-    if (quality === undefined) {
-      // Non-MiniMax tiers retain their AutoDL spelling, including exact enum labels.
-      quality = rawChoice ? rawChoice.resolution : input.resolution;
-      if (Object.values(MINIMAX_RESOLUTIONS).includes(quality)) throw new Error("AutoDL: use MiniMax resolution spelling 480P, 768P or 2K");
-    }
+    if (input.resolution !== undefined && typeof input.resolution !== "string") throw new Error("AutoDL: MiniMax resolution must be a string");
+    // Omitted resolution: the workflow's default tier.
+    const spelled = input.resolution === undefined ? undefined : input.resolution.trim();
+    const upper = spelled === undefined ? undefined : spelled.toUpperCase();
+    // Exact AutoDL labels keep their own direction; MiniMax tiers (480P/768P/2K) and any other tier
+    // spelling, in any case, resolve through the shared tier matcher.
+    const rawChoice = spelled === undefined ? null : config.resolutions.find(function (entry) { return entry.upstream === spelled; });
+    let quality = spelled === undefined
+      ? config.resolutions.find(function (entry) { return entry.upstream === config.rules.resolution.default; }).resolution
+      : rawChoice ? rawChoice.resolution : tierFor(config, has(MINIMAX_RESOLUTIONS, upper) ? MINIMAX_RESOLUTIONS[upper] : spelled);
     // Legacy motion spelling: 832p was the portrait 464p tier.
     const legacyPortrait = tableId(config) === MOTION_WORKFLOW && quality === "832p";
     if (legacyPortrait) quality = "464p";
@@ -1403,42 +1454,143 @@ function savedNative(config, input) {
   return sameTable(decodedConfig, config) ? analysis : analyzeNative(config, raw);
 }
 
-// Alibaba Cloud DashScope wan2.2-animate-move, mapped onto AutoDL's motion-transfer workflow. The
-// official fields are kept; `parameters.resolution` / `parameters.orientation` are the AutoDL
-// extension for its output tier, which DashScope has no field for.
+// Alibaba Cloud DashScope (Model Studio). Bailian has several generations of video bodies and one
+// TTS body; all of them are read, for every workflow:
+// * legacy Wan:   input.img_url / first_frame_url / last_frame_url / audio_url / reference_urls,
+//                 parameters.size ("1280*720") or resolution ("720P")
+// * Wan 2.7:      input.media[] of {type: first_frame|last_frame|reference_image|reference_video|
+//                 driving_audio, url, reference_voice?}, parameters.resolution + ratio
+// * animate-move: input.image_url + video_url, parameters.mode (wan-std)
+// * Qwen-TTS:     input.text + input.voice (a reference audio link here)
+// The request is translated into the unified fields and validated by the same table as /v1/videos.
+// AutoDL extensions sit in `parameters`: orientation, the workflow controls (mode, style_preset,
+// video_subject_to_replace) and emotion for TTS. Bailian options AutoDL has no switch for
+// (negative_prompt, prompt_extend, watermark -- under input for animate-move, under parameters
+// elsewhere --, shot_type, audio, check_image, language_type) are
+// accepted and ignored.
 const DASHSCOPE_FIELDS = ["model", "input", "parameters"];
-const DASHSCOPE_INPUT = ["image_url", "video_url", "watermark"];
-const DASHSCOPE_PARAMETERS = ["mode", "check_image", "resolution", "orientation"];
+const DASHSCOPE_IGNORED_INPUT = ["negative_prompt", "language_type", "watermark"];
+const DASHSCOPE_IGNORED_PARAMETERS = ["prompt_extend", "watermark", "shot_type", "audio", "check_image"];
+const DASHSCOPE_MEDIA = { first_frame: "first", last_frame: "last", reference_image: "image", reference_video: "video", driving_audio: "audio", reference_audio: "audio" };
+const VIDEO_EXTENSION = /\.(mp4|mov|webm|m4v|mkv|avi)(?:[?#]|$)/i;
 
-function normalizeDashScope(config, source) {
+function dashScopeList(value, name) {
+  const values = typeof value === "string" ? [value] : value;
+  if (!Array.isArray(values) || values.some(function (item) { return typeof item !== "string"; })) throw new Error("AutoDL: DashScope " + name + " must be a URL or an array of URLs");
+  return values;
+}
+
+function dashScopeUnified(config, source) {
   if (!object(source)) throw new Error("AutoDL: DashScope body must be a JSON object");
   for (const key of Object.keys(source)) if (!DASHSCOPE_FIELDS.includes(key)) throw new Error("AutoDL: unsupported DashScope field " + key);
-  if (source.model !== MOTION_ALIAS) throw new Error("AutoDL: DashScope model must be " + MOTION_ALIAS);
-  if (!object(source.input)) throw new Error("AutoDL: DashScope input must be an object with image_url and video_url");
-  if (!object(source.parameters)) throw new Error("AutoDL: DashScope parameters must be an object with mode");
-  const input = source.input, parameters = source.parameters;
-  for (const key of Object.keys(input)) if (!DASHSCOPE_INPUT.includes(key)) throw new Error("AutoDL: unsupported DashScope input field " + key);
-  for (const key of Object.keys(parameters)) if (!DASHSCOPE_PARAMETERS.includes(key)) throw new Error("AutoDL: unsupported DashScope parameters field " + key);
-  if (parameters.mode === "wan-pro") throw new Error("AutoDL: parameters.mode wan-pro is not available; AutoDL's motion-transfer workflow serves wan-std only");
-  if (parameters.mode !== "wan-std") throw new Error("AutoDL: DashScope parameters.mode is required and must be wan-std");
-  if (has(input, "watermark") && typeof input.watermark !== "boolean") throw new Error("AutoDL: DashScope input.watermark must be boolean");
-  if (input.watermark === true) throw new Error("AutoDL: the motion-transfer workflow cannot add a watermark; omit input.watermark or set it to false");
-  // Accepted for compatibility; AutoDL has no switch for the image pre-check either way.
-  if (has(parameters, "check_image") && typeof parameters.check_image !== "boolean") throw new Error("AutoDL: DashScope parameters.check_image must be boolean");
-  const defaults = config.resolutions.find(function (entry) { return entry.upstream === config.rules.resolution.default; });
-  const quality = parameters.resolution === undefined ? defaults.resolution : parameters.resolution;
-  const orientation = parameters.orientation === undefined ? defaults.orientation : parameters.orientation;
-  const selected = config.resolutions.find(function (entry) { return entry.resolution === quality && entry.orientation === orientation; });
-  if (!selected) throw new Error("AutoDL: unsupported parameters.resolution/orientation; use " + config.resolutions.map(function (entry) { return entry.resolution + " + " + entry.orientation; }).join(" or "));
-  const normalized = normalizeMiniMaxBody(config, { ref_image: inputMedia(input.image_url, "image"), ref_video: inputMedia(input.video_url, "video"), resolution: selected.upstream });
-  // No duration field upstream: reserve the default, settlement bills the delivered clip.
-  normalized.facts.seconds = MOTION_DEFAULT_SECONDS;
-  return normalized;
+  const input = source.input === undefined ? {} : source.input;
+  const parameters = source.parameters === undefined ? {} : source.parameters;
+  if (!object(input)) throw new Error("AutoDL: DashScope input must be an object");
+  if (!object(parameters)) throw new Error("AutoDL: DashScope parameters must be an object");
+  const unified = { model: source.model };
+  const frames = {}, images = [], audios = [], videos = [];
+  let voice;
+  const frame = function (role, url) {
+    if (has(frames, role)) throw new Error("AutoDL: duplicate DashScope " + role + "_frame");
+    frames[role] = url;
+  };
+  const place = function (kind, url) {
+    if (typeof url !== "string") throw new Error("AutoDL: DashScope media url must be a string");
+    if (kind === "first" || kind === "last") frame(kind, url);
+    else ({ image: images, video: videos, audio: audios })[kind].push(url);
+  };
+  for (const key of Object.keys(input)) {
+    const value = input[key];
+    if (key === "prompt" || key === "text") {
+      if (has(unified, "prompt") && unified.prompt !== value) throw new Error("AutoDL: DashScope input.prompt and input.text conflict");
+      unified.prompt = value;
+    } else if (key === "img_url" || key === "first_frame_url") place("first", value);
+    else if (key === "last_frame_url") place("last", value);
+    else if (key === "image_url") place("image", value);
+    else if (key === "video_url") place("video", value);
+    else if (key === "audio_url") place("audio", value);
+    else if (key === "voice") {
+      if (typeof value !== "string" || !/^(https?:|data:)/i.test(value.trim())) throw new Error("AutoDL: DashScope input.voice must be a reference audio URL or Data URL; IndexTTS-2 clones the voice from it");
+      voice = value;
+    } else if (key === "ref_images_url") dashScopeList(value, "input." + key).forEach(function (url) { place("image", url); });
+    else if (key === "reference_video_urls") dashScopeList(value, "input." + key).forEach(function (url) { place("video", url); });
+    else if (key === "reference_urls") {
+      // Legacy reference-to-video mixes images and videos in one list.
+      dashScopeList(value, "input." + key).forEach(function (url) { place(VIDEO_EXTENSION.test(url) || /^data:video\//i.test(url) ? "video" : "image", url); });
+    } else if (key === "media") {
+      if (!Array.isArray(value)) throw new Error("AutoDL: DashScope input.media must be an array");
+      for (const item of value) {
+        if (!object(item)) throw new Error("AutoDL: DashScope input.media entries must be objects");
+        for (const field of Object.keys(item)) if (!["type", "url", "reference_voice"].includes(field)) throw new Error("AutoDL: unsupported DashScope media field " + field);
+        if (item.type === "first_clip") throw new Error("AutoDL: DashScope first_clip (video continuation) has no AutoDL counterpart; use reference_video");
+        if (!has(DASHSCOPE_MEDIA, item.type)) throw new Error("AutoDL: DashScope media type must be first_frame, last_frame, reference_image, reference_video or driving_audio");
+        place(DASHSCOPE_MEDIA[item.type], item.url);
+        if (item.reference_voice !== undefined) place("audio", item.reference_voice);
+      }
+    } else if (!DASHSCOPE_IGNORED_INPUT.includes(key)) throw new Error("AutoDL: unsupported DashScope input field " + key);
+  }
+  if (frames.last !== undefined && frames.first === undefined) throw new Error("AutoDL: DashScope last_frame needs a first_frame");
+  const references = [frames.first, frames.last].filter(function (url) { return url !== undefined; }).concat(images);
+  if (references.length) unified.input_reference = references;
+  if (voice !== undefined) audios.unshift(voice);
+  if (audios.length) unified.audios = audios;
+  if (videos.length) unified.videos = videos;
+
+  const controls = workflowControls(config);
+  let size;
+  for (const key of Object.keys(parameters)) {
+    const value = parameters[key];
+    if (key === "duration") unified.seconds = value;
+    else if (key === "seed" || key === "resolution" || key === "orientation" || key === "emotion") unified[key] = value;
+    else if (key === "ratio") {
+      if (value === "adaptive") continue;
+      if (typeof value !== "string" || !has(MINIMAX_RATIOS, value)) throw new Error("AutoDL: DashScope ratio must be 16:9, 9:16, 1:1, 4:3, 3:4 or 21:9");
+      unified.orientation = MINIMAX_RATIOS[value];
+      if (has(parameters, "orientation") && parameters.orientation !== unified.orientation) throw new Error("AutoDL: DashScope ratio and orientation conflict");
+    } else if (key === "size") size = value;
+    else if (key === "mode" && !controls.includes("mode")) {
+      // Bailian's service mode. AutoDL has one quality, the standard one; wan-pro is refused
+      // rather than silently served at the lower tier.
+      if (value === "wan-pro") throw new Error("AutoDL: parameters.mode wan-pro is not available; AutoDL serves wan-std only");
+      if (value !== "wan-std") throw new Error("AutoDL: DashScope parameters.mode must be wan-std for this workflow");
+    } else if (controls.includes(key)) unified[key] = value;
+    else if (!DASHSCOPE_IGNORED_PARAMETERS.includes(key)) throw new Error("AutoDL: unsupported DashScope parameters field " + key);
+  }
+  if (size !== undefined) {
+    // "1280*720": an exact AutoDL size wins; otherwise the direction comes from the shape and the
+    // tier from the short side, matched like any other tier spelling.
+    const match = typeof size === "string" && size.trim().match(/^(\d{2,5})\s*[*xX]\s*(\d{2,5})$/);
+    if (!match) throw new Error("AutoDL: DashScope size must look like 1280*720");
+    const width = Number(match[1]), height = Number(match[2]);
+    const exact = config.resolutions.find(function (entry) { return entry.size === width + "x" + height; });
+    const shape = width > height ? "landscape" : width < height ? "portrait" : "square";
+    if (unified.orientation !== undefined && unified.orientation !== (exact ? exact.orientation : shape)) throw new Error("AutoDL: DashScope size and ratio/orientation conflict");
+    if (exact && unified.resolution === undefined) unified.size = exact.size;
+    else {
+      unified.orientation = shape;
+      if (unified.resolution === undefined) unified.resolution = Math.min(width, height) + "p";
+    }
+  }
+  // Only the AutoDL motion table reads a bare 464p as landscape (a legacy OpenAI spelling); a
+  // DashScope tier without a direction keeps the workflow's default direction instead.
+  if (unified.resolution !== undefined && unified.orientation === undefined && unified.size === undefined && config.resolutions.length) {
+    unified.orientation = config.resolutions.find(function (entry) { return entry.upstream === config.rules.resolution.default; }).orientation;
+  }
+  return unified;
+}
+
+function normalizeDashScope(config, source) {
+  const normalized = normalizeInput(config, dashScopeUnified(config, source));
+  // Facts in the shape the saved field list reproduces at every later hook.
+  const facts = normalizeMiniMaxBody(config, normalized.body).facts;
+  if (normalized.facts.seconds !== undefined) facts.seconds = normalized.facts.seconds;
+  return { body: normalized.body, facts: facts, type: normalized.type };
 }
 
 function savedDashScope(input) {
   let source;
   try { source = JSON.parse(input.__autodl_dashscope); } catch (_) { throw new Error("AutoDL: invalid internal DashScope source"); }
+  if (!object(source) || !text(source.model)) throw new Error("AutoDL: invalid internal DashScope model");
   return source;
 }
 
@@ -1453,22 +1605,20 @@ function normalizeRequest(config, input) {
     // The integrity checks below compare the saved fields with the table the decoder used. `config`
     // can differ from it: a native MiniMax decoder never sees the channel mapping, which only
     // reaches the driver hooks.
-    let decodedConfig = config, expected, expectedFacts, source;
+    let decodedConfig = config, expected, expectedFacts, source, reshape;
     if (has(input, "__autodl_dashscope")) {
       if (typeof input.__autodl_dashscope !== "string") throw new Error("AutoDL: invalid internal DashScope source");
-      decodedConfig = resolveWorkflow("", MOTION_ALIAS);
-      // A channel may map the alias onto another upstream id, but the body is always the
-      // motion-transfer one.
-      if (!sameTable(decodedConfig, config)) throw new Error("AutoDL: the DashScope API serves only motion transfer; map " + MOTION_ALIAS + " to the motion-transfer workflow");
-      const normalizedSource = normalizeDashScope(decodedConfig, savedDashScope(input));
-      expected = normalizedSource.body;
-      expectedFacts = normalizedSource.facts;
+      source = savedDashScope(input);
+      reshape = normalizeDashScope;
     }
     if (has(input, "__autodl_minimax")) {
       if (typeof input.__autodl_minimax !== "string") throw new Error("AutoDL: invalid internal MiniMax source");
       source = savedMiniMax(input);
+      reshape = normalizeMiniMax;
+    }
+    if (source) {
       decodedConfig = resolveWorkflow("", source.model);
-      const normalizedSource = normalizeMiniMax(decodedConfig, source);
+      const normalizedSource = reshape(decodedConfig, source);
       expected = normalizedSource.body;
       expectedFacts = normalizedSource.facts;
     }
@@ -1488,7 +1638,7 @@ function normalizeRequest(config, input) {
     if (motion && !has(input, "seconds")) throw new Error("AutoDL: internal motion billing seconds are missing");
     // Once the mapping names a different table, that table validates and shapes
     // the request, exactly as on the OpenAI surface.
-    if (source && !sameTable(decodedConfig, config)) return normalizeMiniMax(config, source);
+    if (source && !sameTable(decodedConfig, config)) return reshape(config, source);
     return result;
   }
   if (object(input) && has(input, "content")) return normalizeMiniMax(config, input);
@@ -2495,10 +2645,15 @@ function decodeNative(ctx) {
 function decodeDashScope(ctx) {
   if (!(ctx.body && ctx.body.kind === "json" && object(ctx.body.value))) throw new Error("AutoDL: the DashScope API requires a JSON object body");
   const source = copyRequest(ctx.body.value);
-  const parsed = normalizeDashScope(resolveWorkflow("", MOTION_ALIAS), source);
-  const request = Object.assign({ model: MOTION_ALIAS, __autodl_fields: Object.entries(parsed.body) }, parsed.facts);
-  request.__autodl_dashscope = JSON.stringify(source);
-  return { kind: "submit", model: MOTION_ALIAS, action: "video_to_video", requestBody: request };
+  const model = text(source.model);
+  if (!model) throw new Error("AutoDL: DashScope model is required");
+  // Native decoders run before channel selection, so a mapped name is validated generically here
+  // and again against the mapped table at submission, exactly like the MiniMax surface.
+  const config = resolveWorkflow("", model);
+  const parsed = normalizeDashScope(config, source);
+  const request = Object.assign({ model: model, __autodl_fields: Object.entries(parsed.body) }, parsed.facts);
+  request.__autodl_dashscope = JSON.stringify(Object.assign({}, source, { model: config.unmapped ? config.workflowId : tableId(config) }));
+  return { kind: "submit", model: model, action: taskAction(config, request), requestBody: request };
 }
 
 // One status vocabulary per surface, read from the host's task status.
@@ -2562,8 +2717,12 @@ export const native = {
       let items = [];
       try { items = artifacts(task); } catch (_) { items = []; }
       const video = items.find(function (item) { return item.type === "video"; });
-      if (video) output.results = { video_url: video.url };
-      else { output.task_status = "FAILED"; output.code = "InternalError"; output.message = "AutoDL: task produced no video"; }
+      const audio = items.find(function (item) { return item.type === "audio"; });
+      // Current Bailian video tasks answer output.video_url; animate-move answers
+      // output.results.video_url; Qwen-TTS answers output.audio.url. Both video spellings are sent.
+      if (video) { output.video_url = video.url; output.results = { video_url: video.url }; }
+      else if (audio) output.audio = { url: audio.url };
+      else { output.task_status = "FAILED"; output.code = "InternalError"; output.message = "AutoDL: task produced no media"; }
     } else if (["FAILED", "CANCELED"].includes(output.task_status)) {
       output.code = output.task_status === "CANCELED" ? "TaskCanceled" : "InternalError";
       output.message = safeReason(ctx, task.fail_reason);

@@ -142,9 +142,11 @@ def plugin_table(catalogue):
 
 
 # ---------------------------------------------------------------- examples
+def required(entry, kind):
+    return sum(1 for f in entry[kind] if entry["rules"][f]["required"]) or (2 if entry[kind][:2] == ["first_frame", "last_frame"] else 0)
+
+
 def examples(catalogue, previous):
-    def required(entry, kind):
-        return sum(1 for f in entry[kind] if entry["rules"][f]["required"]) or (2 if entry[kind][:2] == ["first_frame", "last_frame"] else 0)
     openai, minimax = {}, {}
     old_minimax = previous.get("_formats", {}).get("minimax", {})
     for uuid, entry in catalogue.items():
@@ -176,12 +178,47 @@ def examples(catalogue, previous):
     # AutoDL's own API takes the workflow's upstream body as-is, so its example is derived from the
     # table every time: prompt, the default length and resolution, and every required media slot.
     formats["autodl"] = {uuid: native_example(entry) for uuid, entry in catalogue.items()}
-    formats["dashscope"] = {"wan2.2-animate-move": {
+    # DashScope: the official animate-move body for the motion alias, and the current Bailian
+    # (Wan 2.7 media[]) spelling for every workflow, TTS in the Qwen-TTS spelling.
+    dashscope = {"wan2.2-animate-move": {
         "model": "wan2.2-animate-move",
         "input": {"image_url": f"{HOST}reference-1.png", "video_url": f"{HOST}reference-1.mp4"},
         "parameters": {"mode": "wan-std"},
     }}
+    for uuid, entry in catalogue.items():
+        dashscope[uuid] = dashscope_example(uuid, entry)
+    formats["dashscope"] = dashscope
     return {**openai, "_formats": formats}
+
+
+def dashscope_example(uuid, entry):
+    rules, body_input, parameters = entry["rules"], {}, {}
+    images, audios, videos = (required(entry, k) for k in ("input_reference", "audios", "videos"))
+    if entry["type"] == "audio":
+        body_input["text"] = "用平静的语气读这句话。"
+        body_input["voice"] = f"{HOST}reference-1.wav"
+        return {"model": uuid, "input": body_input}
+    if entry["promptField"]:
+        body_input["prompt"] = "保留手里的话筒" if rules[entry["promptField"]].get("required") is False else "一只猫在雪地中奔跑"
+    media = []
+    frames = entry["input_reference"][:2] == ["first_frame", "last_frame"]
+    for i in range(images):
+        kind = ("first_frame", "last_frame")[i] if frames else "reference_image"
+        media.append({"type": kind, "url": f"{HOST}reference-{i + 1}.png"})
+    media += [{"type": "reference_video", "url": f"{HOST}reference-{i + 1}.mp4"} for i in range(videos)]
+    media += [{"type": "driving_audio", "url": f"{HOST}reference-{i + 1}.wav"} for i in range(audios)]
+    if media:
+        body_input["media"] = media
+    if entry["secondsField"]:
+        parameters["duration"] = rules[entry["secondsField"]]["default"]
+    if entry["resolutions"]:
+        default = next(r for r in entry["resolutions"] if r["upstream"] == rules["resolution"]["default"])
+        parameters["resolution"] = default["resolution"].upper()
+        parameters["ratio"] = {"portrait": "9:16", "landscape": "16:9", "square": "1:1"}[default["orientation"]]
+    body = {"model": uuid, "input": body_input}
+    if parameters:
+        body["parameters"] = parameters
+    return body
 
 
 def native_example(entry):

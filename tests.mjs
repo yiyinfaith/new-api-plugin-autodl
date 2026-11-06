@@ -32,11 +32,8 @@ test('exact official catalog coverage', () => {
   assert.equal(official.length, 27);
   assert.deepEqual(Object.values(catalog).map(c => c.workflowId).sort(), official.map(c => c.uuid).sort());
   assert.deepEqual(p.meta.models.slice().sort(), [...Object.keys(catalog), 'wan2.2-animate-move', 'IndexTTS-2'].sort());
-  assert.equal(p.meta.protocols[0].models.length, 27);
-  assert.ok(!p.meta.protocols[0].models.includes('indextts2-v1'));
-  // TTS is served only by the MiniMax V2 surface, so its alias must not be
-  // advertised on /v1/videos where the audio path cannot answer it.
-  assert.ok(!p.meta.protocols[0].models.includes('IndexTTS-2'));
+  // Every model is callable on all four formats, /v1/videos included.
+  assert.deepEqual(p.meta.protocols[0].models.slice().sort(), p.meta.models.slice().sort());
 });
 
 // Every advertised model must carry a usage profile, otherwise the host prices it
@@ -247,14 +244,37 @@ test('the IndexTTS-2 alias resolves to the same workflow as indextts2-v1', () =>
   const emo = drive('IndexTTS-2', tts('IndexTTS-2', { emo_control_method: '使用情感向量控制', emo_happy: 0.8 }));
   assert.equal(emo.request.body.emo_happy, 0.8);
 });
-// The alias is a public name, so it must not be routable where TTS cannot answer.
-// Reaching the audio-slot check proves it resolved to the TTS workflow rather than
-// being accepted as a generic video request.
+// TTS on /v1/videos: the alias resolves to the TTS table, so its voice reference is required...
 const ttsAsVideo = { model: 'IndexTTS-2', prompt: 'hello' };
-reject('IndexTTS-2 is refused on the OpenAI video surface', 'buildSubmitRequest',
+reject('IndexTTS-2 on the OpenAI surface still needs its voice reference', 'buildSubmitRequest',
   [{ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: ttsAsVideo }, requestBody: ttsAsVideo }], 'audios[0] is required');
-test('the TTS alias is not advertised on the OpenAI surface', () =>
-  assert.ok(!p.meta.protocols[0].models.includes('IndexTTS-2')));
+// ...and the OpenAI speech spellings are accepted as the same request.
+test('OpenAI TTS accepts prompt/audios and the speech spellings input/voice alike', () => {
+  const voiceUrl = 'https://cdn.example.com/voice.wav';
+  const plain = { model: 'IndexTTS-2', prompt: 'hello', audios: [voiceUrl], emotion: { mode: 'vector', happy: 0.5 } };
+  const speech = { model: 'IndexTTS-2', input: 'hello', voice: voiceUrl, emotion: { mode: 'vector', happy: 0.5 }, instructions: 'calm', speed: 1, response_format: 'wav' };
+  for (const name of ['IndexTTS-2', 'indextts2-v1']) {
+    const run = body => {
+      const decoded = p.protocols.openai_video.decodeRequest({ ...base, model: name, body: { kind: 'json', value: { ...body, model: name } } });
+      assert.equal(decoded.action, 'text_to_audio');
+      const driver = { ...base, model: name, upstreamModel: name, requestBody: decoded.requestBody };
+      return { body: p.buildSubmitRequest(driver).body, facts: p.extractUsage(driver) };
+    };
+    assert.deepEqual(run(speech), run(plain));
+    assert.equal(run(plain).body.prompt_simple, voiceUrl);
+    assert.equal(run(plain).facts.seconds, 10);
+  }
+  assert.throws(() => p.protocols.openai_video.decodeRequest({ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: { model: 'IndexTTS-2', input: 'a', voice: 'alloy' } } }), /voice must be a reference audio/);
+  assert.throws(() => p.protocols.openai_video.decodeRequest({ ...base, model: 'IndexTTS-2', body: { kind: 'json', value: { model: 'IndexTTS-2', input: 'a', voice: voiceUrl, audios: [voiceUrl] } } }), /either voice or audios/);
+  // The speech spellings stay unknown fields for video workflows.
+  assert.throws(() => p.protocols.openai_video.decodeRequest({ ...base, model: 'minimax_h3_z0901', body: { kind: 'json', value: { model: 'minimax_h3_z0901', input: 'a cat' } } }), /unsupported request field input/);
+});
+test('the OpenAI surface renders a TTS result as its audio artifact', () => {
+  const data = envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.wav', type: 'audio', file_type: 'wav' }]);
+  const out = p.protocols.openai_video.render(base, { status: 'SUCCESS', action: 'text_to_audio', data });
+  assert.equal(out.url, 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.wav');
+  assert.deepEqual(p.listArtifacts({ status: 'SUCCESS', action: 'text_to_audio', data }), [{ key: 'audio', type: 'audio', mimeType: 'audio/wav' }]);
+});
 // A private name the operator chose carries no capability table, so its modality
 // cannot be guessed from its spelling. Inferring audio from /tts|indextts/ made a
 // video workflow called "tts-enhance-video" submit as text_to_audio, and -- because
@@ -637,7 +657,7 @@ for (const [model, config] of Object.entries(catalog)) {
     });
     if (choice.size) fixture(model + ': size ' + choice.size, 'extractUsage', [ctx(model, { ...input, resolution: choice.resolution, orientation: choice.orientation, size: choice.size })], { ...expectedFacts, resolution: choice.resolution, orientation: choice.orientation });
   }
-  reject(model + ': invalid resolution', 'buildSubmitRequest', [ctx(model, { ...input, resolution: '720p' })], config.resolutions.length ? 'unsupported resolution' : 'no resolution');
+  reject(model + ': invalid resolution', 'buildSubmitRequest', [ctx(model, { ...input, resolution: '2160p' })], config.resolutions.length ? 'unsupported resolution' : 'no resolution');
   for (const kind of ['input_reference', 'audios', 'videos']) {
     const countError = kind === 'input_reference' && !config[kind].length ? 'does not accept input_reference' : 'too many ' + kind;
     reject(model + ': media count ' + kind, 'buildSubmitRequest', [ctx(model, { ...input, [kind]: mediaInput(kind, Array(config[kind].length + 1).fill('https://cdn.example.com/a')) })], countError);
@@ -958,7 +978,8 @@ test('the three native surfaces are registered at their vendor paths', () => {
   assert.deepEqual(p.meta.routes.map(r => [r.method, r.path]), [
     ['POST', '/v2/video_generation'], ['GET', '/v2/query/video_generation/:task_id'],
     ['POST', '/api/v1/comfyui/comfyui_workflow/:workflow_id'], ['GET', '/api/v1/comfyui/comfyui_workflow/result/:task_id'],
-    ['POST', '/api/v1/services/aigc/image2video/video-synthesis'], ['GET', '/api/v1/tasks/:task_id'],
+    ['POST', '/api/v1/services/aigc/video-generation/video-synthesis'], ['POST', '/api/v1/services/aigc/image2video/video-synthesis'],
+    ['POST', '/api/v1/services/aigc/multimodal-generation/generation'], ['GET', '/api/v1/tasks/:task_id'],
   ]);
   assert.equal(formats.minimax_api.create_path, '/v2/video_generation');
   assert.equal(formats.minimax_api.query_path, '/v2/query/video_generation/{task_id}');
@@ -2276,7 +2297,7 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
     assert.equal(submit.action, 'image_to_video');
   });
   test('MiniMax: an alias still gets the mapped table limits at submission', () => {
-    assert.throws(() => nativeFlow('my-h3', 'minimax_h3_z0901', { model: 'my-h3', content: [{ type: 'text', text: 'cat' }], resolution: '720P', ratio: '16:9' }), /unsupported MiniMax resolution/);
+    assert.throws(() => nativeFlow('my-h3', 'minimax_h3_z0901', { model: 'my-h3', content: [{ type: 'text', text: 'cat' }], resolution: '2160P', ratio: '16:9' }), /unsupported MiniMax resolution/);
   });
   test('MiniMax: a declared workflow mapped onto a private id keeps its table and pins the private id', () => {
     const { submit, facts } = nativeFlow('minimax_h3_z0901', 'private-z', { model: 'minimax_h3_z0901', content: [{ type: 'text', text: 'cat' }], resolution: '480P', ratio: '9:16', duration: 1 });
@@ -2442,48 +2463,111 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
     assert.equal(p.native.rawTask(base, null).data.status, 'FAILED');
   });
 }
-// Alibaba Cloud DashScope wan2.2-animate-move (/autodl/api/v1/services/aigc/image2video/video-synthesis).
+// Alibaba Cloud DashScope (/autodl/api/v1/services/aigc/...): every workflow, every Bailian spelling.
 {
   const official = { model: 'wan2.2-animate-move', input: { image_url: 'https://cdn.example.com/person.png', video_url: 'https://cdn.example.com/move.mp4' }, parameters: { mode: 'wan-std', check_image: true } };
-  const dashContext = body => ({ method: 'POST', path: '/api/v1/services/aigc/image2video/video-synthesis', body: { kind: 'json', value: hostJSON(body) } });
-  const dashDriver = (intent, upstreamModel = 'wan2.2-animate-move') => ({ ...base, model: intent.model, upstreamModel, requestBody: intent.requestBody });
-  const intent = p.native.dashCreate(dashContext(official));
-  test('DashScope official request maps onto the motion workflow', () => {
+  const dashContext = body => ({ method: 'POST', path: '/api/v1/services/aigc/video-generation/video-synthesis', body: { kind: 'json', value: hostJSON(body) } });
+  const dashDriver = (intent, upstreamModel = intent.model) => ({ ...base, model: intent.model, upstreamModel, requestBody: intent.requestBody });
+  const dash = (body, upstreamModel) => {
+    const intent = p.native.dashCreate(dashContext(body));
+    const driver = dashDriver(intent, upstreamModel);
+    return { intent, submit: p.buildSubmitRequest(driver), facts: p.extractUsage(driver) };
+  };
+  const I = n => 'https://cdn.example.com/i' + n + '.png', A = n => 'https://cdn.example.com/a' + n + '.wav', V = 'https://cdn.example.com/v.mp4';
+
+  test('every examples.json DashScope example is accepted and matches the OpenAI request', () => {
+    assert.deepEqual(Object.keys(formats.dashscope).filter(k => k !== 'wan2.2-animate-move').sort(), Object.keys(catalog).sort());
+    for (const [model, body] of Object.entries(formats.dashscope)) {
+      const run = dash(body);
+      assert.equal(run.submit.url, base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + (catalog[model] ? model : motionModel), model);
+      if (catalog[model] && model !== motionModel) {
+        // Same media, same tier and direction, same billing as the OpenAI example.
+        const openai = ctx(model);
+        assert.deepEqual(Object.keys(run.submit.body).sort(), Object.keys(p.buildSubmitRequest(openai).body).sort(), model);
+        assert.deepEqual(run.facts, p.extractUsage(openai), model);
+      }
+    }
+  });
+  test('DashScope animate-move request maps onto the motion workflow', () => {
+    const { intent, submit, facts } = dash(official);
     assert.equal(intent.model, 'wan2.2-animate-move');
     assert.equal(intent.action, 'video_to_video');
-    const submit = p.buildSubmitRequest(dashDriver(intent));
-    assert.equal(submit.url, base.baseUrl + 'api/v1/comfyui/comfyui_workflow/' + motionModel);
     assert.equal(submit.rewriteModel, motionModel);
     assert.deepEqual(submit.body, { ref_image: official.input.image_url, ref_video: official.input.video_url, resolution: '464*832px(竖版)' });
-    assert.deepEqual(p.extractUsage(dashDriver(intent)), { requests: 1, seconds: 5, resolution: '464p', orientation: 'portrait' });
-    // A channel that maps the alias onto the workflow id gives the same request.
-    assert.deepEqual(p.buildSubmitRequest(dashDriver(intent, motionModel)).body, submit.body);
+    assert.deepEqual(facts, { requests: 1, seconds: 5, resolution: '464p', orientation: 'portrait' });
+    // The workflow id works as the model too, and mode is optional.
+    assert.deepEqual(dash({ ...official, model: motionModel, parameters: {} }).submit.body, submit.body);
+    // A declared length is the reservation, as on the other surfaces.
+    assert.equal(dash({ ...official, parameters: { duration: 8 } }).facts.seconds, 8);
+    // input.watermark (animate-move) and parameters.watermark (other Wan APIs) are both ignored.
+    assert.deepEqual(dash({ ...official, input: { ...official.input, watermark: true }, parameters: { watermark: true, check_image: false } }).submit.body, submit.body);
   });
-  test('DashScope AutoDL extension selects the landscape tier', () => {
-    const landscape = p.native.dashCreate(dashContext({ ...official, parameters: { mode: 'wan-std', resolution: '464p', orientation: 'landscape' } }));
-    assert.equal(p.buildSubmitRequest(dashDriver(landscape)).body.resolution, '832*464px(横版)');
-    assert.equal(p.extractUsage(dashDriver(landscape)).orientation, 'landscape');
+  test('DashScope tiers, ratio and size select the AutoDL tier', () => {
+    const t2v = 'minimax_h3_z0901', base0 = { model: t2v, input: { prompt: 'cat' } };
+    const label = body => dash(body).submit.body.resolution;
+    assert.equal(label({ ...base0, parameters: { resolution: '480P', ratio: '16:9' } }), '480p横(864*480)');
+    assert.equal(label({ ...base0, parameters: { resolution: '720P', ratio: '9:16' } }), '768p竖(768*1344)');
+    assert.equal(label({ ...base0, parameters: { resolution: '1080P', ratio: '16:9' } }), '1088p横(1920*1088)');
+    assert.equal(label({ ...base0, parameters: { resolution: '2K' } }), '1440p竖(1440*2560)');
+    assert.equal(label({ ...base0, parameters: { size: '864*480' } }), '480p横(864*480)');
+    assert.equal(label({ ...base0, parameters: { size: '1280*720' } }), '768p横(1344*768)');
+    assert.equal(label({ ...base0, parameters: { resolution: '768P', orientation: 'landscape' } }), '768p横(1344*768)');
+    assert.equal(label(base0), catalog[t2v].rules.resolution.default);
+    assert.throws(() => dash({ ...base0, parameters: { resolution: '4K' } }), /unsupported resolution/);
+    assert.throws(() => dash({ ...base0, parameters: { size: '1280*720', ratio: '9:16' } }), /size and ratio\/orientation conflict/);
+    assert.throws(() => dash({ ...base0, parameters: { size: 'big' } }), /size must look like/);
   });
-  test('DashScope tolerates watermark false and either check_image', () => {
-    for (const body of [{ ...official, input: { ...official.input, watermark: false } }, { ...official, parameters: { mode: 'wan-std', check_image: false } }]) {
-      assert.deepEqual(p.buildSubmitRequest(dashDriver(p.native.dashCreate(dashContext(body)))).body, p.buildSubmitRequest(dashDriver(intent)).body);
+  test('DashScope legacy and Wan 2.7 media spellings reach the same slots', () => {
+    const frames = 'minimax_h3_lightx2v';
+    const legacy = dash({ model: frames, input: { prompt: 'p', first_frame_url: I(1), last_frame_url: I(2) }, parameters: { resolution: '480P', duration: 3 } });
+    const media = dash({ model: frames, input: { prompt: 'p', media: [{ type: 'first_frame', url: I(1) }, { type: 'last_frame', url: I(2) }] }, parameters: { resolution: '480P', duration: 3 } });
+    assert.deepEqual(legacy.submit.body, media.submit.body);
+    assert.equal(legacy.submit.body.first_frame, I(1));
+    assert.equal(legacy.submit.body.last_frame, I(2));
+    const multi = 'minimax_h3_zm_u08';
+    const r2v = dash({ model: multi, input: { prompt: 'p', media: [{ type: 'reference_image', url: I(1), reference_voice: A(1) }, { type: 'reference_image', url: I(2) }, { type: 'driving_audio', url: A(2) }] } });
+    assert.deepEqual([r2v.submit.body.ref_image_0, r2v.submit.body.ref_image_1, r2v.submit.body.ref_audio_0, r2v.submit.body.ref_audio_1], [I(1), I(2), A(1), A(2)]);
+    const old = dash({ model: multi, input: { prompt: 'p', img_url: I(1), ref_images_url: [I(2)], audio_url: A(1) } });
+    assert.deepEqual([old.submit.body.ref_image_0, old.submit.body.ref_image_1, old.submit.body.ref_audio_0], [I(1), I(2), A(1)]);
+    const mixed = dash({ model: 'minimax_h3_zm_titi', input: { reference_urls: [I(1), V] } });
+    assert.deepEqual([mixed.submit.body.ref_image, mixed.submit.body.ref_video], [I(1), V]);
+    assert.equal(mixed.intent.action, 'video_to_video');
+  });
+  test('DashScope Qwen-TTS spelling drives IndexTTS-2', () => {
+    for (const model of ['IndexTTS-2', 'indextts2-v1']) {
+      const run = dash({ model, input: { text: '你好', voice: A(1), audio_url: A(2), language_type: 'Chinese' }, parameters: { emotion: { mode: 'reference' } } });
+      assert.equal(run.intent.action, 'text_to_audio');
+      assert.equal(run.submit.body.prompt_text, '你好');
+      assert.equal(run.submit.body.prompt_simple, A(1));
+      assert.equal(run.submit.body.emo_ref_audio, A(2));
+      assert.equal(run.facts.seconds, 10);
     }
+    assert.throws(() => dash({ model: 'IndexTTS-2', input: { text: 'a', voice: 'Cherry' } }), /voice must be a reference audio/);
+  });
+  test('DashScope keeps the AutoDL workflow controls in parameters', () => {
+    assert.equal(dash({ model: 'minimax_h3_801', input: { prompt: 'p', img_url: I(1) }, parameters: { mode: '高速模式' } }).submit.body.mode, '高速模式');
+    assert.equal(dash({ model: 'minimax_h3_805', input: { prompt: 'p' }, parameters: { style_preset: '漫剧模式-漫剧-武戏' } }).submit.body.style_preset, '漫剧模式-漫剧-武戏');
+  });
+  test('DashScope channel mapping re-derives the body from the mapped table', () => {
+    const intent = p.native.dashCreate(dashContext({ model: 'my-t2v', input: { prompt: 'cat' }, parameters: { resolution: '480P', ratio: '16:9', duration: 2 } }));
+    const driver = dashDriver(intent, 'minimax_h3_z0901');
+    assert.equal(p.buildSubmitRequest(driver).body.resolution, '480p横(864*480)');
+    assert.deepEqual(p.extractUsage(driver), { requests: 1, seconds: 2, resolution: '480p', orientation: 'landscape' });
   });
   for (const [label, body, error] of [
     ['wan-pro', { ...official, parameters: { mode: 'wan-pro' } }, 'wan-pro is not available'],
-    ['a missing mode', { ...official, parameters: {} }, 'mode is required'],
-    ['missing parameters', { model: official.model, input: official.input }, 'parameters must be an object'],
-    ['a watermark', { ...official, input: { ...official.input, watermark: true } }, 'cannot add a watermark'],
-    ['another model', { ...official, model: 'wan2.2-animate-mix' }, 'model must be wan2.2-animate-move'],
-    ['the workflow id as model', { ...official, model: motionModel }, 'model must be wan2.2-animate-move'],
     ['an unknown top-level field', { ...official, seconds: 5 }, 'unsupported DashScope field seconds'],
-    ['an unknown input field', { ...official, input: { ...official.input, audio_url: 'https://cdn.example.com/a.wav' } }, 'unsupported DashScope input field audio_url'],
-    ['an unknown parameters field', { ...official, parameters: { mode: 'wan-std', seed: 1 } }, 'unsupported DashScope parameters field seed'],
-    ['an unknown tier', { ...official, parameters: { mode: 'wan-std', resolution: '720p' } }, 'unsupported parameters.resolution'],
-    ['a missing video', { ...official, input: { image_url: official.input.image_url } }, 'invalid media URL'],
-    ['a non-boolean check_image', { ...official, parameters: { mode: 'wan-std', check_image: 'yes' } }, 'check_image must be boolean'],
+    ['an unknown input field', { ...official, input: { ...official.input, foo: 1 } }, 'unsupported DashScope input field foo'],
+    ['an unknown parameters field', { ...official, parameters: { foo: 1 } }, 'unsupported DashScope parameters field foo'],
+    ['first_clip continuation', { model: 'minimax_h3_zm_titi', input: { media: [{ type: 'first_clip', url: V }] } }, 'first_clip'],
+    ['a last frame without a first', { model: 'minimax_h3_lightx2v', input: { prompt: 'p', last_frame_url: I(1) } }, 'needs a first_frame'],
+    ['audio on a silent workflow', { ...official, input: { ...official.input, audio_url: A(1) } }, 'too many audios'],
+    ['a missing motion video', { ...official, input: { image_url: official.input.image_url } }, 'videos[0] is required'],
+    ['a missing model', { input: { prompt: 'p' } }, 'model is required'],
+    ['a retired official model', { model: 'MiniMax-H3', input: { prompt: 'p' } }, 'unsupported model'],
   ]) nativeFixture('DashScope rejects ' + label, 'dashCreate', [dashContext(body)], null, error);
   test('DashScope saved fields cannot be tampered with', () => {
+    const intent = p.native.dashCreate(dashContext(official));
     const fields = intent.requestBody.__autodl_fields.map(([k, v]) => [k, k === 'ref_video' ? 'https://cdn.example.com/other.mp4' : v]);
     assert.throws(() => p.buildSubmitRequest(dashDriver({ ...intent, requestBody: { ...intent.requestBody, __autodl_fields: fields } })), /DashScope fields conflict/);
     assert.throws(() => p.extractUsage(dashDriver({ ...intent, requestBody: { ...intent.requestBody, seconds: 1 } })), /usage facts conflict/);
@@ -2493,12 +2577,18 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
   for (const [status, expected] of [['SUBMITTED', 'PENDING'], ['QUEUED', 'PENDING'], ['IN_PROGRESS', 'RUNNING'], ['UNKNOWN', 'RUNNING'], ['FAILURE', 'FAILED'], ['CANCELLED', 'CANCELED']]) {
     test('DashScope query maps ' + status, () => assert.equal(p.native.dashTask(base, { task_id: 't', status }).output.task_status, expected));
   }
-  test('DashScope query returns the video URL and UTC+8 times', () => {
+  test('DashScope query returns the video URL in both Bailian spellings and UTC+8 times', () => {
     const data = envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4', type: 'video', file_type: 'mp4' }]);
     assert.deepEqual(p.native.dashTask(base, { task_id: 'task_pub', status: 'SUCCESS', action: 'video_to_video', data, created_at: 1758180720, updated_at: 1758180881 }), {
       request_id: '',
-      output: { task_id: 'task_pub', task_status: 'SUCCEEDED', submit_time: '2025-09-18 15:32:00.000', end_time: '2025-09-18 15:34:41.000', results: { video_url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4' } },
+      output: { task_id: 'task_pub', task_status: 'SUCCEEDED', submit_time: '2025-09-18 15:32:00.000', end_time: '2025-09-18 15:34:41.000', video_url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4', results: { video_url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.mp4' } },
     });
+  });
+  test('DashScope query returns TTS audio as output.audio.url', () => {
+    const data = envelope('SUCCESS', [{ url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.wav', type: 'audio', file_type: 'wav' }]);
+    const out = p.native.dashTask(base, { task_id: 't', status: 'SUCCESS', action: 'text_to_audio', data }).output;
+    assert.deepEqual(out.audio, { url: 'https://cg-comfyui-prod.tos-cn-beijing.volces.com/a.wav' });
+    assert.equal(out.video_url, undefined);
   });
   test('DashScope query failure carries a redacted message', () => {
     const out = p.native.dashTask(base, { task_id: 't', status: 'FAILURE', fail_reason: 'Bearer fake-autodl-token rejected' }).output;
@@ -2508,5 +2598,34 @@ test('a measurement above the ceiling is clamped rather than refunded', () => {
     assert.equal(p.native.dashTask(base, null).output.task_status, 'UNKNOWN');
   });
 }
+// MiniMax V2 tolerance: tier spelling in any case, and omitted resolution / text-to-video ratio
+// fall back to the workflow defaults.
+{
+  const mini = body => {
+    const intent = p.native.miniCreate(v2Context(body));
+    const driver = { ...base, model: body.model, upstreamModel: body.model, requestBody: intent.requestBody };
+    return { body: p.buildSubmitRequest(driver).body, facts: p.extractUsage(driver) };
+  };
+  const t2v = { model: 'minimax_h3_z0901', content: [{ type: 'text', text: 'cat' }] };
+  test('MiniMax accepts tier spellings in any case', () => {
+    for (const spelling of ['480P', '480p']) assert.equal(mini({ ...t2v, resolution: spelling, ratio: '16:9' }).body.resolution, '480p横(864*480)');
+    assert.equal(mini({ ...t2v, resolution: '720P', ratio: '16:9' }).body.resolution, '768p横(1344*768)');
+    assert.equal(mini({ ...t2v, resolution: '2k', ratio: '9:16' }).body.resolution, '1440p竖(1440*2560)');
+    assert.equal(mini({ ...t2v, resolution: '1080P', ratio: '9:16' }).body.resolution, '1088p竖(1088*1920)');
+  });
+  test('MiniMax omitted resolution and ratio use the workflow defaults', () => {
+    const run = mini(t2v);
+    assert.equal(run.body.resolution, catalog['minimax_h3_z0901'].rules.resolution.default);
+    assert.equal(run.facts.orientation, 'portrait');
+    assert.equal(mini({ ...t2v, ratio: 'adaptive' }).body.resolution, catalog['minimax_h3_z0901'].rules.resolution.default);
+  });
+}
+// OpenAI tier tolerance mirrors the other surfaces.
+test('OpenAI accepts upper-case and near tiers', () => {
+  const body = resolution => p.buildSubmitRequest(ctx('minimax_h3_z0901', { model: 'minimax_h3_z0901', prompt: 'cat', resolution, orientation: 'landscape' })).body.resolution;
+  assert.equal(body('480P'), '480p横(864*480)');
+  assert.equal(body('720p'), '768p横(1344*768)');
+  assert.equal(body('1080p'), '1088p横(1920*1088)');
+});
 writeFileSync(new URL('./golden.json', import.meta.url), JSON.stringify({ unixNow: 2000, cases: fixtures }, null, 2) + '\n');
 console.log(`PASS: ${checks} checks; generated ${fixtures.length} official host fixture cases for all ${Object.keys(catalog).length} workflows.`);
