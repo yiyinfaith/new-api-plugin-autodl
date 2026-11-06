@@ -322,7 +322,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/image2video/vide
 | 报错 | 原因 / 处理 |
 |---|---|
 | `model_price_error` | 请求的 model（包括别名、映射名）没有配置价格。 |
-| AutoDL 原生 / DashScope 返回 404 或网页 | 路径前漏了 `/autodl`。 |
+| AutoDL 原生 / DashScope 返回 404 `Invalid URL` | 路径前漏了 `/autodl`。 |
 | `no_eligible_channel` | 渠道未启用、没有该模型，或 Key 所在分组无权使用。 |
 | `invalid media URL` | 不是 HTTP(S) URL 或标准 Data URL，或 MIME 与字段不符。 |
 | `unsupported request field …` / `unsupported or mixed MiniMax field …` / `unsupported DashScope … field …` | 未知或拼错的字段，或该工作流不支持此参数。 |

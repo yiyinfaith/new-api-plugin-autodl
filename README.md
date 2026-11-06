@@ -29,7 +29,7 @@
 | AutoDL 原生 | `POST /autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}` | 全部 27 个 |
 | 阿里云百炼 DashScope | `POST /autodl/api/v1/services/aigc/image2video/video-synthesis` | `GET /autodl/api/v1/tasks/{task_id}` | 仅 `wan2.2-animate-move`（动作迁移） |
 
-> **AutoDL 原生和 DashScope 必须在官方路径前加 `/autodl`。** 这两种官方路径都以 `/api/` 开头，`/api` 是 New API 自己的路径，宿主（rc.48 起）不会把插件挂在顶层的 `/api/...`，只挂在插件 key 前缀下。所以调用方把官方 Base URL（`https://autodl.art`、`https://dashscope.aliyuncs.com`）换成 `https://你的域名/autodl` 即可，后面的路径不变；不加 `/autodl` 会落到 New API 自己的接口上，返回 404 或网页。OpenAI 和 MiniMax 两种格式不用加。
+> **AutoDL 原生和 DashScope 必须在官方路径前加 `/autodl`。** 这两种官方路径都以 `/api/` 开头，`/api` 是 New API 自己的路径，宿主（rc.48 起）不会把插件挂在顶层的 `/api/...`，只挂在插件 key 前缀下。所以调用方把官方 Base URL（`https://autodl.art`、`https://dashscope.aliyuncs.com`）换成 `https://你的域名/autodl` 即可，后面的路径不变；不加 `/autodl` 会落到 New API 自己的接口上，返回 404 `Invalid URL`。OpenAI 和 MiniMax 两种格式不用加。
 
 ```bash
 # OpenAI：单图生视频，1 秒 480p 横屏
@@ -169,7 +169,7 @@ hour("Asia/Shanghai") < 8 ? (u("resolution") == "480p" ? tier("off_peak_480p", u
 | 现象 | 处理 |
 | --- | --- |
 | `model_price_error` | 给实际请求的模型名（包括别名）配置价格 |
-| AutoDL 原生 / DashScope 返回 404 或网页 | 路径前漏了 `/autodl`，见[调用](#调用) |
+| AutoDL 原生 / DashScope 返回 404 `Invalid URL` | 路径前漏了 `/autodl`，见[调用](#调用) |
 | 401 / 403 | 渠道密钥必须是 ComfyUI 分组 Token 原文，不加 `Bearer` |
 | `unsupported …` / `must be …` | 参数超出该工作流范围，按报错和上表调整，不会扣费 |
 | `this workflow does not accept a text prompt` | 对口型和动作迁移不接受提示词 |
