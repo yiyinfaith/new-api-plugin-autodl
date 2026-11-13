@@ -2,7 +2,7 @@
 
 把 [AutoDL.Art](https://www.autodl.art/large-model/comfyui) 的 ComfyUI 工作流接入 New API：全部 **27 个**官网工作流（26 个视频 + 1 个 TTS），支持 OpenAI Videos、MiniMax V2、AutoDL 原生、阿里云百炼 DashScope 四种请求格式，按成片秒数计费，失败不收费。
 
-当前版本 **v1.1.5**，插件 key `autodl`，单文件 `plugin.js`，无需改宿主、无需转发配置。已在官方镜像 `calciumion/new-api` **v1.0.0-rc.48** 上验证；AutoDL 原生和 DashScope 两种格式需要 rc.48 及以上。
+当前版本 **v1.1.5**，插件 key `autodl`，单文件 `plugin.js`，无需改宿主、无需转发配置。已在官方镜像 `calciumion/new-api` **v1.0.0-rc.51** 上验证。AutoDL 原生和 DashScope 两种格式：rc.49 及以上可直接用原生路径；rc.48 会跳过上传插件的 `/api/...` 路由，只能加 `/autodl` 前缀。
 
 详细字段、响应示例和报错对照见 [API.md](API.md)。
 
@@ -29,7 +29,7 @@
 | AutoDL 原生 | `POST /api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /api/v1/comfyui/comfyui_workflow/result/{task_id}` |
 | 阿里云百炼 DashScope | `POST /api/v1/services/aigc/video-generation/video-synthesis`（`image2video/video-synthesis`、`multimodal-generation/generation` 也行） | `GET /api/v1/tasks/{task_id}` |
 
-> **优先使用无插件前缀的原生路径。** 一般把官方域名替换成 `https://你的域名` 即可；`/v1`、`/api` 本身并不等于路由冲突。只有当原生路径被 New API 主程序或其他插件占用、未正确进入 AutoDL、返回 404 `Invalid URL` 等路由问题时，才在原路径前加 `/autodl`，例如 `/autodl/api/v1/services/aigc/video-generation/video-synthesis`。New API 可能已内置 Alibaba Bailian 插件（无需手动安装），DashScope 的创建和查询路径可能与其共享；**无前缀能否正确路由，以实际部署为准**。`/autodl` 始终是明确指定本插件的稳妥备用入口，不需要修改请求体。
+> **优先使用无前缀的原生路径**（rc.49 起支持）：把官方域名换成 `https://你的域名` 即可。只有原生路径被宿主或其他插件占用、请求没进 AutoDL，或宿主是 rc.48（返回 404 `Invalid URL`）时，才在原路径前加 `/autodl`，例如 `/autodl/api/v1/services/aigc/video-generation/video-synthesis`。DashScope 的路径可能与宿主内置的 Alibaba Bailian 插件共享，宿主按 `model` 和任务归属分流；`/autodl` 始终固定命中本插件，请求体不用改。
 
 ```bash
 # OpenAI：单图生视频，1 秒 480p 横屏
@@ -174,7 +174,7 @@ hour("Asia/Shanghai") < 8 ? (u("resolution") == "480p" ? tier("off_peak_480p", u
 | 现象 | 处理 |
 | --- | --- |
 | `model_price_error` | 给实际请求的模型名（包括别名）配置价格 |
-| AutoDL 原生 / DashScope 的原生路径返回 404 `Invalid URL`，或请求未进入 AutoDL | 检查 New API 的路由与插件状态；遇到实际冲突时给路径加 `/autodl`，创建和查询均使用本插件入口，见[调用](#调用) |
+| AutoDL 原生 / DashScope 的原生路径返回 404 `Invalid URL`，或请求未进入 AutoDL | 宿主 rc.48 及以下不支持无前缀，升级到 rc.49+ 或加 `/autodl`；其他冲突同样加 `/autodl`，创建和查询都用，见[调用](#调用) |
 | 401 / 403 | 渠道密钥必须是 ComfyUI 分组 Token 原文，不加 `Bearer` |
 | `unsupported …` / `must be …` | 参数超出该工作流范围，按报错和上表调整，不会扣费 |
 | `this workflow does not accept a text prompt` | 对口型和动作迁移不接受提示词 |

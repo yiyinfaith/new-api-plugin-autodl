@@ -13,7 +13,7 @@
 
 「全部」指 27 个工作流加两个别名 `wan2.2-animate-move`、`IndexTTS-2`，TTS 也包括在内。
 
-- **默认优先调用无插件前缀的原生路径**：将官方域名替换为 `https://你的域名`，路径其余部分保持不变；`/api` 并不意味着所有路径都会冲突。若 New API 宿主或其他插件占用相同的具体路由，导致原生地址返回 404 `Invalid URL`、路由到错误插件或其他路由异常，才在路径前加 `/autodl`（如 `/autodl/api/v1/tasks/{task_id}`）以明确指定 AutoDL。New API 可能默认内置 Alibaba Bailian 插件，即使管理员没有手动安装，也可能与 DashScope 共享部分路径；具体能否无前缀调用请以当前宿主的实际路由注册和测试结果为准。切换前缀时无需修改请求体。
+- **优先调用无前缀的原生路径**（宿主 rc.49 起支持）：把官方域名换成 `https://你的域名`，路径不变。只有原生路径被宿主或其他插件占用、路由到错误插件，或宿主是 rc.48（会跳过上传插件的 `/api/...` 路由，返回 404 `Invalid URL`）时，才在路径前加 `/autodl`（如 `/autodl/api/v1/tasks/{task_id}`）。DashScope 路径可能与宿主内置的 Alibaba Bailian 插件共享，宿主按 `model` 和任务归属分流；`/autodl` 始终固定命中本插件，请求体不用改。
 - 鉴权用 New API 的 Key：`Authorization: Bearer <NEW_API_KEY>`，不要传 AutoDL Token。AutoDL 原生格式也可以照官方写法不带 `Bearer`。
 - 路径决定格式，`model` 决定工作流。`model` 填 workflow ID（AutoDL 原生格式写在路径里）；`wan2.2-animate-move`（动作迁移）和 `IndexTTS-2`（TTS）是插件自带别名。
 - 任务是异步的：创建后用返回的 New API 任务 ID 轮询，不要用上游 ID，也不要重复提交。
@@ -362,7 +362,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/api/v1/services/aigc/video-generation/video-
 | 报错 | 原因 / 处理 |
 |---|---|
 | `model_price_error` | 请求的 model（包括别名、映射名）没有配置价格。 |
-| AutoDL 原生 / DashScope 原生路径返回 404 `Invalid URL`，或未进入 AutoDL | 检查宿主路由和渠道绑定；如果实际冲突，改用带 `/autodl` 前缀的同一 API 路径（查询也一样）。 |
+| AutoDL 原生 / DashScope 原生路径返回 404 `Invalid URL`，或未进入 AutoDL | 宿主 rc.48 及以下不支持无前缀，升级到 rc.49+ 或加 `/autodl`；其他情况检查渠道绑定，有冲突时改用带 `/autodl` 前缀的同一路径（查询也一样）。 |
 | `no_eligible_channel` | 渠道未启用、没有该模型，或 Key 所在分组无权使用。 |
 | `invalid media URL` | 不是 HTTP(S) URL 或标准 Data URL，或 MIME 与字段不符。 |
 | `unsupported request field …` / `unsupported or mixed MiniMax field …` / `unsupported DashScope … field …` | 未知或拼错的字段，或该工作流不支持此参数。 |
