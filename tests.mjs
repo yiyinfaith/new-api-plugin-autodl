@@ -20,6 +20,12 @@ const mediaInput = (kind, values) => kind === 'input_reference' ? values.map(url
 const motionModel = 'wan2.2animate-v4-motion_retargeting';
 const ctx = (model, requestBody = examples[model]) => ({ ...base, model, upstreamModel: model, requestBody });
 const envelope = (status, results = [], extras = {}) => ({ code: 'Success', data: { task_id: 'upstream-123', status, results, ...extras } });
+test('the sidecar logo meets the host limits', () => {
+  // icon.png ships beside plugin.js: PNG signature, at most 512 KiB (docs/plugin-api/v1.md).
+  const icon = readFileSync(new URL('./icon.png', import.meta.url));
+  assert.deepEqual([...icon.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.ok(icon.length <= 512 * 1024);
+});
 test('exact official catalog coverage', () => {
   // The declared version must match the source and be a plain release version, but
   // pinning the literal here means every bump breaks the suite for no reason. Assert

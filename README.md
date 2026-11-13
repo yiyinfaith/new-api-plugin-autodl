@@ -14,7 +14,7 @@
    https://raw.githubusercontent.com/yiyinfaith/new-api-plugin-autodl/main/plugin.js
    ```
 
-2. 确认 key 为 `autodl`，安装并启用为当前版本。更新时重复这一步即可，渠道、价格和任务记录都会保留。
+2. 确认 key 为 `autodl`，安装并启用为当前版本。想显示 AutoDL 官方 logo，在同一个上传对话框的图标处选择仓库里的 [icon.png](icon.png)（先下载到本地）。更新时重复这一步即可，渠道、价格和任务记录都会保留。
 3. 新建渠道：类型 **Task Plugin（61）**，插件选 **AutoDL**；Base URL 填 `https://autodl.art`（不加 `/api/v1`）；密钥填 AutoDL **ComfyUI 分组**的原始 Token（不加 `Bearer `）。
 4. 在渠道里勾选要用的 workflow ID，并按下文[配置价格](#计费配置)。没配价格的模型会返回 `model_price_error`。
 
