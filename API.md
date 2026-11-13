@@ -8,12 +8,12 @@
 |---|---|---|---|---|
 | OpenAI Videos | `POST /v1/videos` | `GET /v1/videos/{id}` | `url`、`results[]`；`GET /v1/videos/{id}/content` 下载 | 全部 |
 | MiniMax V2 | `POST /v2/video_generation` | `GET /v2/query/video_generation/{task_id}` | `task.content.url` | 全部 |
-| AutoDL 原生 | `POST /autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}` | `data.results[].url` | 全部 |
-| 阿里云百炼 DashScope | `POST /autodl/api/v1/services/aigc/video-generation/video-synthesis`（另两个百炼创建路径也行，见下文） | `GET /autodl/api/v1/tasks/{task_id}` | `output.video_url`；TTS 为 `output.audio.url` | 全部 |
+| AutoDL 原生 | `POST /api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /api/v1/comfyui/comfyui_workflow/result/{task_id}` | `data.results[].url` | 全部 |
+| 阿里云百炼 DashScope | `POST /api/v1/services/aigc/video-generation/video-synthesis`（另两个百炼创建路径也行，见下文） | `GET /api/v1/tasks/{task_id}` | `output.video_url`；TTS 为 `output.audio.url` | 全部 |
 
 「全部」指 27 个工作流加两个别名 `wan2.2-animate-move`、`IndexTTS-2`，TTS 也包括在内。
 
-- **AutoDL 原生和 DashScope 的路径必须带 `/autodl` 前缀**：它们的官方路径以 `/api/` 开头，而 `/api` 属于 New API 自己，宿主（rc.48+）只在插件 key 前缀下提供这两组路由。调用方把官方 Base URL 换成 `https://你的域名/autodl`，路径其余部分照抄官方。
+- **默认优先调用无插件前缀的原生路径**：将官方域名替换为 `https://你的域名`，路径其余部分保持不变；`/api` 并不意味着所有路径都会冲突。若 New API 宿主或其他插件占用相同的具体路由，导致原生地址返回 404 `Invalid URL`、路由到错误插件或其他路由异常，才在路径前加 `/autodl`（如 `/autodl/api/v1/tasks/{task_id}`）以明确指定 AutoDL。New API 可能默认内置 Alibaba Bailian 插件，即使管理员没有手动安装，也可能与 DashScope 共享部分路径；具体能否无前缀调用请以当前宿主的实际路由注册和测试结果为准。切换前缀时无需修改请求体。
 - 鉴权用 New API 的 Key：`Authorization: Bearer <NEW_API_KEY>`，不要传 AutoDL Token。AutoDL 原生格式也可以照官方写法不带 `Bearer`。
 - 路径决定格式，`model` 决定工作流。`model` 填 workflow ID（AutoDL 原生格式写在路径里）；`wan2.2-animate-move`（动作迁移）和 `IndexTTS-2`（TTS）是插件自带别名。
 - 任务是异步的：创建后用返回的 New API 任务 ID 轮询，不要用上游 ID，也不要重复提交。
@@ -181,12 +181,12 @@ OpenAI 写法（`POST /v1/videos`，成品用 `/v1/videos/{id}/content` 下载�
 
 ## AutoDL 原生
 
-和 [AutoDL ComfyUI API](https://autodl.art/docs/comfyui_api/) 相同，只是地址换成 `https://你的域名/autodl`、密钥换成 New API Key：
+和 [AutoDL ComfyUI API](https://autodl.art/docs/comfyui_api/) 相同：优先把官方域名换成 `https://你的域名`，密钥换成 New API Key；有实际路由冲突时再使用 `/autodl` 前缀：
 
 | 官方 | 经 New API |
 |---|---|
-| `POST https://autodl.art/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `POST https://你的域名/autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}` |
-| `GET https://autodl.art/api/v1/comfyui/comfyui_workflow/result/{task_id}` | `GET https://你的域名/autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}` |
+| `POST https://autodl.art/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `POST https://你的域名/api/v1/comfyui/comfyui_workflow/{workflow_id}` |
+| `GET https://autodl.art/api/v1/comfyui/comfyui_workflow/result/{task_id}` | `GET https://你的域名/api/v1/comfyui/comfyui_workflow/result/{task_id}` |
 
 - 路径里的 `workflow_id` 就是模型（也可以是别名或渠道映射名），body 不需要 `model`。
 - body 用 AutoDL 官网字段：文本 `prompt`（TTS 为 `prompt_text`）、时长 `duration`（对口型为 `audio_duration`）、分辨率是**完整官网标签**（如 `768p竖`、`768p横(1344*768)`、`464*832px(竖版)`，不接受 `768p` 这种档位简写）、图片 `ref_image_0…` / `first_frame` / `last_frame` / `ref_image`、音频 `ref_audio_0…` / `prompt_simple` / `emo_ref_audio`、视频 `ref_video`，以及 `seed`、`mode`、`style_preset`、`video_subject_to_replace`、`emo_*` 等。每个工作流的完整字段见 [examples.json](examples.json) 的 `_formats.autodl` 和 [workflows.json](workflows.json)。
@@ -194,7 +194,7 @@ OpenAI 写法（`POST /v1/videos`，成品用 `/v1/videos/{id}/content` 下载�
 - 动作迁移没有时长字段，固定预扣 5 秒，结算按成片实测；TTS 预扣 10 秒，结算按成片实测。
 
 ```bash
-curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v" \
+curl -sS -X POST "$NEW_API_BASE_URL/api/v1/comfyui/comfyui_workflow/minimax_h3_lightx2v" \
   -H "Authorization: Bearer $NEW_API_KEY" -H 'Content-Type: application/json' \
   -d '{"prompt":"镜头平稳推进","duration":5,"resolution":"480p横","first_frame":"https://media.example.com/first.png","last_frame":"https://media.example.com/last.png"}'
 ```
@@ -211,14 +211,14 @@ curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/comfyui/comfyui_workflow/minim
 
 ## 阿里云百炼 DashScope
 
-沿用百炼视频生成的请求结构，地址换成 `https://你的域名/autodl`、密钥换成 New API Key。百炼上没有 H3 / IndexTTS 这些模型，所以 `model` 填 AutoDL 的 workflow ID 或别名；其余字段按百炼写，新旧几代写法都认：
+沿用百炼视频生成的请求结构，优先把域名换成 `https://你的域名`（发生实际路由冲突时再加 `/autodl`）、密钥换成 New API Key。百炼上没有 H3 / IndexTTS 这些模型，所以 `model` 填 AutoDL 的 workflow ID 或别名；其余字段按百炼写，新旧几代写法都认：
 
 | 官方 | 经 New API |
 |---|---|
-| `POST https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis`（文生、首帧、参考生视频） | `POST https://你的域名/autodl/api/v1/services/aigc/video-generation/video-synthesis` |
-| `POST …/api/v1/services/aigc/image2video/video-synthesis`（首尾帧、animate-move） | `POST https://你的域名/autodl/api/v1/services/aigc/image2video/video-synthesis` |
-| `POST …/api/v1/services/aigc/multimodal-generation/generation`（Qwen-TTS） | `POST https://你的域名/autodl/api/v1/services/aigc/multimodal-generation/generation` |
-| `GET https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}` | `GET https://你的域名/autodl/api/v1/tasks/{task_id}` |
+| `POST https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis`（文生、首帧、参考生视频） | `POST https://你的域名/api/v1/services/aigc/video-generation/video-synthesis` |
+| `POST …/api/v1/services/aigc/image2video/video-synthesis`（首尾帧、animate-move） | `POST https://你的域名/api/v1/services/aigc/image2video/video-synthesis` |
+| `POST …/api/v1/services/aigc/multimodal-generation/generation`（Qwen-TTS） | `POST https://你的域名/api/v1/services/aigc/multimodal-generation/generation` |
+| `GET https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}` | `GET https://你的域名/api/v1/tasks/{task_id}` |
 
 三个创建路径对所有模型都一样，任选一个；请求体决定用什么媒体，路径不影响。
 
@@ -245,7 +245,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/comfyui/comfyui_workflow/minim
 
 ```bash
 # 文生视频（百炼 wan2.7 写法：resolution + ratio）
-curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/video-generation/video-synthesis" \
+curl -sS -X POST "$NEW_API_BASE_URL/api/v1/services/aigc/video-generation/video-synthesis" \
   -H "Authorization: Bearer $NEW_API_KEY" -H 'Content-Type: application/json' -H 'X-DashScope-Async: enable' \
   -d '{"model":"minimax_h3_z0901","input":{"prompt":"一只猫在雪地中奔跑"},"parameters":{"resolution":"720P","ratio":"16:9","duration":5}}'
 ```
@@ -362,7 +362,7 @@ curl -sS -X POST "$NEW_API_BASE_URL/autodl/api/v1/services/aigc/video-generation
 | 报错 | 原因 / 处理 |
 |---|---|
 | `model_price_error` | 请求的 model（包括别名、映射名）没有配置价格。 |
-| AutoDL 原生 / DashScope 返回 404 `Invalid URL` | 路径前漏了 `/autodl`。 |
+| AutoDL 原生 / DashScope 原生路径返回 404 `Invalid URL`，或未进入 AutoDL | 检查宿主路由和渠道绑定；如果实际冲突，改用带 `/autodl` 前缀的同一 API 路径（查询也一样）。 |
 | `no_eligible_channel` | 渠道未启用、没有该模型，或 Key 所在分组无权使用。 |
 | `invalid media URL` | 不是 HTTP(S) URL 或标准 Data URL，或 MIME 与字段不符。 |
 | `unsupported request field …` / `unsupported or mixed MiniMax field …` / `unsupported DashScope … field …` | 未知或拼错的字段，或该工作流不支持此参数。 |
