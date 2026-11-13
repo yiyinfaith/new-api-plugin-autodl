@@ -26,10 +26,10 @@
 | --- | --- | --- |
 | OpenAI Videos | `POST /v1/videos` | `GET /v1/videos/{id}`，下载 `GET /v1/videos/{id}/content` |
 | MiniMax V2 | `POST /v2/video_generation` | `GET /v2/query/video_generation/{task_id}` |
-| AutoDL 原生 | `POST /autodl/api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /autodl/api/v1/comfyui/comfyui_workflow/result/{task_id}` |
-| 阿里云百炼 DashScope | `POST /autodl/api/v1/services/aigc/video-generation/video-synthesis`（`image2video/video-synthesis`、`multimodal-generation/generation` 也行） | `GET /autodl/api/v1/tasks/{task_id}` |
+| AutoDL 原生 | `POST /api/v1/comfyui/comfyui_workflow/{workflow_id}` | `GET /api/v1/comfyui/comfyui_workflow/result/{task_id}` |
+| 阿里云百炼 DashScope | `POST /api/v1/services/aigc/video-generation/video-synthesis`（`image2video/video-synthesis`、`multimodal-generation/generation` 也行） | `GET /api/v1/tasks/{task_id}` |
 
-> **AutoDL 原生和 DashScope 必须在官方路径前加 `/autodl`。** 这两种官方路径都以 `/api/` 开头，`/api` 是 New API 自己的路径，宿主（rc.48 起）不会把插件挂在顶层的 `/api/...`，只挂在插件 key 前缀下。所以调用方把官方 Base URL（`https://autodl.art`、`https://dashscope.aliyuncs.com`）换成 `https://你的域名/autodl` 即可，后面的路径不变；不加 `/autodl` 会落到 New API 自己的接口上，返回 404 `Invalid URL`。OpenAI 和 MiniMax 两种格式不用加。
+> **优先使用无插件前缀的原生路径。** 一般把官方域名替换成 `https://你的域名` 即可；`/v1`、`/api` 本身并不等于路由冲突。只有当原生路径被 New API 主程序或其他插件占用、未正确进入 AutoDL、返回 404 `Invalid URL` 等路由问题时，才在原路径前加 `/autodl`，例如 `/autodl/api/v1/services/aigc/video-generation/video-synthesis`。New API 可能已内置 Alibaba Bailian 插件（无需手动安装），DashScope 的创建和查询路径可能与其共享；**无前缀能否正确路由，以实际部署为准**。`/autodl` 始终是明确指定本插件的稳妥备用入口，不需要修改请求体。
 
 ```bash
 # OpenAI：单图生视频，1 秒 480p 横屏
@@ -46,12 +46,12 @@ curl https://你的域名/v2/video_generation -H "Authorization: Bearer $NEW_API
 }'
 
 # AutoDL 原生：body 与 AutoDL 官网完全相同，原样转发
-curl https://你的域名/autodl/api/v1/comfyui/comfyui_workflow/minimax_h3_z0901 -H "Authorization: Bearer $NEW_API_KEY" -H "Content-Type: application/json" -d '{
+curl https://你的域名/api/v1/comfyui/comfyui_workflow/minimax_h3_z0901 -H "Authorization: Bearer $NEW_API_KEY" -H "Content-Type: application/json" -d '{
   "prompt": "雨中的霓虹街道", "duration": 5, "resolution": "768p横(1344*768)"
 }'
 
 # 阿里云百炼 DashScope：首尾帧生视频（百炼 Wan 2.7 的 media 写法）
-curl https://你的域名/autodl/api/v1/services/aigc/video-generation/video-synthesis -H "Authorization: Bearer $NEW_API_KEY" -H "Content-Type: application/json" -H "X-DashScope-Async: enable" -d '{
+curl https://你的域名/api/v1/services/aigc/video-generation/video-synthesis -H "Authorization: Bearer $NEW_API_KEY" -H "Content-Type: application/json" -H "X-DashScope-Async: enable" -d '{
   "model": "minimax_h3_lightx2v",
   "input": {"prompt": "镜头平稳推进", "media": [
     {"type": "first_frame", "url": "https://example.com/first.png"},
@@ -77,7 +77,7 @@ curl https://你的域名/autodl/api/v1/services/aigc/video-generation/video-syn
 - **分辨率容错**：大小写都认（`480P` = `480p`，`2K` = `1440p`）；工作流没有的档位就近匹配到它有的、相差不超过 48 的档位（`720P` → `736p`/`768p`，`1080P` ↔ `1088p`），差得更远才报错。省略分辨率或方向时用工作流默认值（多为竖屏）。
 - OpenAI、MiniMax、DashScope 都拒绝未知或拼错的字段，避免参数没生效却照常扣费；官方客户端常带、但 AutoDL 没有对应能力的字段会被接受并忽略：OpenAI 的 `metadata`、`user`、`n`、`instructions`、`speed` 等，MiniMax 的 `callback_url`、`extra`，DashScope 的 `negative_prompt`、`prompt_extend`、`watermark`、`shot_type`、`audio`、`check_image`、`language_type`。
 - **AutoDL 原生**：路径里的 workflow ID 就是模型，body 用 AutoDL 官网字段，**原样转发**，未知字段也照传；插件只检查计费要用的时长、分辨率标签和媒体链接格式，其余由 AutoDL 校验。响应也是 AutoDL 的 `{"code":"Success","data":{…}}` 结构。鉴权可写 `Authorization: Bearer <NEW_API_KEY>`，也可以像 AutoDL 官方那样不带 `Bearer`。
-- **DashScope**：百炼没有 H3 / IndexTTS 这些模型名，所以 `model` 直接填 workflow ID 或别名，其余字段沿用百炼写法，新旧两代（`media` 数组和 `img_url` 等）都认，三个创建路径任选。`parameters.mode` 在 801/802/803 上是 AutoDL 的速度/质量模式，在其他工作流上只接受 `wan-std`（AutoDL 没有 wan-pro）。TTS 按 Qwen-TTS 写 `input.text` + `input.voice`，但 `voice` 填音色参考音频链接；百炼的 TTS 是同步接口，这里仍是异步任务，需要用 `/autodl/api/v1/tasks/{task_id}` 查询，结果在 `output.audio.url`。
+- **DashScope**：百炼没有 H3 / IndexTTS 这些模型名，所以 `model` 直接填 workflow ID 或别名，其余字段沿用百炼写法，新旧两代（`media` 数组和 `img_url` 等）都认，三个创建路径任选。`parameters.mode` 在 801/802/803 上是 AutoDL 的速度/质量模式，在其他工作流上只接受 `wan-std`（AutoDL 没有 wan-pro）。TTS 按 Qwen-TTS 写 `input.text` + `input.voice`，但 `voice` 填音色参考音频链接；百炼的 TTS 是同步接口，这里仍是异步任务，需要用 `/api/v1/tasks/{task_id}` 查询（如有路由冲突则改用 `/autodl/api/v1/tasks/{task_id}`），结果在 `output.audio.url`。
 - **OpenAI 调 TTS**：`model` 填 `IndexTTS-2`，`prompt`（或 `input`）是文本，`audios`（或 `voice`）放参考音频链接，`emotion` 控制情感；成品用 `/v1/videos/{id}/content` 下载。
 
 ## 支持的工作流
@@ -174,7 +174,7 @@ hour("Asia/Shanghai") < 8 ? (u("resolution") == "480p" ? tier("off_peak_480p", u
 | 现象 | 处理 |
 | --- | --- |
 | `model_price_error` | 给实际请求的模型名（包括别名）配置价格 |
-| AutoDL 原生 / DashScope 返回 404 `Invalid URL` | 路径前漏了 `/autodl`，见[调用](#调用) |
+| AutoDL 原生 / DashScope 的原生路径返回 404 `Invalid URL`，或请求未进入 AutoDL | 检查 New API 的路由与插件状态；遇到实际冲突时给路径加 `/autodl`，创建和查询均使用本插件入口，见[调用](#调用) |
 | 401 / 403 | 渠道密钥必须是 ComfyUI 分组 Token 原文，不加 `Bearer` |
 | `unsupported …` / `must be …` | 参数超出该工作流范围，按报错和上表调整，不会扣费 |
 | `this workflow does not accept a text prompt` | 对口型和动作迁移不接受提示词 |
@@ -201,7 +201,7 @@ python tests-client.py      # 测试客户端自检
 NEW_API_BASE_URL=https://你的域名 NEW_API_KEY=sk-xxx python test-task.py --format minimax --example minimax_h3_z0901 --out out.mp4
 ```
 
-`--format` 可选 `openai`、`minimax`、`autodl`、`dashscope`（后两种自动加 `/autodl` 前缀；`autodl` 配 `--request` 时用 `--workflow` 指定 workflow ID）。`test-task.py` 会真实提交并消耗 AutoDL 余额；`--example` 读取 [examples.json](examples.json)，需要媒体的示例要先把占位 URL 换成真实地址。
+`--format` 可选 `openai`、`minimax`、`autodl`、`dashscope`（测试脚本对后两种**仍自动加 `/autodl` 前缀以固定命中本插件**，与上文「普通客户端优先使用原生路径」的建议不冲突；`autodl` 配 `--request` 时用 `--workflow` 指定 workflow ID）。`test-task.py` 会真实提交并消耗 AutoDL 余额；`--example` 读取 [examples.json](examples.json)，需要媒体的示例要先把占位 URL 换成真实地址。
 
 ## 交流与反馈
 
